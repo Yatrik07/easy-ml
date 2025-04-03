@@ -1,11 +1,13 @@
 # Ignore the test folder  
 test_folder/
+Datasets/
 
 # Ignore the virtual environment  
 venv/
 
 # Ignore IDE-specific files (JetBrains IDEA)  
 .idea/
+*.log
 
 # Ignore Python bytecode files
 __pycache__
