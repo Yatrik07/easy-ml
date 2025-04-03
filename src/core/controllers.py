@@ -36,6 +36,10 @@ class MLRegressionController:
 
         ml_model_builder_trainer_controller(self.request_body)
 
+        # print("request_body.performance: ", self.request_body)
+        print("request_body.performance: ", {key: value for key, value in self.request_body.dict().items() if
+               key not in ['X', 'y', 'df', 'X_train', 'X_test', 'y_train', 'y_test']})
+
         return self.request_body
 
 
@@ -69,7 +73,9 @@ class MLClassificationController:
 
         ml_model_builder_trainer_controller(self.request_body)
 
-        print("request_body.performance: ", self.request_body.performance)
+        # print("request_body.performance: ", self.request_body.performance)
+        print("request_body.performance: ", {key: value for key, value in self.request_body.dict().items() if
+               key not in ['X', 'y', 'df', 'X_train', 'X_test', 'y_train', 'y_test']})
 
         return self.request_body
 

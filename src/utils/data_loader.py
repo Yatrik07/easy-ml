@@ -65,10 +65,20 @@ def data_loader(request_body):
         print("Target Encodings: ", request_body.target_encodings)
         print("Encoded Target Values: ", request_body.y)
 
+# this was in the last commit
+# def encode_categorical_list(categorical_list):
+#     unique_categories = sorted(set(categorical_list))  # or use list(set(...)) to avoid sorting
+#     encoding_dict = {category: index + 1 for index, category in enumerate(unique_categories)}
+#     encoded_list = [encoding_dict[category] for category in categorical_list]
+#     return encoding_dict, encoded_list
+
 
 def encode_categorical_list(categorical_list):
-    unique_categories = sorted(set(categorical_list))  # or use list(set(...)) to avoid sorting
-    encoding_dict = {category: index + 1 for index, category in enumerate(unique_categories)}
+    # Ensure that the unique categories are sorted (optional)
+    unique_categories = sorted(set(categorical_list))
+    # Create the encoding dictionary starting from 0
+    encoding_dict = {category: index for index, category in enumerate(unique_categories)}
+    # Encode the categorical list
     encoded_list = [encoding_dict[category] for category in categorical_list]
     return encoding_dict, encoded_list
 
