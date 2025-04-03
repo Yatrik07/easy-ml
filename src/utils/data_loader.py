@@ -2,6 +2,30 @@ import pandas as pd
 import numpy as np
 import os
 
+def get_data_info(data_path):
+    data = pd.read_csv(data_path)
+    rows, cols = data.shape
+
+    if rows<5:
+        data_sample = data.to_dict(orient="records")   # Convert DataFrame to a dictionary
+        data_head = data.to_dict(orient="records")
+        data_tail = data.to_dict(orient="records") 
+    else:
+        data_sample = data.sample(5).to_dict(orient="records") 
+        data_head = data.head(5).to_dict(orient="records") 
+        data_tail = data.tail(5).to_dict(orient="records")
+    
+    columns = data.columns.tolist()
+
+    # Get dataset file size in bytes
+    dataset_size = os.path.getsize(data_path)  # Size in bytes
+    dataset_size_kb = round(dataset_size / 1024, 2)  # Convert to KB 
+
+    data_info = {"data_sample": data_sample, "data_head": data_head,
+                 "data_tail": data_tail, "rows": rows, "cols": cols, 
+                 "column_names": columns,"dataset_size_kb": dataset_size_kb}
+
+    return data_info
 
 def data_loader(request_body):
     print("request_body task: ", request_body.task)

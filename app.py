@@ -1,8 +1,27 @@
+from flask import Flask, jsonify, request
+from src.config.GLOBAL_VARS import *
 from src import MLTrainer
-from flask import Flask, request
+from src.utils.data_loader import get_data_info
 
 app = Flask(__name__)
 
+@app.route('/load_data', methods=['POST'])
+def load_data():
+    """
+    This endpoint loads the data from the given path and returns a
+    data sample, head and tail along with columns, shape and size.
+    """
+    req = request.get_json()
+    data_info = get_data_info(req["data_path"])
+    return jsonify(data_info)
+
+
+@app.route('/get_models', methods=['GET'])
+def get_models():
+    model_names = { "MLClassification": "To be added",
+                    "MLRegression": "To be added"}
+
+    return jsonify(model_names)
 
 @app.route('/ml_predict', methods=['POST'])
 def ml_predict():
