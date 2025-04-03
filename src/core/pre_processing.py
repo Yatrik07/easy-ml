@@ -8,31 +8,40 @@ from imblearn.under_sampling import TomekLinks
 from imblearn.combine import SMOTETomek
 from sklearn.model_selection import train_test_split
 import numpy as np
+from src.utils.logger import get_logger
 
+logger = get_logger()
 
 def preprocessing_controller(request_body):
+    print('-'*50, 'text here', '-'*50)
+    try:
+        encode_categorical(request_body)
+        logger.info("Categorical Encoding Done")
 
-    encode_categorical(request_body)
+        determine_column_types(request_body)
+        logger.info("Column Types Determined")
 
-    determine_column_types(request_body)
 
-    if request_body.task.startswith("ML"):
+        if request_body.task.startswith("ML"):
 
-        request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
-            train_test_split(request_body.X, request_body.y, test_size=0.2)
+            request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
+                train_test_split(request_body.X, request_body.y, test_size=0.2)
+            logger.info("Train test splitted")
 
-        if request_body.imputation:
-            impute_missing_values(request_body)
+            if request_body.imputation:
+                impute_missing_values(request_body)
 
-        if request_body.scaling:
-            scale_features(request_body)
+            if request_body.scaling:
+                scale_features(request_body)
 
-        if request_body.handle_imbalanced_data:
-            handle_imbalance(request_body)
+            if request_body.handle_imbalanced_data:
+                handle_imbalance(request_body)
 
-        if request_body.reduce_features:
-            apply_pca(request_body)
-
+            if request_body.reduce_features:
+                apply_pca(request_body)
+    except Exception as e:
+        logger.error(f"Error in preprocessing: {e}")
+        raise 
 
 
 # TODO : This function can be applied if we want to determine column types before encoding the categorical columns

@@ -4,6 +4,9 @@ import joblib
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, r2_score
 from src.config.GLOBAL_VARS import *
+from src.utils.logger import get_logger
+
+logger = get_logger()
 
 
 def ml_model_builder_trainer_controller(request_body):
@@ -43,6 +46,5 @@ def ml_model_builder_trainer_controller(request_body):
                                                                      "accuracy_train": accuracy_train,
                                                                      "accuracy_test": accuracy_test
                                                                      }
-
-
+        logger.info(f'Model {single_model.__class__.__name__} done')
 

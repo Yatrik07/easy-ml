@@ -2,6 +2,18 @@ from flask import Flask, jsonify, request
 from src.config.GLOBAL_VARS import *
 from src import MLTrainer
 from src.utils.data_loader import get_data_info
+import logging
+app = Flask(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        # Log to console
+        logging.StreamHandler(),
+        # Log to file
+        logging.FileHandler('main_logs.log', encoding='utf-8')
+    ]
+)
 
 app = Flask(__name__)
 

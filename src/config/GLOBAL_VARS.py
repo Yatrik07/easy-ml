@@ -147,6 +147,6 @@ class ML_RequestBody(BaseModel):
 
     def jsonify(self):
         # TODO: convert the entire body into the returnable json (dict) for frontend - ML_RequestBody
-        pass
+        return {'hello' : 'world'}
 
 
