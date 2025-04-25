@@ -6,7 +6,7 @@ def get_data_info(data_path):
     data = pd.read_csv(data_path)
     rows, cols = data.shape
 
-    if rows<5:
+    if rows < 5:
         data_sample = data.to_dict(orient="records")   # Convert DataFrame to a dictionary
         data_head = data.to_dict(orient="records")
         data_tail = data.to_dict(orient="records") 
@@ -66,11 +66,14 @@ def data_loader(request_body):
         print("Encoded Target Values: ", request_body.y)
 
 
+
 def encode_categorical_list(categorical_list):
     unique_categories = sorted(set(categorical_list))  # or use list(set(...)) to avoid sorting
     encoding_dict = {category: index + 1 for index, category in enumerate(unique_categories)}
+    # Ensure that the unique categories are sorted (optional)
+    unique_categories = sorted(set(categorical_list))
+    # Create the encoding dictionary starting from 0
+    encoding_dict = {category: index for index, category in enumerate(unique_categories)}
+    # Encode the categorical list
     encoded_list = [encoding_dict[category] for category in categorical_list]
     return encoding_dict, encoded_list
-
-
-
