@@ -2,8 +2,11 @@ from flask import Flask, jsonify, request
 from src.config.GLOBAL_VARS import *
 from src import MLTrainer
 from src.utils.data_loader import get_data_info
-
+import warnings, os
+warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
+os.environ["LIGHTGBM_VERBOSE"] = "0"
 app = Flask(__name__)
+
 
 @app.route('/load_data', methods=['POST'])
 def load_data():
@@ -55,4 +58,4 @@ def ml_predict():
 
 # Run the Flask app
 if __name__ == '__main__':
-    app.run(port=5001)
+    app.run(port=5007)

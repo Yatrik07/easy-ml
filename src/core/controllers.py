@@ -4,7 +4,7 @@ from src.config.GLOBAL_VARS import ML_RequestBody
 from src.config.GLOBAL_VARS import  *
 from src.core.model_builder import ml_model_builder_trainer_controller
 from src.core.pre_processing import preprocessing_controller
-
+from sklearn.model_selection import train_test_split
 
 class MLRegressionController:
     def __init__(self, dataset_path, target_column, preprocessing=False, imputation=False, scaling=False,
@@ -33,6 +33,10 @@ class MLRegressionController:
 
         if self.request_body.preprocessing:
             preprocessing_controller(self.request_body)
+
+        else:
+            self.request_body.X_train, self.request_body.X_test, self.request_body.y_train, self.request_body.y_test = \
+                train_test_split(self.request_body.X, self.request_body.y, test_size=0.2)
 
         ml_model_builder_trainer_controller(self.request_body)
 

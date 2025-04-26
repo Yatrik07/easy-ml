@@ -216,8 +216,10 @@ ui2back_mappings_regression_models = {
     "linear_regression": LinearRegression(),
     "random_forest": RandomForestRegressor(),
     "xg_boost": XGBRegressor(),
-    "light_gbm": LGBMRegressor(),
-    "cat_boost": CatBoostRegressor(),
+    "light_gbm": LGBMRegressor(verbose=-1),
+    "cat_boost": CatBoostRegressor(
+        logging_level="Silent",  # Disables logs
+    ),
     "knn": KNeighborsRegressor(),
     "ada_boost": AdaBoostRegressor()
 }
@@ -226,11 +228,11 @@ ui2back_mappings_classification_models = {
     "logistic_regression": LogisticRegression(solver='newton-cg'),
     "random_forest": RandomForestClassifier(),
     "xg_boost": XGBClassifier(),
-    "light_gbm": LGBMClassifier(),
+    "light_gbm": LGBMClassifier(verbose=-1),
     "cat_boost": CatBoostClassifier(
         task_type="CPU",
         logging_level="Silent",  # Disables logs
-        save_snapshot=False  # Prevents creating temporary files
+        save_snapshot=False,  # Prevents creating temporary files
     ),
     "knn": KNeighborsClassifier(),
     "ada_boost": AdaBoostClassifier()
