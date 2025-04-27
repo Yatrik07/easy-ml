@@ -43,7 +43,7 @@ def data_loader(request_body):
             request_body.df = load_data_from_path(request_body.dataset_path)
             if request_body.target_column not in request_body.df.columns:
                 raise ValueError(f"Target column '{request_body.target_column}' not found in the dataset.")
-            if request_body.ignore_columns== None:
+            if request_body.ignore_columns is None:
                 request_body.ignore_columns = []
             drop_columns = [request_body.target_column] + request_body.ignore_columns
             request_body.X = request_body.df.drop(columns=drop_columns)
