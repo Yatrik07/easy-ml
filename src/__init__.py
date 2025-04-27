@@ -14,7 +14,7 @@ class MLTrainer:
 
         # print(dataset_path, target_column, preprocessing, imputation, scaling,
         #          models, hyper_parameter_tuning, verbose, categorical_variables, path_to_save,
-        #          reduce_features, handle_imbalanced_data, task, sep="/n")
+        #          reduce_features, handle_imbalanced_data, ignore_columns task, sep="/n")
 
         print(args)
 

@@ -9,7 +9,7 @@ from src.core.pre_processing import preprocessing_controller
 class MLRegressionController:
     def __init__(self, dataset_path, target_column, preprocessing=False, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, verbose=False, categorical_columns=None, path_to_save=None,
-                 reduce_features=False, handle_imbalanced_data=False, task=None):
+                 reduce_features=False,ignore_columns=None, handle_imbalanced_data=False, task=None):
 
         self.request_body = ML_RequestBody(
             dataset_path=dataset_path,
@@ -23,6 +23,7 @@ class MLRegressionController:
             verbose=verbose,
             imputation=imputation,
             reduce_features=reduce_features,
+            ignore_columns=ignore_columns,
             handle_imbalanced_data=handle_imbalanced_data,
             task=task
         )
@@ -42,7 +43,7 @@ class MLRegressionController:
 class MLClassificationController:
     def __init__(self, dataset_path, target_column, preprocessing=False, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, verbose=False, categorical_columns=None, path_to_save=None,
-                 reduce_features=False, handle_imbalanced_data=None, task=None):
+                 reduce_features=False,ignore_columns=None, handle_imbalanced_data=None, task=None):
 
         self.request_body = ML_RequestBody(
             dataset_path=dataset_path,
@@ -56,6 +57,7 @@ class MLClassificationController:
             verbose=verbose,
             imputation=imputation,
             reduce_features=reduce_features,
+            ignore_columns=ignore_columns,
             handle_imbalanced_data=handle_imbalanced_data,
             task=task
         )
