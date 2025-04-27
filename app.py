@@ -18,13 +18,14 @@ def load_data():
 
 @app.route('/get_models', methods=['GET'])
 def get_models():
-    model_names = { "MLClassification": "To be added",
-                    "MLRegression": "To be added"}
+    model_names = { "MLClassification": list(ui2back_mappings_classification_models.keys()),
+                    "MLRegression": list(ui2back_mappings_regression_models.keys())}
 
     return jsonify(model_names)
 
 @app.route('/ml_predict', methods=['POST'])
 def ml_predict():
+    print("Entered")
     # Get data from the POST request
     data = request.get_json()
 
@@ -55,4 +56,4 @@ def ml_predict():
 
 # Run the Flask app
 if __name__ == '__main__':
-    app.run()
+    app.run(port=5001)

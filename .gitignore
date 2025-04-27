@@ -9,3 +9,6 @@ venv/
 
 # Ignore Python bytecode files
 __pycache__
++easyai/Lib/
++easyai/Scripts/
++easyai/pyvenv.cfg
