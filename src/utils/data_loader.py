@@ -1,9 +1,9 @@
 import pandas as pd
 import numpy as np
 import os
+from src.config.GLOBAL_VARS import *
 
-def get_data_info(data_path):
-    data = pd.read_csv(data_path)
+def get_data_info(data):
     rows, cols = data.shape
 
     if rows<5:
@@ -18,7 +18,7 @@ def get_data_info(data_path):
     columns = data.columns.tolist()
 
     # Get dataset file size in bytes
-    dataset_size = os.path.getsize(data_path)  # Size in bytes
+    dataset_size = os.path.getsize(save_data_path)  # Size in bytes
     dataset_size_kb = round(dataset_size / 1024, 2)  # Convert to KB 
 
     data_info = {"data_sample": data_sample, "data_head": data_head,
