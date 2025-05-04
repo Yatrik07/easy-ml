@@ -266,6 +266,7 @@ class ML_RequestBody(BaseModel):
     imputation: bool = False
     reduce_features: bool = False
     handle_imbalanced_data: str = ""
+    ignore_columns: Optional[List[str]] = None
 
     hyper_parameter_tuning: int = 0
     models: Optional[List[str]] = []  # List of model names

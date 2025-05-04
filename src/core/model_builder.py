@@ -3,6 +3,9 @@ import os
 import joblib
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, r2_score
+import tempfile
+import shutil
+from sklearn.preprocessing import LabelEncoder
 from src.config.GLOBAL_VARS import *
 import tempfile
 import shutil

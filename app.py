@@ -44,11 +44,12 @@ def ml_predict():
     path_to_save = data['path_to_save']
     reduce_features = data['reduce_features']
     handle_imbalanced_data = data['handle_imbalanced_data']
+    ignore_columns = data['ignore_columns']
 
     trainer = MLTrainer(task=task, dataset_path=dataset_path, target_column=target_column, preprocessing=preprocessing,
                         imputation=imputation, scaling=scaling, models=models, hyper_parameter_tuning=hyper_parameter_tuning,
                         categorical_columns=categorical_columns, path_to_save=path_to_save,
-                        reduce_features=reduce_features, handle_imbalanced_data=handle_imbalanced_data)
+                        reduce_features=reduce_features, ignore_columns= ignore_columns, handle_imbalanced_data=handle_imbalanced_data)
 
     output = trainer.run()
 
@@ -58,4 +59,4 @@ def ml_predict():
 
 # Run the Flask app
 if __name__ == '__main__':
-    app.run(port=5007)
+    app.run(port=5001)

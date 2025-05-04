@@ -43,7 +43,10 @@ def data_loader(request_body):
             request_body.df = load_data_from_path(request_body.dataset_path)
             if request_body.target_column not in request_body.df.columns:
                 raise ValueError(f"Target column '{request_body.target_column}' not found in the dataset.")
-            request_body.X = request_body.df.drop(columns=[request_body.target_column])
+            if request_body.ignore_columns is None:
+                request_body.ignore_columns = []
+            drop_columns = [request_body.target_column] + request_body.ignore_columns
+            request_body.X = request_body.df.drop(columns=drop_columns)
             request_body.y = request_body.df[request_body.target_column]
         except Exception as e:
             raise ValueError(f"Error loading dataset: {e}")
@@ -52,7 +55,10 @@ def data_loader(request_body):
         request_body.df = request_body.actual_dataset
         if request_body.target_column not in request_body.df.columns:
             raise ValueError(f"Target column '{request_body.target_column}' not found in the dataset.")
-        request_body.X = request_body.df.drop(columns=[request_body.target_column])
+        if request_body.ignore_columns is None:
+            request_body.ignore_columns = []
+        drop_columns = [request_body.target_column] + request_body.ignore_columns
+        request_body.X = request_body.df.drop(columns=drop_columns)
         request_body.y = request_body.df[request_body.target_column]
         print("request_body.df: ", request_body.df.head())
         print("request_body.X: ", request_body.X.head())
@@ -65,11 +71,16 @@ def data_loader(request_body):
         print("Target Encodings: ", request_body.target_encodings)
         print("Encoded Target Values: ", request_body.y)
 
+# this was in the last commit
+# def encode_categorical_list(categorical_list):
+#     unique_categories = sorted(set(categorical_list))  # or use list(set(...)) to avoid sorting
+#     encoding_dict = {category: index + 1 for index, category in enumerate(unique_categories)}
+#     encoded_list = [encoding_dict[category] for category in categorical_list]
+#     return encoding_dict, encoded_list
+
 
 
 def encode_categorical_list(categorical_list):
-    unique_categories = sorted(set(categorical_list))  # or use list(set(...)) to avoid sorting
-    encoding_dict = {category: index + 1 for index, category in enumerate(unique_categories)}
     # Ensure that the unique categories are sorted (optional)
     unique_categories = sorted(set(categorical_list))
     # Create the encoding dictionary starting from 0
