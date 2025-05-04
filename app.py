@@ -18,13 +18,14 @@ def load_data():
 
 @app.route('/get_models', methods=['GET'])
 def get_models():
-    model_names = { "MLClassification": "To be added",
-                    "MLRegression": "To be added"}
+    model_names = { "MLClassification": list(ui2back_mappings_classification_models.keys()),
+                    "MLRegression": list(ui2back_mappings_regression_models.keys())}
 
     return jsonify(model_names)
 
 @app.route('/ml_predict', methods=['POST'])
 def ml_predict():
+    print("Entered")
     # Get data from the POST request
     data = request.get_json()
 
@@ -40,11 +41,12 @@ def ml_predict():
     path_to_save = data['path_to_save']
     reduce_features = data['reduce_features']
     handle_imbalanced_data = data['handle_imbalanced_data']
+    ignore_columns = data['ignore_columns']
 
     trainer = MLTrainer(task=task, dataset_path=dataset_path, target_column=target_column, preprocessing=preprocessing,
                         imputation=imputation, scaling=scaling, models=models, hyper_parameter_tuning=hyper_parameter_tuning,
                         categorical_columns=categorical_columns, path_to_save=path_to_save,
-                        reduce_features=reduce_features, handle_imbalanced_data=handle_imbalanced_data)
+                        reduce_features=reduce_features, ignore_columns= ignore_columns, handle_imbalanced_data=handle_imbalanced_data)
 
     output = trainer.run()
 
@@ -54,4 +56,4 @@ def ml_predict():
 
 # Run the Flask app
 if __name__ == '__main__':
-    app.run()
+    app.run(port=5001)

@@ -211,10 +211,10 @@ def handle_imbalance(request_body):
         raise ValueError("Unsupported technique. Choose 'SMOTE', 'TOMEK', or 'SMOTETOMEK'.")
 
     # Perform resampling
-    X_resampled, y_resampled = resampler.fit_resample(request_body.X, request_body.y)
+    X_resampled, y_resampled = resampler.fit_resample(request_body.X_train, request_body.y_train)
 
     # Ensure X remains a DataFrame and y remains a Series
-    request_body.X = pd.DataFrame(X_resampled, columns=request_body.X.columns)
-    request_body.y = pd.Series(y_resampled, index=None)
+    request_body.X_train = pd.DataFrame(X_resampled, columns=request_body.X.columns)
+    request_body.y_train = pd.Series(y_resampled, index=None)
 
 

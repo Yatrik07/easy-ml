@@ -1,115 +1,243 @@
 from pydantic import BaseModel
-from sklearn.linear_model import LinearRegression
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.svm import SVR
-
 from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from catboost import CatBoostClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
+from sklearn.ensemble import AdaBoostRegressor, AdaBoostClassifier
+
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
+from sklearn.neighbors import KNeighborsRegressor
 
 from typing import Optional, List
 import pandas as pd
 import numpy as np
 
+# ---------------------------------------- ML - Regression Models ----------------------------------------------
+AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
+    LinearRegression(),
+    RandomForestRegressor(),
+    XGBRegressor(),
+    LGBMRegressor(),
+    CatBoostRegressor(),
+    KNeighborsRegressor(),
+    AdaBoostRegressor()
+]
 
 DEFAULT_ML_MODELS_LIST_FOR_REGRESSION = [
     LinearRegression(),
+    RandomForestRegressor(),
+    LGBMRegressor(),
     KNeighborsRegressor(),
-    DecisionTreeRegressor(),
-    SVR()
 ]
 
 PARAM_GRID_LEVEL1_FOR_REGRESSION = {
     "LinearRegression": {
         "fit_intercept": [True, False]
     },
+    "RandomForestRegressor": {
+        "n_estimators": [10, 50],
+        "max_depth": [None, 10]
+    },
+    "XGBRegressor": {
+        "n_estimators": [100, 200],
+        "learning_rate": [0.01, 0.1]
+    },
+    "LGBMRegressor": {
+        "n_estimators": [100, 200],
+        "learning_rate": [0.01, 0.1]
+    },
+    "CatBoostRegressor": {
+        "iterations": [100, 200],
+        "learning_rate": [0.01, 0.1]
+    },
     "KNeighborsRegressor": {
         "n_neighbors": [3, 5],
         "weights": ["uniform", "distance"]
     },
-    "DecisionTreeRegressor": {
-        "max_depth": [None, 10],
-        "min_samples_split": [2, 5]
-    },
-    "SVR": {
-        "kernel": ["linear", "rbf"],
-        "C": [1, 10]
+    "AdaBoostRegressor": {
+        "n_estimators": [50, 100],
+        "learning_rate": [0.01, 0.1]
     }
 }
 
 PARAM_GRID_LEVEL2_FOR_REGRESSION = {
     "LinearRegression": {
         "fit_intercept": [True, False],
+        "normalize": [True, False]
+    },
+    "RandomForestRegressor": {
+        "n_estimators": [50, 100, 200],
+        "max_depth": [None, 10, 20, 30],
+        "min_samples_split": [2, 5, 10],
+        "min_samples_leaf": [1, 2, 4],
+        "bootstrap": [True, False]
+    },
+    "XGBRegressor": {
+        "n_estimators": [100, 200, 300],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "max_depth": [3, 6, 10],
+        "subsample": [0.8, 1.0],
+        "colsample_bytree": [0.8, 1.0],
+        "gamma": [0, 0.1, 0.5]
+    },
+    "LGBMRegressor": {
+        "n_estimators": [100, 200, 500],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "max_depth": [-1, 10, 20],
+        "num_leaves": [31, 50, 100],
+        "boosting_type": ["gbdt", "dart"]
+    },
+    "CatBoostRegressor": {
+        "iterations": [100, 200, 500],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "depth": [6, 10, 12],
+        "l2_leaf_reg": [1, 3, 5],
+        "bagging_temperature": [0, 0.5, 1]
     },
     "KNeighborsRegressor": {
         "n_neighbors": [3, 5, 7, 9],
         "weights": ["uniform", "distance"],
         "metric": ["euclidean", "manhattan"]
     },
-    "DecisionTreeRegressor": {
-        "criterion": ["squared_error", "friedman_mse", "absolute_error", "poisson"],
-        "max_depth": [None, 10, 20, 30],
-        "min_samples_split": [2, 5, 10],
-        "min_samples_leaf": [1, 2, 4]
-    },
-    "SVR": {
-        "kernel": ["linear", "poly", "rbf", "sigmoid"],
-        "C": [0.1, 1, 10],
-        "epsilon": [0.01, 0.1, 0.5]
+    "AdaBoostRegressor": {
+        "n_estimators": [50, 100, 200],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "loss": ["linear", "square", "exponential"]
     }
 }
 
+# ---------------------------------------- ML - Classification Models ----------------------------------------------
+
+AVAILABLE_ML_MODELS_LIST_FOR_CLASSIFICATION = [
+    LogisticRegression(),
+    RandomForestClassifier(),
+    XGBClassifier(),
+    LGBMClassifier(),
+    CatBoostClassifier(),
+    KNeighborsClassifier(),
+    AdaBoostClassifier()
+]
+
 DEFAULT_ML_MODELS_LIST_FOR_CLASSIFICATION = [
     LogisticRegression(),
+    RandomForestClassifier(),
+    LGBMClassifier(),
     KNeighborsClassifier(),
-    DecisionTreeClassifier(),
-    SVC()
 ]
+
 
 PARAM_GRID_LEVEL1_FOR_CLASSIFICATION = {
     "LogisticRegression": {
         "penalty": ["l2"],  # Regularization type
         "C": [0.1, 1]       # Regularization strength
     },
+    "RandomForestClassifier": {
+        "n_estimators": [10, 50],
+        "max_depth": [None, 10]
+    },
+    "XGBClassifier": {
+        "n_estimators": [100, 200],
+        "learning_rate": [0.01, 0.1]
+    },
+    "LGBMClassifier": {
+        "n_estimators": [100, 200],
+        "learning_rate": [0.01, 0.1]
+    },
+    "CatBoostClassifier": {
+        "iterations": [100, 200],
+        "learning_rate": [0.01, 0.1]
+    },
     "KNeighborsClassifier": {
         "n_neighbors": [3, 5],
         "weights": ["uniform", "distance"]
     },
-    "DecisionTreeClassifier": {
-        "max_depth": [None, 10],
-        "min_samples_split": [2, 5]
-    },
-    "SVC": {
-        "kernel": ["linear", "rbf"],
-        "C": [1, 10]
+    "AdaBoostClassifier": {
+        "n_estimators": [50, 100],
+        "learning_rate": [0.01, 0.1]
     }
 }
+
 
 PARAM_GRID_LEVEL2_FOR_CLASSIFICATION = {
     "LogisticRegression": {
-        "penalty": ["l2"],           # Regularization type
-        "C": [0.1, 1, 10]            # Regularization strength
+        "penalty": ["l2"],  # Regularization type
+        "C": [0.1, 1, 10]   # Regularization strength
+    },
+    "RandomForestClassifier": {
+        "n_estimators": [50, 100, 200],
+        "max_depth": [None, 10, 20, 30],
+        "min_samples_split": [2, 5, 10],
+        "min_samples_leaf": [1, 2, 4],
+        "bootstrap": [True, False]
+    },
+    "XGBClassifier": {
+        "n_estimators": [100, 200, 300],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "max_depth": [3, 6, 10],
+        "subsample": [0.8, 1.0],
+        "colsample_bytree": [0.8, 1.0],
+        "gamma": [0, 0.1, 0.5]
+    },
+    "LGBMClassifier": {
+        "n_estimators": [100, 200, 500],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "max_depth": [-1, 10, 20],
+        "num_leaves": [31, 50, 100],
+        "boosting_type": ["gbdt", "dart"]
+    },
+    "CatBoostClassifier": {
+        "iterations": [100, 200, 500],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "depth": [6, 10, 12],
+        "l2_leaf_reg": [1, 3, 5],
+        "bagging_temperature": [0, 0.5, 1]
     },
     "KNeighborsClassifier": {
-        "n_neighbors": [3, 5, 7],    # Number of neighbors
-        "weights": ["uniform", "distance"],  # Weight function for prediction
-        "metric": ["euclidean", "manhattan"] # Distance metric
+        "n_neighbors": [3, 5, 7, 9],
+        "weights": ["uniform", "distance"],
+        "metric": ["euclidean", "manhattan"]
     },
-    "DecisionTreeClassifier": {
-        "criterion": ["gini", "entropy"],  # Split criterion
-        "max_depth": [None, 10],           # Maximum depth of tree
-        "min_samples_split": [2, 5],       # Min samples required to split a node
-        "min_samples_leaf": [1, 2]         # Min samples required to be at a leaf node
-    },
-    "SVC": {
-        "kernel": ["linear", "rbf"],      # Kernel type
-        "C": [0.1, 1, 10],                # Regularization parameter
-        "gamma": ["scale", "auto"]        # Kernel coefficient (for 'rbf')
+    "AdaBoostClassifier": {
+        "n_estimators": [50, 100, 200],
+        "learning_rate": [0.01, 0.05, 0.1],
+        "algorithm": ["SAMME", "SAMME.R"]
     }
 }
 
+# ---------------------------------------- ui2back_mappings ----------------------------------------------
+# Classification Adaboost
+ui2back_mappings_regression_models = {
+    "linear_regression": LinearRegression(),
+    "random_forest": RandomForestRegressor(),
+    "xg_boost": XGBRegressor(),
+    "light_gbm": LGBMRegressor(),
+    "cat_boost": CatBoostRegressor(),
+    "knn": KNeighborsRegressor(),
+    "ada_boost": AdaBoostRegressor()
+}
+
+ui2back_mappings_classification_models = {
+    "logistic_regression": LogisticRegression(),
+    "random_forest": RandomForestClassifier(),
+    "xg_boost": XGBClassifier(),
+    "light_gbm": LGBMClassifier(),
+    "cat_boost": CatBoostClassifier(
+        task_type="CPU",
+        logging_level="Silent",  # Disables logs
+        save_snapshot=False  # Prevents creating temporary files
+    ),
+    "knn": KNeighborsClassifier(),
+    "ada_boost": AdaBoostClassifier()
+}
+
+
+# ---------------------------------------- Request Body ----------------------------------------------
 
 # TODO: re-set all the required datatypes of the available variables in the class - ML_RequestBody
 class ML_RequestBody(BaseModel):
@@ -136,6 +264,7 @@ class ML_RequestBody(BaseModel):
     imputation: bool = False
     reduce_features: bool = False
     handle_imbalanced_data: str = ""
+    ignore_columns: Optional[List[str]] = None
 
     hyper_parameter_tuning: int = 0
     models: Optional[List[str]] = []  # List of model names
