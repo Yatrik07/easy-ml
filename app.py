@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from src.config.GLOBAL_VARS import *
 from src import MLTrainer
 from src.utils.data_loader import get_data_info
+from datetime import datetime
 import warnings, os
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
@@ -33,15 +34,20 @@ def ml_predict():
     data = request.get_json()
 
     task = data['task']
+    name = data['name']
     dataset_path = data['dataset_path']
     target_column = data['target_column']
-    preprocessing = data['preprocessing']
-    imputation = data['imputation']
+    # preprocessing = data['preprocessing']
+    preprocessing = True # assinging as this is being used in some places, but internally this has no affect, we always do preprocessing
+    # imputation = data['imputation']
+    imputation = True # assinging as this is being used in some places, but internally this has no affect,we alwasy do imputation.
     scaling = data['scaling']
     models = data['models']
     hyper_parameter_tuning = data['hyper_parameter_tuning']
     categorical_columns = data['categorical_columns']
-    path_to_save = data['path_to_save']
+    os.makedirs('runs', exist_ok=True)
+    path_to_save = os.path.join('runs', f"{name}_{datetime.now().strftime('%Y_%m_%d %H%M%S')}")
+    os.makedirs(path_to_save, exist_ok=False)
     reduce_features = data['reduce_features']
     handle_imbalanced_data = data['handle_imbalanced_data']
     ignore_columns = data['ignore_columns']

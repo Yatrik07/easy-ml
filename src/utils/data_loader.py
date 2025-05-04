@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
+from src.config.GLOBAL_VARS import ML_RequestBody
 
 def get_data_info(data_path):
     data = pd.read_csv(data_path)
@@ -27,7 +28,7 @@ def get_data_info(data_path):
 
     return data_info
 
-def data_loader(request_body):
+def data_loader(request_body : ML_RequestBody):
     print("request_body task: ", request_body.task)
     def load_data_from_path(path):
         """Load dataset from the given path based on the file type."""

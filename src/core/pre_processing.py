@@ -7,9 +7,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from typing import List, Tuple, Union
+from src.config.GLOBAL_VARS import ML_RequestBody
+import joblib
+import os
 
 
-def preprocessing_controller(request_body):
+def preprocessing_controller(request_body : ML_RequestBody):
     # Initialize transformers list
     # request_body.transformers = []
 
@@ -32,10 +35,9 @@ def preprocessing_controller(request_body):
     request_body.column_transformer.transformers = request_body.transformers
 
     # Create final pipeline with ColumnTransformer and PCA
-    final_pipeline = Pipeline([
+    final_pipeline = Pipeline(steps=[
         ('column_transformer', request_body.column_transformer),
-        ('pca', PCA(n_components=getattr(request_body, 'variance_retained', 0.95)))
-    ])
+    ] + ([('pca', PCA(n_components=getattr(request_body, 'variance_retained', 0.95)))] if request_body.reduce_features else []))
 
     # Debug: Print transformers
     # for idx, transformer in enumerate(request_body.transformers):
@@ -46,6 +48,8 @@ def preprocessing_controller(request_body):
     # Transform train and test data using the final pipeline
     request_body.X_train = final_pipeline.fit_transform(request_body.X_train)
     request_body.X_test = final_pipeline.transform(request_body.X_test)
+
+    joblib.dump(final_pipeline, os.path.join(request_body.path_to_save, "preprocessing_pipeline.pkl"), protocol=5)
 
     print("X_train transformed:", request_body.X_train.shape, type(request_body.X_train))
     print("X_test transformed:", request_body.X_test.shape, type(request_body.X_test))
@@ -74,7 +78,7 @@ def get_column_transformer(operation: str, columns: Union[str, List[str]], **kwa
     else:
         raise ValueError(f"Unsupported operation: {operation}")
 
-def determine_column_types(request_body):
+def determine_column_types(request_body: ML_RequestBody):
     if request_body.X is None:
         raise ValueError("X is None — Make sure dataset is loaded before determining column types.")
 
@@ -111,14 +115,13 @@ def determine_column_types(request_body):
     print("Categorical columns:", request_body.categorical_columns)
 
 
-def encode_categorical(request_body):
+def encode_categorical(request_body : ML_RequestBody):
     # Ordinal pipeline: Imputation -> Ordinal Encoding -> Scaling
     if request_body.ordinal_columns:
         ordinal_pipeline = Pipeline([
             ('imputer', SimpleImputer(strategy='most_frequent')),
             ('encoder', OrdinalEncoder()),
-            ('scaler', StandardScaler())
-        ])
+        ] + ([('scaler', StandardScaler())] if request_body.scaling else []))
         request_body.transformers.append(('ordinal_pipeline', ordinal_pipeline, request_body.ordinal_columns))
 
     # Nominal pipeline: Imputation -> OneHot Encoding -> Scaling
@@ -126,23 +129,20 @@ def encode_categorical(request_body):
         nominal_pipeline = Pipeline([
             ('imputer', SimpleImputer(strategy='most_frequent')),
             ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False)),
-            ('scaler', StandardScaler())
-        ])
+        ] + ([('scaler', StandardScaler())] if request_body.scaling else []))
         request_body.transformers.append(('nominal_pipeline', nominal_pipeline, request_body.nominal_columns))
 
 
-def process_numerical(request_body):
+def process_numerical(request_body : ML_RequestBody):
     # Numerical pipeline: Imputation -> Scaling
     if request_body.numeric_columns:
         numerical_pipeline = Pipeline([
-            ('imputer', SimpleImputer(strategy='most_frequent')),
-            ('scaler', StandardScaler())
-        ])
+            ('imputer', SimpleImputer(strategy='median')),
+        ] + ([('scaler', StandardScaler())] if request_body.scaling else []))
         request_body.transformers.append(('numerical_pipeline', numerical_pipeline, request_body.numeric_columns))
 
 
 def print_pipeline(pipeline, indent=0):
-    print("print_pipeline")
     prefix = "    " * indent
     if isinstance(pipeline, Pipeline):
         print(f"{prefix}Pipeline(steps=[")

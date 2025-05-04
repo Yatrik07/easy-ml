@@ -74,8 +74,7 @@ class MLClassificationController:
         print("Here")
         data_loader(self.request_body)
 
-        if self.request_body.preprocessing:
-            preprocessing_controller(self.request_body)
+        preprocessing_controller(self.request_body)
 
         ml_model_builder_trainer_controller(self.request_body)
 

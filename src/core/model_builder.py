@@ -9,10 +9,11 @@ from sklearn.preprocessing import LabelEncoder
 from src.config.GLOBAL_VARS import *
 import tempfile
 import shutil
+import json
 
 
 #new
-def ml_model_builder_trainer_controller(request_body):
+def ml_model_builder_trainer_controller(request_body : ML_RequestBody):
     task = "classification" if "classification" in request_body.task.lower() else "regression" if "regression" in request_body.task.lower() else None
 
     mappings = ui2back_mappings_regression_models if task == "regression" else ui2back_mappings_classification_models if task else None
@@ -77,4 +78,6 @@ def ml_model_builder_trainer_controller(request_body):
                                                                      "accuracy_train": accuracy_train,
                                                                      "accuracy_test": accuracy_test
                                                                      }
+        json_path = os.path.join(request_body.path_to_save, "config_json.json")
+        json.dump(request_body.jsonify(), open(json_path, "w"))
 
