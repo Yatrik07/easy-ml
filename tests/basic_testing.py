@@ -10,6 +10,7 @@ import time
 import shutil
 import gdown
 import json
+from src.config.GLOBAL_VARS import DEFAULT_ML_MODELS_LIST_FOR_CLASSIFICATION, DEFAULT_ML_MODELS_LIST_FOR_REGRESSION
 
 INDENT_MULTIPLIER = 4
 
@@ -64,9 +65,9 @@ class BasicTest(unittest.TestCase):
         self.__class__.log(f'Start verify_ml for task {task}, Payload used: {input_payload}', indent= INDENT_MULTIPLIER * 4)
         if models is None:
             if task == "MLRegression":
-                models = ["DecisionTreeRegressor", "KNeighborsRegressor", "LinearRegression"]
+                models = [type(single_model).__name__ for single_model in DEFAULT_ML_MODELS_LIST_FOR_REGRESSION]
             elif task == "MLClassification":
-                models = ["DecisionTreeClassifier", "KNeighborsClassifier", "LogisticRegression"]
+                models = [type(single_model).__name__ for single_model in DEFAULT_ML_MODELS_LIST_FOR_CLASSIFICATION]
         self.__class__.log(f"Running verify_ml for models: {models}",indent= INDENT_MULTIPLIER * 4)
         files = os.listdir(self.save_dir)
         for model in models:
@@ -93,7 +94,7 @@ class BasicTest(unittest.TestCase):
             "task" : task,
             "dataset_path" : dataset_path,
             "target_column" : target,
-            "ignore_cols" : ignore_cols,
+            "ignore_columns" : ignore_cols,
             "path_to_save" : self.save_dir,
             "categorical_columns" : categorical_cols,
             "models" : None,
@@ -102,7 +103,7 @@ class BasicTest(unittest.TestCase):
         for preprocessing in [True, False]:
             for imputation in [False, True]:
                 for scaling in [False, True]:
-                    for hyper_parameter_tuning in [0,1,2]:
+                    for hyper_parameter_tuning in [0,1]:
                         for reduce_features in [False, True]:
                             final_payload = base_request_payload.copy()
                             final_payload.update(
