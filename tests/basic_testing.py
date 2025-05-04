@@ -1,3 +1,31 @@
+# NOTE
+# While trying to run this script if you keep downloading datasets from gdrive after some tries you will unable to download as google rate limits it.
+# So it is better that you download it once and then use it. To do so follow below steps.
+# In the first run comment out following lines
+#    1. in setUpClass:
+        # try:
+        #     shutil.rmtree('Datasets')
+        # except:
+        #     pass
+    # 2. in tearDownClass:
+        # shutil.rmtree('Datasets')
+# After the first run is successfull you should have a folder named "Datasets" in the directory which was downloaded from gdrive.
+# If above is true then commend out the following lines also to avoid downloading the folder again.
+# In setUpClass:
+        # gdown.download_folder(
+        #     url="https://drive.google.com/drive/folders/1fz8aVuMXFe65DaaIyoSBsFoTVuYeiG7K?usp=drive_link",
+        #     output='Datasets',
+        #     quiet=False,
+        #     use_cookies=False
+        # )
+
+# TODO
+# This test is for the old version where train_models need the dataset path. But in the new version we get the dataset then store it in locally. So need to change it. But will need to merge that change before changing this script.
+# 1. Add testing for option where the user chooses models. (although it is covered in all models but still)
+# 2. This test only covers if the response is 200 or not. Better to test if the options are actually working or not.
+# 3. This test only checks for the model.pkl file. Adding test for the preprocessor file and checking its contents based on given options.
+# 4. Currently there is no response for the train_models API, when we add a response. We would also want to validate the response structure and contents.
+
 import unittest
 from app import app
 import argparse
