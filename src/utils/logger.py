@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 
+
 #TODO : this the final logger class, now just need to apply throughout our code to keep the track
 class logging:
     def __init__(self, filename, logger_filename):
@@ -36,3 +37,13 @@ class logging:
 
     def close(self):
         self.file.close()
+
+
+logger_file_name = r"D:\PycharmProjects\easy-ml\sample_logs\application_logs.log"
+
+
+def write_log(message, level, module_name):
+    with open(logger_file_name, "a") as f:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        level = level.upper()
+        f.write(f"{timestamp} - {module_name} - {level} - {message}\n")

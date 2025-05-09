@@ -1,4 +1,3 @@
-import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
@@ -7,141 +6,201 @@ from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from typing import List, Tuple, Union
-
+from src.utils.logger import write_log
+import os
+import traceback
+ERROR_CODE = 5003
 
 def preprocessing_controller(request_body):
-    # Initialize transformers list
-    # request_body.transformers = []
 
-    # Determine column types first
-    determine_column_types(request_body)
+    try:
 
-    # Process categorical variables (ordinal and nominal) before split
-    encode_categorical(request_body)
+        write_log("entered preprocessing controller", "info", os.path.basename(__file__))
+        determine_column_types(request_body)
 
-    # Split data into train/test
-    request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
-        train_test_split(request_body.X, request_body.y, test_size=0.2, random_state=42,
-                         stratify=request_body.y if "classification" in request_body.task.lower() else None)
+        # Process categorical variables (ordinal and nominal) before split
+        encode_categorical(request_body)
 
-    # Process numerical variables after split
-    process_numerical(request_body)
+        # Split data into train/test
+        write_log("splitting the data into train-test-split", "info", os.path.basename(__file__))
+        request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
+            train_test_split(request_body.X, request_body.y, test_size=0.2, random_state=42,
+                             stratify=request_body.y if "classification" in request_body.task.lower() else None)
 
-    # Create ColumnTransformer with all transformers
-    # column_transformer = ColumnTransformer(transformers=request_body.transformers)
-    request_body.column_transformer.transformers = request_body.transformers
+        # Process numerical variables after split
+        process_numerical(request_body)
 
-    # Create final pipeline with ColumnTransformer and PCA
-    final_pipeline = Pipeline([
-        ('column_transformer', request_body.column_transformer),
-        ('pca', PCA(n_components=getattr(request_body, 'variance_retained', 0.95)))
-    ])
+        # Create ColumnTransformer with all transformers
+        # column_transformer = ColumnTransformer(transformers=request_body.transformers)
+        write_log("appending all the transformers to request_body.column_transformer.transformers ", "info", os.path.basename(__file__))
+        request_body.column_transformer.transformers = request_body.transformers
 
-    # Debug: Print transformers
-    # for idx, transformer in enumerate(request_body.transformers):
-    #     print(f"Transformer {idx}: {transformer[0]}, Columns: {transformer[2]}")
+        # Create final pipeline with ColumnTransformer and PCA
+        final_pipeline = Pipeline([
+            ('column_transformer', request_body.column_transformer),
+            ('pca', PCA(n_components=getattr(request_body, 'variance_retained', 0.95)))
+        ])
 
-    print_pipeline(final_pipeline)
+        write_log("built final pipeline with column transformer and pca", "info", os.path.basename(__file__))
 
-    # Transform train and test data using the final pipeline
-    request_body.X_train = final_pipeline.fit_transform(request_body.X_train)
-    request_body.X_test = final_pipeline.transform(request_body.X_test)
+        print_pipeline(final_pipeline)
 
-    print("X_train transformed:", request_body.X_train.shape, type(request_body.X_train))
-    print("X_test transformed:", request_body.X_test.shape, type(request_body.X_test))
+        # Transform train and test data using the final pipeline
+        write_log("transforming the data using the final pipeline", "info", os.path.basename(__file__))
+        request_body.X_train = final_pipeline.fit_transform(request_body.X_train)
+        request_body.X_test = final_pipeline.transform(request_body.X_test)
+        write_log("transformed the data using the final pipeline", "info", os.path.basename(__file__))
 
+        print("X_train transformed:", request_body.X_train.shape, type(request_body.X_train))
+        print("X_test transformed:", request_body.X_test.shape, type(request_body.X_test))
+        write_log(f"X_train transformed: shape->{request_body.X_train.shape} type->{type(request_body.X_train)}", "info", os.path.basename(
+            __file__))
+        write_log(f"X_test transformed: shape->{request_body.X_test.shape} type->{type(request_body.X_test)}", "info", os.path.basename(
+            __file__))
 
-def get_column_transformer(operation: str, columns: Union[str, List[str]], **kwargs) -> Tuple[str, object, List[str]]:
-    if operation == "scale":
-        scaler = StandardScaler()
-        return ("standard_scaler", scaler, columns)
+    except Exception as e:
+        if request_body.status_code == 200:
+           request_body.status_code = ERROR_CODE
+           request_body.error_message = str(e)
+           request_body.error_traceback = traceback.format_exc()
 
-    elif operation == "impute":
-        strategy = kwargs.get("strategy", "most_frequent")
-        imputer = SimpleImputer(strategy=strategy)
-        return (f"{strategy}_imputer", imputer, columns)
+           write_log("error occurred- {} - {}".format(
+               request_body.error_message, request_body.error_traceback),
+               "error", os.path.basename(__file__))
 
-    elif operation == "encode":
-        encoding_type = kwargs.get("encoding_type", "onehot")
-        if encoding_type == "onehot":
-            encoder = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-        elif encoding_type == "ordinal":
-            encoder = OrdinalEncoder()
-        else:
-            raise ValueError(f"Unsupported encoding type: {encoding_type}")
-        return (f"{encoding_type}_encoder", encoder, columns)
+        raise e
 
-    else:
-        raise ValueError(f"Unsupported operation: {operation}")
 
 def determine_column_types(request_body):
-    if request_body.X is None:
-        raise ValueError("X is None — Make sure dataset is loaded before determining column types.")
 
-    # Ensure ordinal_columns and nominal_columns are lists
-    request_body.ordinal_columns = request_body.ordinal_columns or []
-    request_body.nominal_columns = request_body.nominal_columns or []
+    try:
 
-    # If nominal_columns are not provided, detect categorical columns
-    if not request_body.nominal_columns:
-        # Start with object and category columns, excluding ordinal columns
-        nominal_columns = request_body.X.select_dtypes(
-            include=["object", "category"]).columns.difference(request_body.ordinal_columns).tolist()
+        write_log("entered - determine_column_types", "info", os.path.basename(__file__))
 
-        # Extend with columns having fewer than 10 unique values
-        nominal_columns.extend([col for col in request_body.X.columns if request_body.X[col].nunique() < 10])
+        if request_body.X is None:
+            raise ValueError("X is None — Make sure dataset is loaded before determining column types.")
 
-        # Include boolean columns
-        bool_columns = [col for col in request_body.X.columns if request_body.X[col].dtype == bool]
-        nominal_columns = list(set(nominal_columns).union(bool_columns))
+        # Ensure ordinal_columns and nominal_columns are lists
+        request_body.ordinal_columns = request_body.ordinal_columns or []
+        request_body.nominal_columns = request_body.nominal_columns or []
 
-        # Update nominal_columns
-        request_body.nominal_columns = nominal_columns
+        # If nominal_columns are not provided, detect categorical columns
+        if not request_body.nominal_columns:
+            # Start with object and category columns, excluding ordinal columns
+            nominal_columns = request_body.X.select_dtypes(
+                include=["object", "category"]).columns.difference(request_body.ordinal_columns).tolist()
 
-    # Combine ordinal and nominal columns into categorical columns
-    request_body.categorical_columns = list(set(request_body.ordinal_columns).union(request_body.nominal_columns))
+            # Extend with columns having fewer than 10 unique values
+            nominal_columns.extend([col for col in request_body.X.columns if request_body.X[col].nunique() < 10])
 
-    # Numeric columns are those not in categorical columns
-    request_body.numeric_columns = [
-        col for col in request_body.X.columns
-        if col not in request_body.categorical_columns
-    ]
+            # Include boolean columns
+            bool_columns = [col for col in request_body.X.columns if request_body.X[col].dtype == bool]
+            nominal_columns = list(set(nominal_columns).union(bool_columns))
 
-    print("Numeric columns:", request_body.numeric_columns)
-    print("Categorical columns:", request_body.categorical_columns)
+            # Update nominal_columns
+            request_body.nominal_columns = nominal_columns
+
+        # Combine ordinal and nominal columns into categorical columns
+        request_body.categorical_columns = list(set(request_body.ordinal_columns).union(request_body.nominal_columns))
+
+        # Numeric columns are those not in categorical columns
+        request_body.numeric_columns = [
+            col for col in request_body.X.columns
+            if col not in request_body.categorical_columns
+        ]
+
+        write_log(f"determined column types - \n\tnumerical columns - {request_body.numeric_columns} \n\tcategorical columns - "
+                  f"{request_body.categorical_columns}", "info", os.path.basename(__file__))
+
+        print("Numeric columns:", request_body.numeric_columns)
+        print("Categorical columns:", request_body.categorical_columns)
+
+    except Exception as e:
+        if request_body.status_code == 200:
+           request_body.status_code = ERROR_CODE
+           request_body.error_message = str(e)
+           request_body.error_traceback = traceback.format_exc()
+
+           write_log("error occurred- {} - {}".format(
+               request_body.error_message, request_body.error_traceback),
+               "error", os.path.basename(__file__))
+
+        raise e
 
 
 def encode_categorical(request_body):
-    # Ordinal pipeline: Imputation -> Ordinal Encoding -> Scaling
-    if request_body.ordinal_columns:
-        ordinal_pipeline = Pipeline([
-            ('imputer', SimpleImputer(strategy='most_frequent')),
-            ('encoder', OrdinalEncoder()),
-            ('scaler', StandardScaler())
-        ])
-        request_body.transformers.append(('ordinal_pipeline', ordinal_pipeline, request_body.ordinal_columns))
 
-    # Nominal pipeline: Imputation -> OneHot Encoding -> Scaling
-    if request_body.nominal_columns:
-        nominal_pipeline = Pipeline([
-            ('imputer', SimpleImputer(strategy='most_frequent')),
-            ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False)),
-            ('scaler', StandardScaler())
-        ])
-        request_body.transformers.append(('nominal_pipeline', nominal_pipeline, request_body.nominal_columns))
+    try:
+        write_log("encoding categorical variables", "info", os.path.basename(__file__))
+
+        if request_body.ordinal_columns:
+            ordinal_pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='most_frequent')),
+                ('encoder', OrdinalEncoder()),
+                ('scaler', StandardScaler())
+            ])
+
+            write_log("appending pipeline to thr request_body.transformers for ordinal columns", "info", os.path.basename(
+                __file__))
+
+            request_body.transformers.append(('ordinal_pipeline', ordinal_pipeline, request_body.ordinal_columns))
+
+        # Nominal pipeline: Imputation -> OneHot Encoding -> Scaling
+        if request_body.nominal_columns:
+            nominal_pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='most_frequent')),
+                ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False)),
+                ('scaler', StandardScaler())
+            ])
+
+            write_log("appending pipeline to thr request_body.transformers for nominal columns", "info", os.path.basename(
+                __file__))
+
+            request_body.transformers.append(('nominal_pipeline', nominal_pipeline, request_body.nominal_columns))
+
+    except Exception as e:
+        if request_body.status_code == 200:
+            request_body.status_code = ERROR_CODE
+            request_body.error_message = str(e)
+            request_body.error_traceback = traceback.format_exc()
+
+            write_log("error occurred- {} - {}".format(
+                request_body.error_message, request_body.error_traceback),
+                "error", os.path.basename(__file__))
+
+        raise e
 
 
 def process_numerical(request_body):
-    # Numerical pipeline: Imputation -> Scaling
-    if request_body.numeric_columns:
-        numerical_pipeline = Pipeline([
-            ('imputer', SimpleImputer(strategy='most_frequent')),
-            ('scaler', StandardScaler())
-        ])
-        request_body.transformers.append(('numerical_pipeline', numerical_pipeline, request_body.numeric_columns))
+
+    try:
+        write_log("entered process_numerical()", "info", os.path.basename(__file__))
+        if request_body.numeric_columns:
+            numerical_pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='most_frequent')),
+                ('scaler', StandardScaler())
+            ])
+
+            write_log("appending pipeline to the request_body.transformers for numeric columns", "info", os.path.basename(
+                __file__))
+
+            request_body.transformers.append(('numerical_pipeline', numerical_pipeline, request_body.numeric_columns))
+
+    except Exception as e:
+        if request_body.status_code == 200:
+            request_body.status_code = ERROR_CODE
+            request_body.error_message = str(e)
+            request_body.error_traceback = traceback.format_exc()
+
+            write_log("error occurred- {} - {}".format(
+                request_body.error_message, request_body.error_traceback),
+                "error", os.path.basename(__file__))
+
+        raise e
 
 
 def print_pipeline(pipeline, indent=0):
+
     print("print_pipeline")
     prefix = "    " * indent
     if isinstance(pipeline, Pipeline):
