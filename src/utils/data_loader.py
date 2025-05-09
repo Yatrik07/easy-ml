@@ -4,6 +4,7 @@ from src.utils.logger import write_log
 import traceback
 from src.utils.utils import *
 ERROR_CODE = 5001
+from src.config.GLOBAL_VARS import ML_RequestBody
 
 def get_data_info(data_path):
     data = pd.read_csv(data_path)
@@ -49,11 +50,17 @@ def data_loader(request_body):
 
     try:
         request_body.df = load_data_from_path(request_body.dataset_path)
-
+        
         if request_body.target_column not in request_body.df.columns:
             raise ValueError(f"Target column '{request_body.target_column}' not found in the dataset.")
-        request_body.X = request_body.df.drop(columns=[request_body.target_column])
+        
+        if request_body.ignore_columns is None:
+            request_body.ignore_columns = []
+            
+        drop_columns = [request_body.target_column] + request_body.ignore_columns
+        request_body.X = request_body.df.drop(columns=drop_columns)
         request_body.y = request_body.df[request_body.target_column]
+
         write_log("read dataframe in python", "info", os.path.basename(__file__))
 
         # Encode target if it's a classification task
@@ -73,6 +80,7 @@ def data_loader(request_body):
                 "error", os.path.basename(__file__))
 
         raise e
+
 
 
 def encode_categorical_list(categorical_list):

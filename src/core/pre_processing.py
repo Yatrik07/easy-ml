@@ -5,16 +5,15 @@ from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from typing import List, Tuple, Union
 from src.utils.logger import write_log
 import os
 import traceback
+import joblib
+from src.config.GLOBAL_VARS import ML_RequestBody
 ERROR_CODE = 5003
 
-def preprocessing_controller(request_body):
-
+def preprocessing_controller(request_body: ML_RequestBody):
     try:
-
         write_log("entered preprocessing controller", "info", os.path.basename(__file__))
         determine_column_types(request_body)
 
@@ -30,19 +29,17 @@ def preprocessing_controller(request_body):
         # Process numerical variables after split
         process_numerical(request_body)
 
-        # Create ColumnTransformer with all transformers
-        # column_transformer = ColumnTransformer(transformers=request_body.transformers)
         write_log("appending all the transformers to request_body.column_transformer.transformers ", "info", os.path.basename(__file__))
         request_body.column_transformer.transformers = request_body.transformers
 
         # Create final pipeline with ColumnTransformer and PCA
-        final_pipeline = Pipeline([
+        final_pipeline = Pipeline(steps=[
             ('column_transformer', request_body.column_transformer),
-            ('pca', PCA(n_components=getattr(request_body, 'variance_retained', 0.95)))
-        ])
+        ] + ([('pca', PCA(n_components=getattr(request_body, 'variance_retained', 0.95)))] if request_body.reduce_features else []))
 
         write_log("built final pipeline with column transformer and pca", "info", os.path.basename(__file__))
 
+        print("printing final pipeline: ")
         print_pipeline(final_pipeline)
 
         # Transform train and test data using the final pipeline
@@ -51,8 +48,8 @@ def preprocessing_controller(request_body):
         request_body.X_test = final_pipeline.transform(request_body.X_test)
         write_log("transformed the data using the final pipeline", "info", os.path.basename(__file__))
 
-        print("X_train transformed:", request_body.X_train.shape, type(request_body.X_train))
-        print("X_test transformed:", request_body.X_test.shape, type(request_body.X_test))
+        joblib.dump(final_pipeline, os.path.join(request_body.path_to_save, "preprocessing_pipeline.pkl"), protocol=5)
+
         write_log(f"X_train transformed: shape->{request_body.X_train.shape} type->{type(request_body.X_train)}", "info", os.path.basename(
             __file__))
         write_log(f"X_test transformed: shape->{request_body.X_test.shape} type->{type(request_body.X_test)}", "info", os.path.basename(
@@ -70,11 +67,9 @@ def preprocessing_controller(request_body):
 
         raise e
 
-
-def determine_column_types(request_body):
+def determine_column_types(request_body: ML_RequestBody):
 
     try:
-
         write_log("entered - determine_column_types", "info", os.path.basename(__file__))
 
         if request_body.X is None:
@@ -128,7 +123,7 @@ def determine_column_types(request_body):
         raise e
 
 
-def encode_categorical(request_body):
+def encode_categorical(request_body : ML_RequestBody):
 
     try:
         write_log("encoding categorical variables", "info", os.path.basename(__file__))
@@ -137,26 +132,22 @@ def encode_categorical(request_body):
             ordinal_pipeline = Pipeline([
                 ('imputer', SimpleImputer(strategy='most_frequent')),
                 ('encoder', OrdinalEncoder()),
-                ('scaler', StandardScaler())
-            ])
+            ] + ([('scaler', StandardScaler())] if request_body.scaling else []))
+            request_body.transformers.append(('ordinal_pipeline', ordinal_pipeline, request_body.ordinal_columns))
 
             write_log("appending pipeline to thr request_body.transformers for ordinal columns", "info", os.path.basename(
                 __file__))
-
-            request_body.transformers.append(('ordinal_pipeline', ordinal_pipeline, request_body.ordinal_columns))
 
         # Nominal pipeline: Imputation -> OneHot Encoding -> Scaling
         if request_body.nominal_columns:
             nominal_pipeline = Pipeline([
                 ('imputer', SimpleImputer(strategy='most_frequent')),
                 ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False)),
-                ('scaler', StandardScaler())
-            ])
+            ] + ([('scaler', StandardScaler())] if request_body.scaling else []))
+            request_body.transformers.append(('nominal_pipeline', nominal_pipeline, request_body.nominal_columns))
 
             write_log("appending pipeline to thr request_body.transformers for nominal columns", "info", os.path.basename(
                 __file__))
-
-            request_body.transformers.append(('nominal_pipeline', nominal_pipeline, request_body.nominal_columns))
 
     except Exception as e:
         if request_body.status_code == 200:
@@ -170,21 +161,19 @@ def encode_categorical(request_body):
 
         raise e
 
-
-def process_numerical(request_body):
+def process_numerical(request_body : ML_RequestBody):
 
     try:
         write_log("entered process_numerical()", "info", os.path.basename(__file__))
+
         if request_body.numeric_columns:
             numerical_pipeline = Pipeline([
-                ('imputer', SimpleImputer(strategy='most_frequent')),
-                ('scaler', StandardScaler())
-            ])
+                ('imputer', SimpleImputer(strategy='median')),
+            ] + ([('scaler', StandardScaler())] if request_body.scaling else []))
+            request_body.transformers.append(('numerical_pipeline', numerical_pipeline, request_body.numeric_columns))
 
             write_log("appending pipeline to the request_body.transformers for numeric columns", "info", os.path.basename(
                 __file__))
-
-            request_body.transformers.append(('numerical_pipeline', numerical_pipeline, request_body.numeric_columns))
 
     except Exception as e:
         if request_body.status_code == 200:
@@ -200,8 +189,6 @@ def process_numerical(request_body):
 
 
 def print_pipeline(pipeline, indent=0):
-
-    print("print_pipeline")
     prefix = "    " * indent
     if isinstance(pipeline, Pipeline):
         print(f"{prefix}Pipeline(steps=[")

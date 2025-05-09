@@ -241,7 +241,7 @@ ui2back_mappings_classification_models = {
 error_code_mappings = {
     5001: "DataIngestionError",
     5003: "PreProcessingError",
-    5004: "ModelTrainingError"
+    5004: "ModelTrainingError",
     5005: "OtherError"
 }
 
@@ -271,6 +271,7 @@ class ML_RequestBody(BaseModel):
     numeric_columns: Optional[List[str]] = []
     imputation: bool = False
     reduce_features: bool = False
+    ignore_columns: Optional[List[str]] = None
 
     hyper_parameter_tuning: int = 0
     models: Optional[List[str]] = []  # List of model names
@@ -288,5 +289,20 @@ class ML_RequestBody(BaseModel):
         arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
 
     def jsonify(self):
-        # TODO: convert the entire body into the returnable json (dict) for frontend - ML_RequestBody
-        pass
+        to_dump = dict()
+        to_dump['task'] = self.task
+        to_dump['dataset_path'] = self.dataset_path
+        to_dump['target_column'] = self.target_column
+        to_dump["preprocessing"] = self.preprocessing
+        to_dump["scaling"] = self.scaling
+        to_dump["categorical_columns"] = self.categorical_columns
+        to_dump["ordinal_columns"] = self.ordinal_columns
+        to_dump["nominal_columns"] = self.nominal_columns
+        to_dump["numeric_columns"] = self.numeric_columns
+        to_dump["imputation"] = self.imputation
+        to_dump["reduce_features"] = self.reduce_features
+        to_dump["hyper_parameter_tuning"] = self.hyper_parameter_tuning
+        to_dump["ignore_columns"] = self.ignore_columns
+        to_dump["models"] = self.models
+        to_dump["performance"] = self.performance
+        return to_dump

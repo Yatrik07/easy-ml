@@ -3,14 +3,18 @@ import os
 import joblib
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, r2_score
+import tempfile
+import shutil
+from sklearn.preprocessing import LabelEncoder
 from src.config.GLOBAL_VARS import *
 import tempfile
 import shutil
 from src.utils.logger import write_log
 import traceback
 ERROR_CODE=5004
+import json
 
-def ml_model_builder_trainer_controller(request_body):
+def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
 
     try:
 
@@ -85,6 +89,8 @@ def ml_model_builder_trainer_controller(request_body):
                                                                          "accuracy_train": accuracy_train,
                                                                          "accuracy_test": accuracy_test
                                                                          }
+            json_path = os.path.join(request_body.path_to_save, "config_json.json")
+            json.dump(request_body.jsonify(), open(json_path, "w"))
 
     except Exception as e:
         if request_body.status_code == 200:
