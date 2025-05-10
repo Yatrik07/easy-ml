@@ -38,7 +38,7 @@ import time
 import shutil
 import gdown
 import json
-from src.config.GLOBAL_VARS import DEFAULT_ML_MODELS_LIST_FOR_CLASSIFICATION, DEFAULT_ML_MODELS_LIST_FOR_REGRESSION
+from src.config.GLOBAL_VARS import DEFAULT_ML_MODELS_LIST_FOR_CLASSIFICATION, DEFAULT_ML_MODELS_LIST_FOR_REGRESSION, save_data_path
 
 INDENT_MULTIPLIER = 4
 
@@ -117,10 +117,10 @@ class BasicTest(unittest.TestCase):
         dir_name = 'Regression' if task == "MLRegression" else 'Classification'
 
         dataset_path = os.path.join("Datasets", dir_name, dataset)
+        shutil.copy(dataset_path, save_data_path)
         base_request_payload = {
             "name" : dataset,
             "task" : task,
-            "dataset_path" : dataset_path,
             "target_column" : target,
             "ignore_columns" : ignore_cols,
             "path_to_save" : self.save_dir,
