@@ -1,5 +1,6 @@
 # Ignore the test folder  
 test_folder/
+*.csv
 
 # Ignore the virtual environment  
 venv/
