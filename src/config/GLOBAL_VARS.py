@@ -18,6 +18,7 @@ from typing import Optional, List
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 
+save_data_path = "data.csv"
 # ---------------------------------------- ML - Regression Models ----------------------------------------------
 AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
     LinearRegression(),
