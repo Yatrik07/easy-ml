@@ -2,8 +2,11 @@ from flask import Flask, jsonify, request
 from src.config.GLOBAL_VARS import *
 from src import MLTrainer
 from src.utils.data_loader import get_data_info
+from flask_cors import CORS
+from io import StringIO
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/load_data', methods=['POST'])
 def load_data():
@@ -11,8 +14,11 @@ def load_data():
     This endpoint loads the data from the given path and returns a
     data sample, head and tail along with columns, shape and size.
     """
-    req = request.get_json()
-    data_info = get_data_info(req["data_path"])
+    file = request.files['file']
+    stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
+    data = pd.read_csv(stream)
+    data.to_csv(save_data_path, index=False)
+    data_info = get_data_info(data)
     return jsonify(data_info)
 
 
@@ -30,7 +36,7 @@ def ml_predict():
     data = request.get_json()
 
     task = data['task']
-    dataset_path = data['dataset_path']
+    dataset_path = save_data_path
     target_column = data['target_column']
     preprocessing = data['preprocessing']
     imputation = data['imputation']

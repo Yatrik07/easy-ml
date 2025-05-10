@@ -1,6 +1,7 @@
 # Ignore the test folder  
 test_folder/
 Datasets/
+*.csv
 
 # Ignore the virtual environment  
 venv/
