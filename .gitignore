@@ -11,6 +11,8 @@ sample_logs/
 
 runs/
 
+logs/
+
 # Ignore Python bytecode files
 __pycache__
 +easyai/Lib/
