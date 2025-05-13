@@ -238,6 +238,12 @@ ui2back_mappings_classification_models = {
     "ada_boost": AdaBoostClassifier()
 }
 
+error_code_mappings = {
+    "DataIngestionError": 5001,
+    "PreProcessingError": 5003,
+    "ModelTrainingError": 5004,
+    "OtherError": 5005
+}
 
 # ---------------------------------------- Request Body ----------------------------------------------
 
@@ -265,7 +271,6 @@ class ML_RequestBody(BaseModel):
     numeric_columns: Optional[List[str]] = []
     imputation: bool = False
     reduce_features: bool = False
-    handle_imbalanced_data: str = ""
     ignore_columns: Optional[List[str]] = None
 
     hyper_parameter_tuning: int = 0
@@ -275,6 +280,10 @@ class ML_RequestBody(BaseModel):
 
     column_transformer: ColumnTransformer = ColumnTransformer(transformers=[], remainder='passthrough')
     transformers: Optional[List] = []
+
+    status_code: int = 200
+    error_message: Optional[str] = None
+    error_traceback: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
@@ -296,6 +305,5 @@ class ML_RequestBody(BaseModel):
         to_dump["ignore_columns"] = self.ignore_columns
         to_dump["models"] = self.models
         to_dump["performance"] = self.performance
+        to_dump["status_code"] = self.status_code
         return to_dump
-
-

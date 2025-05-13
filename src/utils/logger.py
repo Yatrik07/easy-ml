@@ -1,8 +1,10 @@
 from datetime import datetime
 import os
+import logging
+
 
 #TODO : this the final logger class, now just need to apply throughout our code to keep the track
-class logging:
+class Logging:
     def __init__(self, filename, logger_filename):
         self.filename = filename or os.path.basename(__file__)
         self.file = open(logger_filename, "a")
@@ -36,3 +38,53 @@ class logging:
 
     def close(self):
         self.file.close()
+
+
+os.makedirs(r"logs", exist_ok=True)
+
+class InfoLevelFilter(logging.Filter):
+    """
+    Filter logs based on minimum log level
+    """
+    def __init__(self):
+        super().__init__()
+
+    def filter(self, record):
+        return record.levelno == 20
+
+logger = logging.getLogger('custom_logger')
+logger.setLevel(logging.INFO)
+
+file_handler = logging.FileHandler(r"logs\logs.log", encoding='utf-8')
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'))
+file_handler.addFilter(InfoLevelFilter())
+file_handler.setLevel(logging.INFO)
+
+error_handler = logging.FileHandler(r"logs\error_logs.log",  encoding='utf-8')
+error_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'))
+error_handler.setLevel(logging.ERROR)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'))
+console_handler.setLevel(logging.INFO)
+
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+logger.addHandler(error_handler)
+
+def get_logger():
+    return logger
+
+def write_log(message, level, module_name):
+    level_map = {
+        'info' : logging.INFO,
+        'error' : logging.ERROR
+    }
+    message = f"{module_name} - {message}"
+    logger.log(level_map.get(level, logging.INFO), message)

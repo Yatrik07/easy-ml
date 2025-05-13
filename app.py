@@ -1,13 +1,25 @@
 from flask import Flask, jsonify, request
+import logging
 from src.config.GLOBAL_VARS import *
 from src import MLTrainer
 from src.utils.data_loader import get_data_info
 from datetime import datetime
 import warnings, os
+from src.utils.logger import write_log
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
 app = Flask(__name__)
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        # Log to console
+        logging.StreamHandler(),
+        # Log to file
+        logging.FileHandler(r'logs\main_logs.log', encoding='utf-8')
+    ]
+)
 
 @app.route('/load_data', methods=['POST'])
 def load_data():
@@ -30,8 +42,10 @@ def get_models():
 @app.route('/ml_predict', methods=['POST'])
 def ml_predict():
     print("Entered")
+    write_log("new incoming request to /ml_predict", "info", os.path.basename(__file__))
     # Get data from the POST request
     data = request.get_json()
+    write_log("received json data", "info", os.path.basename(__file__))
 
     task = data['task']
     name = data['name']
@@ -49,18 +63,29 @@ def ml_predict():
     path_to_save = os.path.join('runs', f"{name}_{datetime.now().strftime('%Y_%m_%d %H%M%S')}")
     os.makedirs(path_to_save, exist_ok=False)
     reduce_features = data['reduce_features']
-    handle_imbalanced_data = data['handle_imbalanced_data']
     ignore_columns = data['ignore_columns']
 
+    write_log("creating a object of MLTrainer", "info", os.path.basename(__file__))
     trainer = MLTrainer(task=task, dataset_path=dataset_path, target_column=target_column, preprocessing=preprocessing,
                         imputation=imputation, scaling=scaling, models=models, hyper_parameter_tuning=hyper_parameter_tuning,
                         categorical_columns=categorical_columns, path_to_save=path_to_save,
-                        reduce_features=reduce_features, ignore_columns= ignore_columns, handle_imbalanced_data=handle_imbalanced_data)
+                        reduce_features=reduce_features, ignore_columns= ignore_columns)
 
-    output = trainer.run()
+    write_log("going for trainer.run()", "info", os.path.basename(__file__))
 
-    # Return response as JSON
-    return output.jsonify()
+    try:
+        output = trainer.run()
+
+        # Return response as JSON
+        return output.jsonify()
+
+    except Exception as e:
+
+        return {
+            "status_code": 500,
+            "error_message": trainer.controller.request_body.error_message,
+        }
+
 
 
 # Run the Flask app
