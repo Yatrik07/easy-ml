@@ -7,6 +7,10 @@ venv/
 # Ignore IDE-specific files (JetBrains IDEA)  
 .idea/
 
+sample_logs/
+
+runs/
+
 # Ignore Python bytecode files
 __pycache__
 +easyai/Lib/

@@ -9,8 +9,7 @@ from src.utils.logger import write_log
 import os
 import traceback
 import joblib
-from src.config.GLOBAL_VARS import ML_RequestBody
-ERROR_CODE = 5003
+from src.config.GLOBAL_VARS import ML_RequestBody, error_code_mappings
 
 def preprocessing_controller(request_body: ML_RequestBody):
     try:
@@ -57,8 +56,8 @@ def preprocessing_controller(request_body: ML_RequestBody):
 
     except Exception as e:
         if request_body.status_code == 200:
-           request_body.status_code = ERROR_CODE
-           request_body.error_message = str(e)
+           request_body.error_message = "PreProcessingError"
+           request_body.status_code = error_code_mappings[request_body.error_message]
            request_body.error_traceback = traceback.format_exc()
 
            write_log("error occurred- {} - {}".format(
@@ -112,8 +111,8 @@ def determine_column_types(request_body: ML_RequestBody):
 
     except Exception as e:
         if request_body.status_code == 200:
-           request_body.status_code = ERROR_CODE
-           request_body.error_message = str(e)
+           request_body.error_message = "PreProcessingError"
+           request_body.status_code = error_code_mappings[request_body.error_message]
            request_body.error_traceback = traceback.format_exc()
 
            write_log("error occurred- {} - {}".format(
@@ -151,8 +150,8 @@ def encode_categorical(request_body : ML_RequestBody):
 
     except Exception as e:
         if request_body.status_code == 200:
-            request_body.status_code = ERROR_CODE
-            request_body.error_message = str(e)
+            request_body.error_message = "PreProcessingError"
+            request_body.status_code = error_code_mappings[request_body.error_message]
             request_body.error_traceback = traceback.format_exc()
 
             write_log("error occurred- {} - {}".format(
@@ -177,8 +176,8 @@ def process_numerical(request_body : ML_RequestBody):
 
     except Exception as e:
         if request_body.status_code == 200:
-            request_body.status_code = ERROR_CODE
-            request_body.error_message = str(e)
+            request_body.error_message = "PreProcessingError"
+            request_body.status_code = error_code_mappings[request_body.error_message]
             request_body.error_traceback = traceback.format_exc()
 
             write_log("error occurred- {} - {}".format(

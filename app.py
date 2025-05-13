@@ -8,7 +8,6 @@ from src.utils.logger import write_log
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
 app = Flask(__name__)
-ERROR_CODE=5005
 
 @app.route('/load_data', methods=['POST'])
 def load_data():
@@ -71,8 +70,7 @@ def ml_predict():
     except Exception as e:
 
         return {
-            "status_code": trainer.controller.request_body.status_code,
-            "error_code": error_code_mappings[trainer.controller.request_body.status_code],
+            "status_code": 500,
             "error_message": trainer.controller.request_body.error_message,
         }
 

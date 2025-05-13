@@ -239,10 +239,10 @@ ui2back_mappings_classification_models = {
 }
 
 error_code_mappings = {
-    5001: "DataIngestionError",
-    5003: "PreProcessingError",
-    5004: "ModelTrainingError",
-    5005: "OtherError"
+    "DataIngestionError": 5001,
+    "PreProcessingError": 5003,
+    "ModelTrainingError": 5004,
+    "OtherError": 5005
 }
 
 # ---------------------------------------- Request Body ----------------------------------------------
@@ -305,4 +305,5 @@ class ML_RequestBody(BaseModel):
         to_dump["ignore_columns"] = self.ignore_columns
         to_dump["models"] = self.models
         to_dump["performance"] = self.performance
+        to_dump["status_code"] = self.status_code
         return to_dump

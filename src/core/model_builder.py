@@ -1,17 +1,12 @@
-import sklearn
 import os
 import joblib
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, r2_score
 import tempfile
 import shutil
-from sklearn.preprocessing import LabelEncoder
 from src.config.GLOBAL_VARS import *
-import tempfile
-import shutil
 from src.utils.logger import write_log
 import traceback
-ERROR_CODE=5004
 import json
 
 def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
@@ -94,8 +89,8 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
 
     except Exception as e:
         if request_body.status_code == 200:
-           request_body.status_code = ERROR_CODE
-           request_body.error_message = str(e)
+           request_body.error_message = "ModelTrainingError"
+           request_body.status_code = error_code_mappings[request_body.error_message]
            request_body.error_traceback = traceback.format_exc()
 
            write_log("error occurred- {} - {}".format(

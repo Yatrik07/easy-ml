@@ -3,8 +3,7 @@ import os, json
 from src.utils.logger import write_log
 import traceback
 from src.utils.utils import *
-ERROR_CODE = 5001
-from src.config.GLOBAL_VARS import ML_RequestBody
+from src.config.GLOBAL_VARS import error_code_mappings
 
 def get_data_info(data_path):
     data = pd.read_csv(data_path)
@@ -71,8 +70,8 @@ def data_loader(request_body):
 
     except Exception as e:
         if request_body.status_code==200:
-            request_body.status_code = ERROR_CODE
-            request_body.error_message = str(e)
+            request_body.error_message = "DataIngestionError"
+            request_body.status_code = error_code_mappings[request_body.error_message]
             request_body.error_traceback = traceback.format_exc()
 
             write_log("error occurred- {} - {}".format(

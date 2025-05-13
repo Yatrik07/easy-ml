@@ -1,4 +1,3 @@
-# entry point
 from src.core.pre_processing import *
 from src.core.model_builder import *
 from src.utils.data_loader import *
@@ -37,8 +36,8 @@ class MLTrainer:
 
         except Exception as e:
             if self.controller.request_body.status_code == 200:
-                self.controller.request_body.status_code = ERROR_CODE
-                self.controller.request_body.error_message = str(e)
+                self.controller.request_body.error_message = "OtherError"
+                self.controller.request_body.status_code = error_code_mappings[self.controller.request_body.error_message]
                 self.controller.request_body.error_traceback = traceback.format_exc()
 
                 write_log("error occurred- {} - {}".format(

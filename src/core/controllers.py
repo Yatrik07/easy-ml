@@ -5,7 +5,6 @@ from src.core.model_builder import ml_model_builder_trainer_controller
 from src.core.pre_processing import preprocessing_controller
 from sklearn.model_selection import train_test_split
 from src.utils.logger import write_log
-ERROR_CODE=5005
 
 class MLRegressionController:
     def __init__(self, dataset_path, target_column, preprocessing=False, imputation=False, scaling=False,
@@ -50,8 +49,8 @@ class MLRegressionController:
 
         except Exception as e:
             if self.request_body.status_code == 200:
-                self.request_body.status_code = ERROR_CODE
-                self.request_body.error_message = str(e)
+                self.request_body.error_message = "OtherError"
+                self.request_body.status_code = error_code_mappings[self.request_body.error_message]
                 self.request_body.error_traceback = traceback.format_exc()
 
                 write_log("error occurred- {} - {}".format(
@@ -99,8 +98,8 @@ class MLClassificationController:
 
         except Exception as e:
             if self.request_body.status_code == 200:
-                self.request_body.status_code = ERROR_CODE
-                self.request_body.error_message = str(e)
+                self.request_body.error_message = "otherError"
+                self.request_body.status_code = error_code_mappings[self.request_body.error_message]
                 self.request_body.error_traceback = traceback.format_exc()
 
                 write_log("error occurred- {} - {}".format(
