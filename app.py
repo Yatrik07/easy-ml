@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request
+import logging
 from src.config.GLOBAL_VARS import *
 from src import MLTrainer
 from src.utils.data_loader import get_data_info
@@ -8,6 +9,17 @@ from src.utils.logger import write_log
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
 app = Flask(__name__)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        # Log to console
+        logging.StreamHandler(),
+        # Log to file
+        logging.FileHandler(r'logs\main_logs.log', encoding='utf-8')
+    ]
+)
 
 @app.route('/load_data', methods=['POST'])
 def load_data():
