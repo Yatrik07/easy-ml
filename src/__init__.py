@@ -32,6 +32,8 @@ class MLTrainer:
         try:
             response = self.controller.run()
 
+            json.dump(response.jsonify(), open(f"{response.path_to_save}/final_output.json", "w"))
+
             return response
 
         except Exception as e:

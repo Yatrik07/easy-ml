@@ -5,6 +5,7 @@ from src.core.model_builder import ml_model_builder_trainer_controller
 from src.core.pre_processing import preprocessing_controller
 from sklearn.model_selection import train_test_split
 from src.utils.logger import write_log
+from src.utils.shared_status import update_progress
 
 class MLRegressionController:
     def __init__(self, dataset_path, target_column, preprocessing=False, imputation=False, scaling=False,
@@ -33,11 +34,13 @@ class MLRegressionController:
 
             if self.request_body.preprocessing:
                 preprocessing_controller(self.request_body)
+                update_progress("completed preprocessing")
 
             else:
                 self.request_body.X_train, self.request_body.X_test, self.request_body.y_train, self.request_body.y_test = \
                     train_test_split(self.request_body.X, self.request_body.y, test_size=0.2)
 
+            update_progress("going to model builder controller")
             ml_model_builder_trainer_controller(self.request_body)
 
             # print("request_body.performance: ", self.request_body)
@@ -85,15 +88,19 @@ class MLClassificationController:
         try:
 
             data_loader(self.request_body)
+            update_progress("completed data loading")
 
             preprocessing_controller(self.request_body)
+            update_progress("completed preprocessing")
 
+            update_progress("going to model builder controller")
             ml_model_builder_trainer_controller(self.request_body)
 
             # print("request_body.performance: ", self.request_body.performance)
             print("request_body.performance: ", {key: value for key, value in self.request_body.dict().items() if
                    key not in ['X', 'y', 'df', 'X_train', 'X_test', 'y_train', 'y_test']})
 
+            update_progress("✅ Training complete", final=True)
             return self.request_body
 
         except Exception as e:

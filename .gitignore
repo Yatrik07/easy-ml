@@ -13,6 +13,8 @@ runs/
 
 logs/
 
+progress_status.json
+
 # Ignore Python bytecode files
 __pycache__
 +easyai/Lib/
