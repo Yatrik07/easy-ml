@@ -14,9 +14,10 @@ from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.neighbors import KNeighborsRegressor
 
-from typing import Optional, List
+from typing import Optional, List, Any
 import pandas as pd
 from sklearn.compose import ColumnTransformer
+from datetime import datetime
 
 # ---------------------------------------- ML - Regression Models ----------------------------------------------
 AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
@@ -242,14 +243,25 @@ error_code_mappings = {
     "DataIngestionError": 5001,
     "PreProcessingError": 5003,
     "ModelTrainingError": 5004,
-    "OtherError": 5005
+    "DatabaseError": 5005,
+    "OtherError": 5006
 }
+
+# ----------------------------------------Database --------------------------------------------------
+db_runs_columns_config = [
+    "id INTEGER PRIMARY KEY AUTOINCREMENT",
+    "run_name TEXT",
+    "folder_path TEXT",
+    "timestamp TEXT",
+    "task TEXT"
+]
 
 # ---------------------------------------- Request Body ----------------------------------------------
 
 # TODO: re-set all the required datatypes of the available variables in the class - ML_RequestBody
 class ML_RequestBody(BaseModel):
     task: str = ""
+    name: str = ""
 
     dataset_path: Optional[str] = None
     X: Optional[pd.DataFrame] = None
@@ -285,6 +297,8 @@ class ML_RequestBody(BaseModel):
     error_message: Optional[str] = None
     error_traceback: Optional[str] = None
 
+    timestamp: str = ""
+
     class Config:
         arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
 
@@ -306,4 +320,28 @@ class ML_RequestBody(BaseModel):
         to_dump["models"] = self.models
         to_dump["performance"] = self.performance
         to_dump["status_code"] = self.status_code
+        to_dump["target_encodings"] = self.target_encodings
         return to_dump
+
+class ML_InferenceBody(BaseModel):
+    task: str = ""
+    run_id: int = ""
+    data: Any = None
+
+    target_encodings: Optional[dict] = None
+
+    ignore_columns: Optional[List[str]] = None
+
+    model: Any = None
+    model_name: str = None
+    pipeline: Any = None
+
+    status_code: int = 200
+    error_message: Optional[str] = None
+    error_traceback: Optional[str] = None
+
+    class Config:
+        arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
+
+    def jsonify(self):
+        pass

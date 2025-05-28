@@ -1,16 +1,13 @@
-class EasyAIException(Exception):
-    def __init__(self, message, error_code="E000", details=None):
-        super().__init__(message)
-        self.error_code = error_code
-        self.details = details or {}
+import numpy as np
 
-    def to_dict(self):
-        return {
-            "error_code": self.error_code,
-            "message": str(self),
-            "details": self.details
-        }
-
+def convert_numpy(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    # elif isinstance(obj, np.ndarray):
+    #     return obj.tolist()
+    return obj
 #
 # class PreprocessingError(EasyAIException):
 #     def __init__(self, message="Preprocessing failed", details=None):
