@@ -1,10 +1,7 @@
 from src.utils.data_loader import *
-from src.config.GLOBAL_VARS import ML_RequestBody
-from src.config.GLOBAL_VARS import *
-from src.core.model_builder import ml_model_builder_trainer_controller
-from src.core.pre_processing import preprocessing_controller
+from easyml.core.model_builder import ml_model_builder_trainer_controller
+from easyml.core.pre_processing import preprocessing_controller
 from sklearn.model_selection import train_test_split
-from src.utils.logger import write_log
 from src.utils.database_operations import *
 from datetime import datetime
 

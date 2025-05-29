@@ -4,7 +4,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score, r2_score
 import tempfile
 import shutil
-from src.config.GLOBAL_VARS import *
+from easyml.config.GLOBAL_VARS import *
 from src.utils.logger import write_log
 import traceback
 import json

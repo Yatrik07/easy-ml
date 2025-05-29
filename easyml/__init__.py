@@ -1,8 +1,5 @@
-from src.core.pre_processing import *
-from src.core.model_builder import *
 from src.utils.data_loader import *
-from src.config.GLOBAL_VARS import *
-from src.core.controllers import *
+from easyml.core.controllers import *
 from src.utils.logger import write_log
 
 class MLTrainer:

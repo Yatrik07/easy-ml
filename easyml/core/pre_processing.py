@@ -9,7 +9,7 @@ from src.utils.logger import write_log
 import os
 import traceback
 import joblib
-from src.config.GLOBAL_VARS import ML_RequestBody, error_code_mappings
+from easyml.config.GLOBAL_VARS import ML_RequestBody, error_code_mappings
 
 def preprocessing_controller(request_body: ML_RequestBody):
     try:

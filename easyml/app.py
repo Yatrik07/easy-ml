@@ -1,13 +1,13 @@
 from flask import Flask, jsonify, request
 import logging
-from src.config.GLOBAL_VARS import *
-from src import MLTrainer
-from src.utils.data_loader import get_data_info
+from easyml.config.GLOBAL_VARS import *
+from easyml import MLTrainer
+from easyml.utils.data_loader import get_data_info
 from datetime import datetime
 import warnings, os
-from src.utils.logger import write_log
-from src.utils.database_operations import get_data_from_database
-from src.core.inference import MLInferenceController
+from easyml.utils.logger import write_log
+from easyml.utils.database_operations import get_data_from_database
+from easyml.core.inference import MLInferenceController
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
 app = Flask(__name__)

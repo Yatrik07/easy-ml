@@ -2,8 +2,7 @@ import pandas as pd
 import os, json
 from src.utils.logger import write_log
 import traceback
-from src.utils.utils import *
-from src.config.GLOBAL_VARS import error_code_mappings
+from easyml.config.GLOBAL_VARS import error_code_mappings
 
 def get_data_info(data_path):
     data = pd.read_csv(data_path)

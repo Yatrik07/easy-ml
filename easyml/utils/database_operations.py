@@ -1,8 +1,7 @@
 import sqlite3
 from src.utils.logger import write_log
-import pandas as pd
 import os
-from src.config.GLOBAL_VARS import *
+from easyml.config.GLOBAL_VARS import *
 import json
 
 def create_database_table(table_name):

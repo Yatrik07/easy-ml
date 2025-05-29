@@ -1,6 +1,5 @@
-from src.utils.logger import write_log
 from src.utils.database_operations import *
-from src.config.GLOBAL_VARS import ML_InferenceBody
+from easyml.config.GLOBAL_VARS import ML_InferenceBody
 import joblib
 import pandas as pd
 import traceback
