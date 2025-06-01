@@ -72,7 +72,7 @@ def ml_predict():
     models = data['models']
     hyper_parameter_tuning = data['hyper_parameter_tuning']
     categorical_columns = data['categorical_columns']
-    os.makedirs('../runs', exist_ok=True)
+    os.makedirs(os.path.join(PROJECT_ROOT, "artifacts", 'runs'), exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
     path_to_save = os.path.join(PROJECT_ROOT, "artifacts", 'runs', f"{name}_{timestamp}")
     print("path_to_save:", path_to_save)
