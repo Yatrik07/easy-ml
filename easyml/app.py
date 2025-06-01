@@ -152,11 +152,12 @@ def inference():
         }
 
 # Run the Flask app
-# if __name__ == '__main__':
-#     from easyml.app import app
-#     app.run(port=5001)
 
 def main():
     from easyml.app import app
     write_log("🚀 easy-ml server started successfully.", "info", "app.py")
     app.run(port=5001, threaded=True)
+
+if __name__ == '__main__':
+    from easyml.app import app
+    app.run(port=5001)
