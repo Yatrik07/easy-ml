@@ -4,7 +4,7 @@ from easyml.utils.logger import write_log
 import traceback
 from easyml.config.GLOBAL_VARS import error_code_mappings
 from easyml.utils.utils import *
-from config.GLOBAL_VARS import *
+from easyml.config.GLOBAL_VARS import *
 
 
 def get_data_info(data):
