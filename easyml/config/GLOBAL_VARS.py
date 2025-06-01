@@ -17,7 +17,10 @@ from sklearn.neighbors import KNeighborsRegressor
 from typing import Optional, List, Any
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from datetime import datetime
+import os
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+print("Project root:", PROJECT_ROOT)
 
 # ---------------------------------------- ML - Regression Models ----------------------------------------------
 AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
@@ -244,7 +247,8 @@ error_code_mappings = {
     "PreProcessingError": 5003,
     "ModelTrainingError": 5004,
     "DatabaseError": 5005,
-    "OtherError": 5006
+    "InferenceError": 5006,
+    "OtherError": 5007
 }
 
 # ----------------------------------------Database --------------------------------------------------

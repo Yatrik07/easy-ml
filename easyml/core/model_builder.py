@@ -5,7 +5,7 @@ from sklearn.metrics import accuracy_score, r2_score
 import tempfile
 import shutil
 from easyml.config.GLOBAL_VARS import *
-from src.utils.logger import write_log
+from easyml.utils.logger import write_log
 import traceback
 import json
 

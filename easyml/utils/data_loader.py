@@ -1,6 +1,6 @@
 import pandas as pd
 import os, json
-from src.utils.logger import write_log
+from easyml.utils.logger import write_log
 import traceback
 from easyml.config.GLOBAL_VARS import error_code_mappings
 

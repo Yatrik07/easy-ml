@@ -1,9 +1,9 @@
-from src.utils.database_operations import *
+from easyml.utils.database_operations import *
 from easyml.config.GLOBAL_VARS import ML_InferenceBody
 import joblib
 import pandas as pd
 import traceback
-from src.utils.utils import convert_numpy
+from easyml.utils.utils import convert_numpy
 from numpy import max
 
 class MLInferenceController:

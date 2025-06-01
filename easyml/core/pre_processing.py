@@ -5,7 +5,7 @@ from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from src.utils.logger import write_log
+from easyml.utils.logger import write_log
 import os
 import traceback
 import joblib

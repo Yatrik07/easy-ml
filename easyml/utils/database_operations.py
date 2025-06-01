@@ -1,14 +1,22 @@
 import sqlite3
-from src.utils.logger import write_log
+from easyml.utils.logger import write_log
 import os
 from easyml.config.GLOBAL_VARS import *
 import json
+import shutil
+
+# Connect to the SQLite database with proper string formatting
+db_dir = os.path.join(PROJECT_ROOT, "artifacts", "database")
+print("db_dir: ", db_dir)
+os.makedirs(db_dir, exist_ok=True)  # Ensure the folder exists
+
 
 def create_database_table(table_name):
     write_log("Entered function create_Database_Table.", "info", os.path.basename(__file__))
 
-    # Connect to the SQLite database with proper string formatting
-    conn = sqlite3.connect(f'database//{table_name}.db')
+    db_path = os.path.join(db_dir, f"{table_name}.db")
+    conn = sqlite3.connect(db_path)
+    # conn = sqlite3.connect(f'database//{table_name}.db')
     write_log(f"Created / Connected TrainingData Database - {table_name} table successfully!", "info",
               os.path.basename(__file__))
 
@@ -27,7 +35,8 @@ def enter_record_to_table(table_name, **values):
     write_log("Entered function enter_record_to_table.", "info", os.path.basename(__file__))
 
     # Connect to the appropriate database
-    conn = sqlite3.connect(f'database/{table_name}.db')
+    db_path = os.path.join(db_dir, f"{table_name}.db")
+    conn = sqlite3.connect(db_path)
     cursor_obj = conn.cursor()
 
     # Prepare columns and values for insertion (excluding 'id')
@@ -45,9 +54,12 @@ def enter_record_to_table(table_name, **values):
     conn.commit()
     conn.close()
 
-def show_table():
+def show_table(table_name):
     write_log("Entered function showTable.", "info", os.path.basename(__file__))
-    conn = sqlite3.connect('database/TrainingData.db')
+
+    db_path = os.path.join(db_dir, f"{table_name}.db")
+    conn = sqlite3.connect(db_path)
+
     cursor_obj = conn.cursor()
     output = cursor_obj.execute("select * from Train")
 
@@ -63,7 +75,9 @@ def drop_table(table_name):
     write_log("Entered function drop_table.", "info", os.path.basename(__file__))
 
     # Connect to the database file dynamically based on table name
-    conn = sqlite3.connect(f'database/{table_name}.db')
+    db_path = os.path.join(db_dir, f"{table_name}.db")
+    conn = sqlite3.connect(db_path)
+
     cursor_obj = conn.cursor()
 
     # Drop the table if it exists
@@ -74,15 +88,18 @@ def drop_table(table_name):
     write_log(f"Table {table_name} dropped successfully.", "info", os.path.basename(__file__))
 
 def show_all_tables():
-    conn = sqlite3.connect('database/TrainingData.db')
+
+    db_path = os.path.join(db_dir, f"runs.db")
+    conn = sqlite3.connect(db_path)
     cursor_obj = conn.cursor()
+
     cursor_obj.execute("SELECT name FROM sqlite_master WHERE type='table';")
     print(cursor_obj.fetchall())
 
 def dataframe_to_database(data, table_name="Train"):
     write_log("Entered function dataframe_to_database.", "info", os.path.basename(__file__))
 
-    db_path = f'database/{table_name}.db'
+    db_path = os.path.join(db_dir, f"{table_name}.db")
     conn = sqlite3.connect(db_path)
 
     try:
@@ -96,7 +113,7 @@ def dataframe_to_database(data, table_name="Train"):
 def get_data_from_database(table_name="runs"):
     write_log("Entered function get_data_from_database.", "info", os.path.basename(__file__))
 
-    db_path = f'database/{table_name}.db'
+    db_path = os.path.join(db_dir, f"{table_name}.db")
     conn = sqlite3.connect(db_path)
 
     try:
@@ -122,7 +139,7 @@ def get_data_from_database(table_name="runs"):
 def get_record_by_id(record_id: int, table_name: str = "runs"):
     write_log("Entered function get_record_by_id.", "info", os.path.basename(__file__))
 
-    db_path = f'database/{table_name}.db'
+    db_path = os.path.join(db_dir, f"{table_name}.db")
     conn = sqlite3.connect(db_path)
     cursor_obj = conn.cursor()
 
@@ -149,5 +166,53 @@ def get_record_by_id(record_id: int, table_name: str = "runs"):
             "status_code": 500,
             "error_message": "DatabaseError"
         }
+    finally:
+        conn.close()
+
+def delete_run_by_id(run_id: int, table_name: str = "runs"):
+    write_log("Entered function delete_run_by_id.", "info", os.path.basename(__file__))
+
+    db_path = os.path.join(db_dir, f"{table_name}.db")
+    conn = sqlite3.connect(db_path)
+    cursor_obj = conn.cursor()
+
+    try:
+        # Only fetch folder_path
+        cursor_obj.execute(f"SELECT folder_path FROM {table_name} WHERE id = ?", (run_id,))
+        result = cursor_obj.fetchone()
+
+        if not result:
+            write_log(f"No run found with ID {run_id} in table '{table_name}'.", "warning", os.path.basename(__file__))
+            return {
+                "status_code": 404,
+                "message": f"Run with ID {run_id} not found."
+            }
+
+        folder_path = result[0]
+
+        # Delete the folder if it exists
+        if folder_path and os.path.exists(folder_path):
+            shutil.rmtree(folder_path)
+            write_log(f"Deleted folder at path: {folder_path}", "info", os.path.basename(__file__))
+        else:
+            write_log(f"Folder path not found or doesn't exist: {folder_path}", "warning", os.path.basename(__file__))
+
+        # Delete the row
+        cursor_obj.execute(f"DELETE FROM {table_name} WHERE id = ?", (run_id,))
+        conn.commit()
+
+        write_log(f"Run with ID {run_id} deleted successfully from '{table_name}'.", "info", os.path.basename(__file__))
+        return {
+            "status_code": 200,
+            "message": f"Run with ID {run_id} and associated folder deleted successfully."
+        }
+
+    except Exception as e:
+        write_log(f"Error deleting run with ID {run_id} from '{table_name}': {str(e)}", "error", os.path.basename(__file__))
+        return {
+            "status_code": 500,
+            "error_message": "DatabaseError"
+        }
+
     finally:
         conn.close()

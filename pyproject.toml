@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easy-ml"
+version = "0.1.0"
+description = "An easy-to-use ML training and inference system built on Flask."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+
+authors = [
+  { name = "Yatrikkumar Shah", email = "yatriksshah@gmail.com" },
+  { name = "Pawan Kumar J", email = "pawanjain72002@gmail.com" },
+  { name = "Esha Mishra", email = "emish8cool@gmail.com" },
+  { name = "Dhruv Jain", email = "djamitjn@gmail.com" }
+]
+
+dependencies = [
+  "flask>=3.1.0",
+  "pandas>=2.2.3",
+  "numpy>=1.26.4",
+  "scikit-learn>=1.6.1",
+  "joblib>=1.4.2",
+#  "matplotlib>=3.10.1",
+#  "lightgbm>=4.6.0",
+#  "xgboost>=3.0.0",
+#  "catboost>=1.2.7",
+  "pydantic>=2.10.6",
+  "requests>=2.32.3"
+]
+
+[project.scripts]
+easy-ml = "easyml.app:main"
+
+[tool.setuptools.packages.find]
+include = ["easyml*"]
+exclude = ["logs*", "runs*", "database*", "test_folder*"]

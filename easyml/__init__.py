@@ -1,6 +1,5 @@
-from src.utils.data_loader import *
 from easyml.core.controllers import *
-from src.utils.logger import write_log
+from easyml.utils.logger import write_log
 
 class MLTrainer:
     def __init__(self, **args):
