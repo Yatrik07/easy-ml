@@ -3,7 +3,7 @@ import os, json
 from easyml.utils.logger import write_log
 import traceback
 from easyml.config.GLOBAL_VARS import error_code_mappings
-from utils.utils import *
+from easyml.utils.utils import *
 from config.GLOBAL_VARS import *
 
 
