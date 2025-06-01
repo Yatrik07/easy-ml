@@ -22,6 +22,7 @@ import os
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 print("Project root:", PROJECT_ROOT)
 
+save_data_path = "data.csv"
 # ---------------------------------------- ML - Regression Models ----------------------------------------------
 AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
     LinearRegression(),

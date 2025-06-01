@@ -10,7 +10,11 @@ from easyml.utils.database_operations import get_data_from_database, delete_run_
 from easyml.core.inference import MLInferenceController
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
+from flask_cors import CORS
+from io import StringIO
+
 app = Flask(__name__)
+CORS(app)
 
 import sys
 if "--no-console" in sys.argv:
@@ -33,8 +37,11 @@ def load_data():
     This endpoint loads the data from the given path and returns a
     data sample, head and tail along with columns, shape and size.
     """
-    req = request.get_json()
-    data_info = get_data_info(req["data_path"])
+    file = request.files['file']
+    stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
+    data = pd.read_csv(stream)
+    data.to_csv(save_data_path, index=False)
+    data_info = get_data_info(data)
     return jsonify(data_info)
 
 
@@ -55,7 +62,7 @@ def ml_predict():
 
     task = data['task']
     name = data['name']
-    dataset_path = data['dataset_path']
+    dataset_path = save_data_path
     target_column = data['target_column']
     # preprocessing = data['preprocessing']
     preprocessing = True # assinging as this is being used in some places, but internally this has no affect, we always do preprocessing
