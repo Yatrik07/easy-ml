@@ -27,7 +27,7 @@ logging.basicConfig(
         # Log to console
         logging.StreamHandler(),
         # Log to file
-        logging.FileHandler(r'../logs/main_logs.log', encoding='utf-8')
+        logging.FileHandler(os.path.join(PROJECT_ROOT, "artifacts", "logs", "main_logs.log"), encoding='utf-8')
     ]
 )
 
