@@ -4,6 +4,8 @@ from easyml.core.pre_processing import preprocessing_controller
 from sklearn.model_selection import train_test_split
 from easyml.utils.database_operations import *
 from datetime import datetime
+from easyml.utils.socket_emitter import emit_progress
+
 
 class MLRegressionController:
     def __init__(self, name, dataset_path, target_column,timestamp,  preprocessing=False, imputation=False, scaling=False,
@@ -30,18 +32,24 @@ class MLRegressionController:
     def run(self):
         try:
 
-            create_database_table("runs")
-
             write_log(f"entered {self.__class__.__name__} -  run()", "info", os.path.basename(__file__))
+
+            create_database_table("runs")
+            emit_progress("setp1- database created")
+
             data_loader(self.request_body)
+            emit_progress("setp2- data loaded successfully")
 
             if self.request_body.preprocessing:
                 preprocessing_controller(self.request_body)
+                emit_progress("step3 - preprocessing done")
+
 
             else:
                 self.request_body.X_train, self.request_body.X_test, self.request_body.y_train, self.request_body.y_test = \
                     train_test_split(self.request_body.X, self.request_body.y, test_size=0.2)
 
+            emit_progress("step4 - going to ml model builder")
             ml_model_builder_trainer_controller(self.request_body)
 
             enter_record_to_table("runs", **{"run_name": self.request_body.name,
@@ -50,6 +58,8 @@ class MLRegressionController:
                                                     "task": self.request_body.task
                                              }
                                   )
+            emit_progress("LAST step5 - entered into database")
+
 
             # print("request_body.performance: ", self.request_body)
             print("request_body.performance: ", {key: value for key, value in self.request_body.dict().items() if
@@ -97,12 +107,19 @@ class MLClassificationController:
 
         try:
 
+            write_log(f"entered {self.__class__.__name__} -  run()", "info", os.path.basename(__file__))
+
             create_database_table("runs")
+            emit_progress("setp1- database created")
+
 
             data_loader(self.request_body)
 
             preprocessing_controller(self.request_body)
+            emit_progress("step2 - preprocessing done")
 
+
+            emit_progress("step3 - going to ml model builder")
             ml_model_builder_trainer_controller(self.request_body)
 
             enter_record_to_table("runs", **{"run_name": self.request_body.name,
@@ -111,6 +128,8 @@ class MLClassificationController:
                                                     "task": self.request_body.task
                                              }
                                   )
+            emit_progress("step4 - entered into database")
+
 
             # print("request_body.performance: ", self.request_body.performance)
             print("request_body.performance: ", {key: value for key, value in self.request_body.dict().items() if

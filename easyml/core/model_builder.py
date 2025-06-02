@@ -8,6 +8,7 @@ from easyml.config.GLOBAL_VARS import *
 from easyml.utils.logger import write_log
 import traceback
 import json
+from easyml.utils.socket_emitter import emit_progress
 
 def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
 
@@ -86,6 +87,8 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                                                                          }
             json_path = os.path.join(request_body.path_to_save, "config_json.json")
             json.dump(request_body.jsonify(), open(json_path, "w"))
+            emit_progress(f"done with model - {type(single_model).__name__}")
+
 
     except Exception as e:
         if request_body.status_code == 200:

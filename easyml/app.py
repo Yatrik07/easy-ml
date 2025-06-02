@@ -12,9 +12,11 @@ warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
 from flask_cors import CORS
 from io import StringIO
+from easyml.utils.socket_emitter import init_socketio, emit_progress
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="/")
 CORS(app)
+socketio = init_socketio(app)
 
 import sys
 if "--no-console" in sys.argv:
@@ -166,10 +168,22 @@ def serve_vue_routes(path):
     return send_from_directory(app.static_folder, "index.html")
 
 def main():
-    from easyml.app import app
-    write_log("🚀 easy-ml server started successfully.", "info", "app.py")
-    app.run(port=5010, threaded=True)
+    # from easyml.app import app
+    # write_log("🚀 easy-ml server started successfully.", "info", "app.py")
+    # app.run(port=5010, threaded=True)
+
+
+    from easyml.utils.socket_emitter import init_socketio
+    socketio = init_socketio(app)
+    write_log("🚀 easy-ml server (with WebSocket) started successfully.", "info", "app.py")
+    socketio.run(app, port=5010, debug=True)
 
 if __name__ == '__main__':
-    from easyml.app import app
-    app.run(port=5010)
+    # from easyml.app import app
+    # app.run(port=5010)
+
+
+    from easyml.utils.socket_emitter import init_socketio
+    socketio = init_socketio(app)
+    write_log("🚀 easy-ml server (with WebSocket) started successfully.", "info", "app.py")
+    socketio.run(app, port=5010, debug=True)
