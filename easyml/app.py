@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 import logging
 from easyml.config.GLOBAL_VARS import *
 from easyml import MLTrainer
@@ -13,7 +13,7 @@ os.environ["LIGHTGBM_VERBOSE"] = "0"
 from flask_cors import CORS
 from io import StringIO
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="frontend/dist", static_url_path="/")
 CORS(app)
 
 import sys
@@ -151,13 +151,25 @@ def inference():
             "error_message": controller.inference_body.error_message,
         }
 
-# Run the Flask app
+
+# Serve Vue frontend
+@app.route("/")
+def serve_index():
+    print("in /")
+    return send_from_directory(app.static_folder, "index.html")
+
+# Catch-all route for Vue.js routing
+@app.route("/<path:path>")
+def serve_vue_routes(path):
+    if os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, "index.html")
 
 def main():
     from easyml.app import app
     write_log("🚀 easy-ml server started successfully.", "info", "app.py")
-    app.run(port=5001, threaded=True)
+    app.run(port=5010, threaded=True)
 
 if __name__ == '__main__':
     from easyml.app import app
-    app.run(port=5001)
+    app.run(port=5010)

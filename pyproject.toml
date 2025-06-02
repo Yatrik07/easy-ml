@@ -24,10 +24,6 @@ dependencies = [
   "numpy>=1.26.4",
   "scikit-learn>=1.6.1",
   "joblib>=1.4.2",
-#  "matplotlib>=3.10.1",
-#  "lightgbm>=4.6.0",
-#  "xgboost>=3.0.0",
-#  "catboost>=1.2.7",
   "pydantic>=2.10.6",
   "requests>=2.32.3"
 ]
@@ -35,6 +31,12 @@ dependencies = [
 [project.scripts]
 easy-ml = "easyml.app:main"
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.packages.find]
 include = ["easyml*"]
 exclude = ["logs*", "runs*", "database*", "test_folder*"]
+
+[tool.setuptools.package-data]
+"easyml" = ["frontend/dist/**/*"]
