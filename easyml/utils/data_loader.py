@@ -6,7 +6,6 @@ from easyml.config.GLOBAL_VARS import error_code_mappings
 from easyml.utils.utils import *
 from easyml.config.GLOBAL_VARS import *
 
-
 def get_data_info(data):
     rows, cols = data.shape
 
@@ -31,7 +30,6 @@ def get_data_info(data):
 
     return data_info
 
-
 def load_data_from_path(path):
     """Load dataset from the given path based on the file type."""
     write_log("entered to load_data_from_path", "info", os.path.basename(__file__))
@@ -52,10 +50,14 @@ def data_loader(request_body):
         request_body.df = load_data_from_path(request_body.dataset_path)
         
         if request_body.target_column not in request_body.df.columns:
-            raise ValueError(f"Target column '{request_body.target_column}' not found in the dataset.")
+            raise
         
         if request_body.ignore_columns is None:
             request_body.ignore_columns = []
+
+        # Drop rows where y is null
+        request_body.df = request_body.df.dropna(subset=[request_body.target_column])
+        request_body.df.reset_index(drop=True, inplace=True)
             
         drop_columns = [request_body.target_column] + request_body.ignore_columns
         request_body.X = request_body.df.drop(columns=drop_columns)
