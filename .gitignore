@@ -18,6 +18,8 @@ database/
 
 easy_ml.egg-info/
 
+temp.html
+
 # Ignore Python bytecode files
 __pycache__
 +easyai/Lib/

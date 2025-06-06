@@ -5,6 +5,7 @@ import traceback
 from easyml.config.GLOBAL_VARS import error_code_mappings
 from easyml.utils.utils import *
 from easyml.config.GLOBAL_VARS import *
+import shutil
 
 def get_data_info(data):
     rows, cols = data.shape
@@ -41,10 +42,17 @@ def load_data_from_path(path):
     else:
         raise ValueError("Unsupported file format. Please provide a .csv or .xlsx file.")
 
+def move_to_runs(request_body):
+    # moving dataset into artifacts/runs/
+    request_body.dataset_path = os.path.join(request_body.path_to_save, "data.csv")
+    shutil.move(save_data_path, request_body.dataset_path)
+
 
 def data_loader(request_body):
 
     write_log("entered data_loader()", "info", os.path.basename(__file__))
+
+    move_to_runs(request_body)
 
     try:
         request_body.df = load_data_from_path(request_body.dataset_path)
