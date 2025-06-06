@@ -20,10 +20,13 @@ authors = [
 dependencies = [
   "Flask==3.1.0",
   "Flask-SocketIO==5.5.1",
+  "flask-cors==5.0.1",
   "pandas==2.2.3",
   "numpy==1.26.4",
   "scikit-learn==1.6.1",
   "joblib==1.4.2",
+  "matplotlib==3.10.1",
+  "plotly==6.0.1",
   "lightgbm==4.6.0",
   "xgboost==3.0.0",
   "catboost==1.2.7",
