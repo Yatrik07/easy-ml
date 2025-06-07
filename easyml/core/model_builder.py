@@ -1,11 +1,11 @@
 import os
 import joblib
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import accuracy_score, r2_score
 import tempfile
 import shutil
 from easyml.config.GLOBAL_VARS import *
 from easyml.utils.logger import write_log
+from easyml.core.evaluator import get_train_test_metrics
 import traceback
 import json
 from easyml.utils.socket_emitter import emit_progress
@@ -63,28 +63,45 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
 
                 grid_search.fit(request_body.X_train, request_body.y_train)
 
-            if task == "classification":
-                accuracy_train, accuracy_test = accuracy_score( request_body.y_train, grid_search.predict(request_body.X_train) ), \
-                    accuracy_score( request_body.y_test, grid_search.predict( request_body.X_test ) )
-            elif task == "regression":
-                accuracy_train, accuracy_test = r2_score( request_body.y_train, grid_search.predict(request_body.X_train) ), \
-                    r2_score( request_body.y_test, grid_search.predict( request_body.X_test ) )
+            metrics = get_train_test_metrics(
+                task=task,
+                y_real_train=request_body.y_train, y_pred_train=grid_search.predict(request_body.X_train),
+                y_real_test=request_body.y_test, y_pred_test=grid_search.predict(request_body.X_test)
+            )
+            if task == 'regression':
+                accuracy_train = metrics['train_metrics'].get('r2_score', None)
+                accuracy_train = round(accuracy_train,5) if accuracy_train is not None else accuracy_train
+                accuracy_test = metrics['test_metrics'].get('r2_score', None)
+                accuracy_test = round(accuracy_test,5) if accuracy_test is not None else accuracy_test
+            else:
+                accuracy_train = metrics['train_metrics'].get('accuracy', None)
+                accuracy_train = round(accuracy_train,5) if accuracy_train is not None else accuracy_train
+                accuracy_test = metrics['test_metrics'].get('accuracy', None)
+                accuracy_test = round(accuracy_test,5) if accuracy_test is not None else accuracy_test
+
+            if accuracy_train is None:
+                write_log(f"Train accuracy None for {type(single_model).__name__} for task {request_body.name}.", level='error', module_name=os.path.basename(__file__))
+            if accuracy_test is None:
+                write_log(f"Test accuracy None for {type(single_model).__name__} for task {request_body.name}.", level='error', module_name=os.path.basename(__file__))
 
             # model_path = os.path.join(request_body.path_to_save, f"{single_model._class.name_}.pkl")
             model_path = os.path.join(request_body.path_to_save, f"{type(single_model).__name__}.pkl")
 
-            write_log(f"trained {single_model} with train accuracy: {round(accuracy_train, 5)} and test_accuracy:"
-                      f" {round(accuracy_test, 5)} - saving at {model_path}", "info", os.path.basename(__file__))
+            write_log(f"trained {single_model} with train accuracy: {accuracy_train} and test_accuracy:"
+                      f" {accuracy_test} - saving at {model_path}", "info", os.path.basename(__file__))
 
             if isinstance(single_model, (CatBoostClassifier, CatBoostRegressor)):
                 grid_search.best_estimator_.save_model(f"{model_path}.cbm")
             else:
                 joblib.dump(grid_search.best_estimator_, model_path, protocol=5)
 
-            request_body.performance[type(single_model).__name__] = {"model_path": model_path,
-                                                                         "accuracy_train": accuracy_train,
-                                                                         "accuracy_test": accuracy_test
-                                                                         }
+            request_body.performance[type(single_model).__name__] = {
+                "model_path": model_path,
+                "accuracy_train": accuracy_train,
+                "accuracy_test": accuracy_test,
+                'train_metrics' : metrics['train_metrics'],
+                "test_metrics" : metrics['test_metrics'],
+            }
             json_path = os.path.join(request_body.path_to_save, "config_json.json")
             json.dump(request_body.jsonify(), open(json_path, "w"))
             emit_progress(f"done with model - {type(single_model).__name__}")

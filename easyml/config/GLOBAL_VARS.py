@@ -13,13 +13,25 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.neighbors import KNeighborsRegressor
-
+from sklearn.metrics import (confusion_matrix, classification_report, mean_absolute_percentage_error,
+                            mean_absolute_error, r2_score, accuracy_score)
+from functools import partial
 from typing import Optional, List, Any
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 import os
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+REGRESSION_METRICS = ['r2_score', 'mape', 'mae']
+CLASSIFICATION_METRICS = ['accuracy', 'confusion_matrix', 'classification_report']
+METRICS_MAPPING = {
+        'accuracy' : accuracy_score,
+        'classification_report' : partial(classification_report, output_dict=True),
+        'confusion_matrix' : confusion_matrix,
+        'r2_score' : r2_score,
+        'mae' : mean_absolute_error,
+        'mape' : mean_absolute_percentage_error
+    }
 print("Project root:", PROJECT_ROOT)
 
 save_data_path = os.path.join(PROJECT_ROOT,"artifacts","data.csv")
