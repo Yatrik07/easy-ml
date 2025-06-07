@@ -6,6 +6,7 @@ from easyml.utils.data_loader import get_data_info
 from datetime import datetime
 import warnings, os
 from easyml.utils.logger import write_log
+from easyml.utils.utils import NumpyJSONProvider
 from easyml.utils.database_operations import get_data_from_database, delete_run_by_id
 from easyml.core.inference import MLInferenceController
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
@@ -15,6 +16,7 @@ from io import StringIO
 from easyml.utils.socket_emitter import init_socketio, emit_progress
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="/")
+app.json = NumpyJSONProvider(app)
 CORS(app)
 socketio = init_socketio(app)
 

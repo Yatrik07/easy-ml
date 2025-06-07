@@ -6,6 +6,7 @@ import shutil
 from easyml.config.GLOBAL_VARS import *
 from easyml.utils.logger import write_log
 from easyml.core.evaluator import get_train_test_metrics
+from easyml.utils.utils import NumpyEncoder
 import traceback
 import json
 from easyml.utils.socket_emitter import emit_progress
@@ -103,7 +104,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 "test_metrics" : metrics['test_metrics'],
             }
             json_path = os.path.join(request_body.path_to_save, "config_json.json")
-            json.dump(request_body.jsonify(), open(json_path, "w"))
+            json.dump(request_body.jsonify(), open(json_path, "w"), cls=NumpyEncoder)
             emit_progress(f"done with model - {type(single_model).__name__}")
 
 
