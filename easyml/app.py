@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response, send_from_directory
 import logging
 from easyml.config.GLOBAL_VARS import *
 from easyml import MLTrainer
@@ -155,6 +155,24 @@ def inference():
             "error_message": controller.inference_body.error_message,
         }
 
+
+@app.route('/debug/logs', methods=['GET'])
+def debug_logs():
+    try:
+        log_file_path = os.path.join(PROJECT_ROOT, "artifacts", "logs", "main_logs.log")
+
+        if not os.path.exists(log_file_path):
+            return Response("Log file not found.", status=404, mimetype='text/plain')
+
+        with open(log_file_path, 'r', encoding='utf-8') as f:
+            log_content = f.read()
+
+        return Response(log_content, mimetype='text/plain')
+
+    except Exception as e:
+        error_msg = f"Error reading log file: {str(e)}"
+        write_log(error_msg, "error", os.path.basename(__file__))
+        return Response(error_msg, status=500, mimetype='text/plain')
 
 # Serve Vue frontend
 @app.route("/")

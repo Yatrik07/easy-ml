@@ -1,4 +1,3 @@
-
 from functools import partial
 import os
 from easyml.config.GLOBAL_VARS import REGRESSION_METRICS, CLASSIFICATION_METRICS, METRICS_MAPPING
