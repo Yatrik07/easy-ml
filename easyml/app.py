@@ -9,6 +9,8 @@ from easyml.utils.logger import write_log
 from easyml.utils.utils import NumpyJSONProvider
 from easyml.utils.database_operations import get_data_from_database, delete_run_by_id
 from easyml.core.inference import MLInferenceController
+from easyml.utils.database_operations import get_record_by_id
+import json
 warnings.filterwarnings('ignore') # , category=UserWarning -> lgbm
 os.environ["LIGHTGBM_VERBOSE"] = "0"
 from flask_cors import CORS
@@ -128,6 +130,24 @@ def manage_runs():
 
     # ✅ fallback in case another method sneaks in
     return jsonify({"error": "Unsupported request method"}), 405
+
+@app.route("/get_run_data", methods=['GET'])
+def get_run_data():
+    data = request.get_json()
+    run_id = data['run_id']
+    result = get_record_by_id(record_id=run_id)
+    if "status_code" not in result:
+        result['status_code'] = 200
+    status_code = result.pop('status_code')
+    if status_code == 200:
+        data_path = result['folder_path']
+        column_data = json.load(open(os.path.join(data_path, "column_data.json"), 'r'))
+        config_data = json.load(open(os.path.join(data_path, "config_json.json"), 'r'))
+        result['column_data'] = column_data
+        result['models'] = list(config_data['performance'].keys())
+        return result, status_code
+    else:
+        return jsonify(result), status_code
 
 @app.route('/inference', methods=['POST'])
 def inference():

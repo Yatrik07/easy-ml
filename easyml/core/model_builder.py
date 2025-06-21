@@ -65,9 +65,10 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 grid_search.fit(request_body.X_train, request_body.y_train)
 
             metrics = get_train_test_metrics(
+                request_body,
                 task=task,
-                y_real_train=request_body.y_train, y_pred_train=grid_search.predict(request_body.X_train),
-                y_real_test=request_body.y_test, y_pred_test=grid_search.predict(request_body.X_test)
+                y_real_train=request_body.y_train, y_pred_train=grid_search.predict(request_body.X_train).squeeze(),
+                y_real_test=request_body.y_test, y_pred_test=grid_search.predict(request_body.X_test).squeeze()
             )
             if task == 'regression':
                 accuracy_train = metrics['train_metrics'].get('r2_score', None)

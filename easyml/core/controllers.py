@@ -139,7 +139,7 @@ class MLClassificationController:
 
         except Exception as e:
             if self.request_body.status_code == 200:
-                self.request_body.error_message = "otherError"
+                self.request_body.error_message = "OtherError"
                 self.request_body.status_code = error_code_mappings[self.request_body.error_message]
                 self.request_body.error_traceback = traceback.format_exc()
 
