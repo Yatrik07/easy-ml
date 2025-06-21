@@ -103,8 +103,17 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 'train_metrics' : metrics['train_metrics'],
                 "test_metrics" : metrics['test_metrics'],
             }
+            column_data = {}
+            column_data['numerical_columns'] = request_body.numeric_columns
+            column_data['categorical_columns'] = request_body.categorical_columns
+            column_data['unique_values'] = {}
+            for col in request_body.categorical_columns:
+                column_data['unique_values'][col] = request_body.df[col].unique().tolist()
+
             json_path = os.path.join(request_body.path_to_save, "config_json.json")
+            column_data_path = os.path.join(request_body.path_to_save, "column_data.json")
             json.dump(request_body.jsonify(), open(json_path, "w"), cls=NumpyEncoder)
+            json.dump(column_data, open(column_data_path, "w"), cls=NumpyEncoder)
             emit_progress(f"done with model - {type(single_model).__name__}")
 
 
