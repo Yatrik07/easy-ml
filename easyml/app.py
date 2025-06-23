@@ -1,6 +1,3 @@
-import sys 
-sys.path.append(r"D:\easy_ml_backend\backend_code\easy-ml")
-
 from flask import Flask, jsonify, request, send_from_directory, Response, send_from_directory
 import logging
 from easyml.config.GLOBAL_VARS import *
