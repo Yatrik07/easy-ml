@@ -3,7 +3,19 @@ import os
 import numpy as np
 from easyml.config.GLOBAL_VARS import REGRESSION_METRICS, CLASSIFICATION_METRICS, METRICS_MAPPING, ML_RequestBody
 from easyml.utils.logger import write_log
+
 def get_classification_metrics(y_real, y_pred):
+    """
+    Computes all classification metrics defined in CLASSIFICATION_METRICS.
+
+    Args:
+        y_real (array-like): True labels.
+        y_pred (array-like): Predicted labels.
+
+    Returns:
+        dict: Computed classification metrics.
+    """
+
     metrics = {}
     for metric in CLASSIFICATION_METRICS:
         try:
@@ -13,6 +25,17 @@ def get_classification_metrics(y_real, y_pred):
 
 
 def get_regression_metrics(y_real, y_pred):
+    """
+    Computes all regression metrics defined in REGRESSION_METRICS.
+
+    Args:
+        y_real (array-like): True values.
+        y_pred (array-like): Predicted values.
+
+    Returns:
+        dict: Computed regression metrics.
+    """
+
     metrics = {}
     for metric in REGRESSION_METRICS:
         try:
@@ -22,6 +45,19 @@ def get_regression_metrics(y_real, y_pred):
 
 
 def get_metrics(request_body : ML_RequestBody, task, y_real, y_pred):
+    """
+    Computes metrics for a given task using real and predicted values.
+
+    Args:
+        request_body (ML_RequestBody): The request context including target encodings.
+        task (str): Either 'classification' or 'regression'.
+        y_real (array-like): True labels or values.
+        y_pred (array-like): Predicted labels or values.
+
+    Returns:
+        dict: Computed metrics for the specified task.
+    """
+
     metrics_to_include = REGRESSION_METRICS if task == 'regression' else CLASSIFICATION_METRICS
     metrics = {}
     if task == 'classification':
@@ -38,6 +74,21 @@ def get_metrics(request_body : ML_RequestBody, task, y_real, y_pred):
     return metrics
 
 def get_train_test_metrics(request_body : ML_RequestBody,task, y_real_train, y_pred_train, y_real_test, y_pred_test):
+    """
+    Computes both training and test metrics for a model run.
+
+    Args:
+        request_body (ML_RequestBody): Request context with target encodings.
+        task (str): Either 'classification' or 'regression'.
+        y_real_train (array-like): True labels for training data.
+        y_pred_train (array-like): Predictions for training data.
+        y_real_test (array-like): True labels for test data.
+        y_pred_test (array-like): Predictions for test data.
+
+    Returns:
+        dict: Dictionary containing 'train_metrics' and 'test_metrics'.
+    """
+
     train_metrics = get_metrics(request_body, task, y_real_train, y_pred_train)
     test_metrics = get_metrics(request_body, task, y_real_test, y_pred_test)
     return {'train_metrics' : train_metrics, 'test_metrics' : test_metrics}

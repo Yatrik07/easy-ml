@@ -12,6 +12,21 @@ import joblib
 from easyml.config.GLOBAL_VARS import ML_RequestBody, error_code_mappings
 
 def preprocessing_controller(request_body: ML_RequestBody):
+    """
+    Main function to preprocess the data:
+    - Determines column types
+    - Encodes categorical variables
+    - Splits data into train/test
+    - Processes numerical variables
+    - Builds and applies a transformation pipeline (with optional PCA)
+
+    Args:
+        request_body (ML_RequestBody): User request data structure containing dataset and config.
+
+    Raises:
+        Exception: Logs and re-raises any exception that occurs during preprocessing.
+    """
+
     try:
         write_log("entered preprocessing controller", "info", os.path.basename(__file__))
         determine_column_types(request_body)
@@ -67,6 +82,16 @@ def preprocessing_controller(request_body: ML_RequestBody):
         raise e
 
 def determine_column_types(request_body: ML_RequestBody):
+    """
+    Detects and assigns nominal, ordinal, categorical, and numeric columns
+    in the dataset using heuristics and user input.
+
+    Args:
+        request_body (ML_RequestBody): The request body with the raw dataset.
+
+    Raises:
+        Exception: Logs and re-raises if dataset is missing or invalid.
+    """
 
     try:
         write_log("entered - determine_column_types", "info", os.path.basename(__file__))
@@ -123,6 +148,17 @@ def determine_column_types(request_body: ML_RequestBody):
 
 
 def encode_categorical(request_body : ML_RequestBody):
+    """
+    Encodes categorical features using appropriate pipelines for:
+    - Ordinal columns: Imputation + Ordinal Encoding (+ optional Scaling)
+    - Nominal columns: Imputation + OneHotEncoding (+ optional Scaling)
+
+    Args:
+        request_body (ML_RequestBody): The request body with encoded transformers.
+
+    Raises:
+        Exception: Logs and re-raises if encoding fails.
+    """
 
     try:
         write_log("encoding categorical variables", "info", os.path.basename(__file__))
@@ -161,6 +197,17 @@ def encode_categorical(request_body : ML_RequestBody):
         raise e
 
 def process_numerical(request_body : ML_RequestBody):
+    """
+    Processes numerical columns using a pipeline of:
+    - Median imputation
+    - Optional scaling
+
+    Args:
+        request_body (ML_RequestBody): The request body with dataset and config.
+
+    Raises:
+        Exception: Logs and re-raises if transformation fails.
+    """
 
     try:
         write_log("entered process_numerical()", "info", os.path.basename(__file__))
@@ -188,6 +235,14 @@ def process_numerical(request_body : ML_RequestBody):
 
 
 def print_pipeline(pipeline, indent=0):
+    """
+    Utility function to pretty-print the structure of a pipeline or ColumnTransformer.
+
+    Args:
+        pipeline (Pipeline or ColumnTransformer or Transformer): Pipeline to print.
+        indent (int): Indentation level for nested steps.
+    """
+
     prefix = "    " * indent
     if isinstance(pipeline, Pipeline):
         print(f"{prefix}Pipeline(steps=[")

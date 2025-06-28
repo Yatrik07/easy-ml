@@ -40,9 +40,13 @@ logging.basicConfig(
 @app.route('/load_data', methods=['POST'])
 def load_data():
     """
-    This endpoint loads the data from the given path and returns a
-    data sample, head and tail along with columns, shape and size.
+    Loads a CSV file, stores it, and returns dataset info including samples,
+    shape, column names, and file size.
+
+    Returns:
+        JSON: Data preview and metadata.
     """
+
     file = request.files['file']
     stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
     data = pd.read_csv(stream)
@@ -53,6 +57,13 @@ def load_data():
 
 @app.route('/get_models', methods=['GET'])
 def get_models():
+    """
+    Returns available classification and regression model names.
+
+    Returns:
+        JSON: Dictionary of model types.
+    """
+
     model_names = { "MLClassification": list(ui2back_mappings_classification_models.keys()),
                     "MLRegression": list(ui2back_mappings_regression_models.keys())}
 
@@ -60,6 +71,13 @@ def get_models():
 
 @app.route('/ml_predict', methods=['POST'])
 def ml_predict():
+    """
+    Endpoint to trigger an ML training run with preprocessing and evaluation.
+
+    Returns:
+        JSON: Model performance and metadata or error details.
+    """
+
     print("Entered")
     write_log("new incoming request to /ml_predict", "info", os.path.basename(__file__))
     # Get data from the POST request
@@ -110,6 +128,17 @@ def ml_predict():
 
 @app.route('/runs', methods=['GET', 'DELETE'])
 def manage_runs():
+    """
+    Handles fetching or deleting training run records.
+
+    Methods:
+        GET: Returns all saved run metadata.
+        DELETE: Deletes a run and its associated artifacts.
+
+    Returns:
+        JSON: Data or status message.
+    """
+
     if request.method == 'GET':
         runs_data = get_data_from_database()
         return runs_data
@@ -133,6 +162,13 @@ def manage_runs():
 
 @app.route("/get_run_data", methods=['GET'])
 def get_run_data():
+    """
+    Returns metadata and column info for a specific run ID.
+
+    Returns:
+        JSON: Run configuration, column data, and list of trained models.
+    """
+
     data = request.get_json()
     run_id = data['run_id']
     result = get_record_by_id(record_id=run_id)
@@ -151,6 +187,13 @@ def get_run_data():
 
 @app.route('/inference', methods=['POST'])
 def inference():
+    """
+    Performs inference on a single data point using a trained model.
+
+    Returns:
+        JSON: Prediction and probabilities or error.
+    """
+
     try:
         write_log("new incoming request to /inference", "info", os.path.basename(__file__))
         # Get data from the POST request
@@ -178,6 +221,13 @@ def inference():
 
 @app.route('/debug/logs', methods=['GET'])
 def debug_logs():
+    """
+    Returns contents of the main log file for debugging.
+
+    Returns:
+        Response: Text/plain log content.
+    """
+
     try:
         log_file_path = os.path.join(PROJECT_ROOT, "artifacts", "logs", "main_logs.log")
 
@@ -197,17 +247,29 @@ def debug_logs():
 # Serve Vue frontend
 @app.route("/")
 def serve_index():
+    """
+    Serves the Vue app's index.html.
+    """
+
     print("in /")
     return send_from_directory(app.static_folder, "index.html")
 
 # Catch-all route for Vue.js routing
 @app.route("/<path:path>")
 def serve_vue_routes(path):
+    """
+    Serves static assets or falls back to index.html for Vue routing.
+    """
+
     if os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     return send_from_directory(app.static_folder, "index.html")
 
 def main():
+    """
+    Starts the Flask app with SocketIO.
+    """
+
     # from easyml.app import app
     # write_log("🚀 easy-ml server started successfully.", "info", "app.py")
     # app.run(port=5010, threaded=True)

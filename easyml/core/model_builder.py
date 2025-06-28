@@ -12,6 +12,21 @@ import json
 from easyml.utils.socket_emitter import emit_progress
 
 def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
+    """
+    Handles model training and evaluation for classification or regression tasks.
+
+    This function:
+    - Selects models based on user input or defaults
+    - Applies hyperparameter tuning using GridSearchCV
+    - Evaluates models using train/test metrics
+    - Saves trained models and configuration JSONs
+
+    Args:
+        request_body (ML_RequestBody): Object containing all user configuration and data.
+
+    Raises:
+        Exception: If any error occurs during training, it logs and re-raises the exception.
+    """
 
     try:
 
