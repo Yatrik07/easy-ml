@@ -2,8 +2,28 @@ from easyml.core.controllers import *
 from easyml.utils.logger import write_log
 
 class MLTrainer:
-    def __init__(self, **args):
+    """
+    MLTrainer is a central orchestrator for managing machine learning tasks.
 
+    It dynamically loads and invokes the appropriate controller based on the specified task
+    (e.g., MLClassificationController, MLRegressionController).
+
+    Attributes:
+        controller: An instance of the selected controller class based on the task type.
+    """
+
+    def __init__(self, **args):
+        """
+        Initializes the MLTrainer by dynamically selecting the appropriate controller.
+
+        Args:
+            **args: A dictionary containing the task type and additional parameters required
+                    to initialize the controller. It must include the key 'task'.
+
+        Raises:
+            ValueError: If the provided task is unsupported.
+            Exception: Re-raises any exception that occurs during initialization after logging.
+        """
         try:
 
             controller_class_name = f"{args['task']}Controller"
@@ -29,7 +49,15 @@ class MLTrainer:
             raise e
 
     def run(self):
+        """
+        Executes the controller's run method to process the ML pipeline.
 
+        Returns:
+            Any: The response returned by the controller's run method.
+
+        Raises:
+            Exception: Re-raises any exception that occurs during execution after logging.
+        """
         try:
             response = self.controller.run()
 
