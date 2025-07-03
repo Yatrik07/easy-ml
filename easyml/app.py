@@ -16,6 +16,8 @@ os.environ["LIGHTGBM_VERBOSE"] = "0"
 from flask_cors import CORS
 from io import StringIO
 from easyml.utils.socket_emitter import init_socketio, emit_progress
+import threading
+import shutil
 
 app = Flask(__name__, static_folder="frontend/dist", static_url_path="/")
 app.json = NumpyJSONProvider(app)
@@ -37,22 +39,54 @@ logging.basicConfig(
     ]
 )
 
+
 @app.route('/load_data', methods=['POST'])
 def load_data():
     """
-    Loads a CSV file, stores it, and returns dataset info including samples,
-    shape, column names, and file size.
+    Loads a dataset either from an uploaded file or from a path in JSON.
+    Returns data preview and metadata.
+
+    - If 'file' is present in the request: processes the uploaded CSV file.
+    - If 'path' is present in the JSON body: copies and loads the file from that path.
 
     Returns:
-        JSON: Data preview and metadata.
+        JSON: Data preview and metadata, or an error response.
     """
 
-    file = request.files['file']
-    stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
-    data = pd.read_csv(stream)
-    data.to_csv(save_data_path, index=False)
-    data_info = get_data_info(data)
-    return jsonify(data_info)
+    try:
+        if 'file' in request.files:
+            # Handle uploaded CSV file
+            file = request.files['file']
+            stream = StringIO(file.stream.read().decode("UTF8"), newline=None)
+            data = pd.read_csv(stream)
+            data.to_csv(save_data_path, index=False)
+
+        elif request.is_json and 'path' in request.json:
+            # Handle file loading from local file system
+            source_path = request.json['path']
+            destination_path = save_data_path
+            print(f"source_path: {source_path}\ndestination path: {destination_path}")
+
+            # Copy large file efficiently
+            with open(source_path, 'rb') as src_file, open(destination_path, 'wb') as dst_file:
+                shutil.copyfileobj(src_file, dst_file)
+
+            data = pd.read_csv(destination_path)
+
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Invalid request: must include either a file upload or a JSON body with 'path'."
+            }), 5001
+
+        data_info = get_data_info(data)
+        return jsonify(data_info)
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Failed to load dataset: {str(e)}"
+        }), 5001
 
 
 @app.route('/get_models', methods=['GET'])
@@ -68,6 +102,7 @@ def get_models():
                     "MLRegression": list(ui2back_mappings_regression_models.keys())}
 
     return jsonify(model_names)
+
 
 @app.route('/ml_predict', methods=['POST'])
 def ml_predict():
@@ -126,6 +161,7 @@ def ml_predict():
             "error_message": trainer.controller.request_body.error_message,
         }
 
+
 @app.route('/runs', methods=['GET', 'DELETE'])
 def manage_runs():
     """
@@ -160,6 +196,7 @@ def manage_runs():
     # ✅ fallback in case another method sneaks in
     return jsonify({"error": "Unsupported request method"}), 405
 
+
 @app.route("/get_run_data", methods=['GET'])
 def get_run_data():
     """
@@ -184,6 +221,7 @@ def get_run_data():
         return result, status_code
     else:
         return jsonify(result), status_code
+
 
 @app.route('/inference', methods=['POST'])
 def inference():
@@ -244,6 +282,20 @@ def debug_logs():
         write_log(error_msg, "error", os.path.basename(__file__))
         return Response(error_msg, status=500, mimetype='text/plain')
 
+
+@app.route('/exit', methods=['POST'])
+def shutdown():
+    """
+    Shuts down the Flask development server (for local use only).
+
+    Returns:
+        JSON: Confirmation message.
+    """
+
+    write_log("Forced shutdown initiated via /exit", "info", os.path.basename(__file__))
+    threading.Thread(target=lambda: os._exit(0)).start()
+    return jsonify({"message": "Force shutdown triggered."}), 200
+
 # Serve Vue frontend
 @app.route("/")
 def serve_index():
@@ -253,6 +305,7 @@ def serve_index():
 
     print("in /")
     return send_from_directory(app.static_folder, "index.html")
+
 
 # Catch-all route for Vue.js routing
 @app.route("/<path:path>")
@@ -264,6 +317,7 @@ def serve_vue_routes(path):
     if os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     return send_from_directory(app.static_folder, "index.html")
+
 
 def main():
     """
@@ -280,10 +334,10 @@ def main():
     write_log("🚀 easy-ml server (with WebSocket) started successfully.", "info", "app.py")
     socketio.run(app, port=5010, debug=True)
 
+
 if __name__ == '__main__':
     # from easyml.app import app
     # app.run(port=5010)
-
 
     from easyml.utils.socket_emitter import init_socketio
     socketio = init_socketio(app)

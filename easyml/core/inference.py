@@ -19,7 +19,7 @@ class MLInferenceController:
         Initializes the inference controller with the required metadata.
 
         Args:
-            run_id (str): Unique ID corresponding to the training run.
+            run_id (int): Unique ID corresponding to the training run.
             data (dict): Input data for which prediction is to be made.
             model_name (str): Name of the model to be loaded for inference.
         """
