@@ -50,7 +50,7 @@ The Easy ML Web App allows users to:
      - Preprocessing
      - Imputation
      - Feature scaling
-     - Feature reduction
+     - Feature reduction (PCA)
      - Hyperparameter tuning
 
 2. **Specify Columns**
@@ -114,5 +114,5 @@ After training:
 
 ## 📬 Contact
 
-For feature requests, support, or feedback, contact the developer or submit issues via the app’s official support channel.
+For feature requests, support, or feedback, contact the developer or submit issues via the app’s official support contact.easyml@gmail.com.
 
