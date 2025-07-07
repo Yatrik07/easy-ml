@@ -7,7 +7,23 @@ from easyml.utils.utils import convert_numpy
 from numpy import max
 
 class MLInferenceController:
+    """
+    Controller for performing inference on a trained ML model using saved artifacts.
+
+    Attributes:
+        inference_body (ML_InferenceBody): Holds model config, input, and outputs.
+    """
+
     def __init__(self, run_id, data, model_name):
+        """
+        Initializes the inference controller with the required metadata.
+
+        Args:
+            run_id (int): Unique ID corresponding to the training run.
+            data (dict): Input data for which prediction is to be made.
+            model_name (str): Name of the model to be loaded for inference.
+        """
+
         self.inference_body = ML_InferenceBody(
             run_id=run_id,
             data=data,
@@ -15,6 +31,15 @@ class MLInferenceController:
         )
 
     def get_inference(self):
+        """
+        Loads the model, pipeline, and target encodings, then performs prediction.
+
+        Returns:
+            dict: Contains the predicted value and associated probability (if available).
+
+        Raises:
+            Exception: Logs and re-raises errors encountered during inference.
+        """
 
         write_log("entered get_inference", "info", os.path.basename(__file__))
 
@@ -41,6 +66,12 @@ class MLInferenceController:
 
 
     def predict_single_point(self):
+        """
+        Applies the pipeline and model to predict a single input record.
+
+        Returns:
+            dict: Dictionary containing prediction and probability (if available).
+        """
 
         write_log("entered predict_single_point", "info", os.path.basename(__file__))
 
@@ -86,6 +117,19 @@ class MLInferenceController:
             raise e
 
     def load_objects(self, inference_body):
+        """
+        Loads the saved model, preprocessing pipeline, and target encodings from disk.
+
+        Args:
+            inference_body (ML_InferenceBody): Contains metadata about the inference task.
+
+        Returns:
+            tuple: model, pipeline, and target_encodings (if classification).
+
+        Raises:
+            Exception: Logs and re-raises errors if file loading fails.
+        """
+
         write_log("entered load_objects", "info", os.path.basename(__file__))
 
         try:

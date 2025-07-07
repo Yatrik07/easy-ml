@@ -12,6 +12,13 @@ os.makedirs(db_dir, exist_ok=True)  # Ensure the folder exists
 
 
 def create_database_table(table_name):
+    """
+    Creates a SQLite table if it doesn't exist using predefined column configs.
+
+    Args:
+        table_name (str): Name of the table to create.
+    """
+
     write_log("Entered function create_Database_Table.", "info", os.path.basename(__file__))
 
     db_path = os.path.join(db_dir, f"{table_name}.db")
@@ -32,6 +39,14 @@ def create_database_table(table_name):
     conn.close()
 
 def enter_record_to_table(table_name, **values):
+    """
+    Inserts a record into the specified table.
+
+    Args:
+        table_name (str): Target table name.
+        **values: Column-value pairs to insert.
+    """
+
     write_log("Entered function enter_record_to_table.", "info", os.path.basename(__file__))
 
     # Connect to the appropriate database
@@ -55,6 +70,13 @@ def enter_record_to_table(table_name, **values):
     conn.close()
 
 def show_table(table_name):
+    """
+    Displays all records from the specified table.
+
+    Args:
+        table_name (str): Name of the table to display.
+    """
+
     write_log("Entered function showTable.", "info", os.path.basename(__file__))
 
     db_path = os.path.join(db_dir, f"{table_name}.db")
@@ -72,6 +94,13 @@ def show_table(table_name):
     conn.close()
 
 def drop_table(table_name):
+    """
+    Drops the specified table from the database.
+
+    Args:
+        table_name (str): Table to drop.
+    """
+
     write_log("Entered function drop_table.", "info", os.path.basename(__file__))
 
     # Connect to the database file dynamically based on table name
@@ -88,6 +117,9 @@ def drop_table(table_name):
     write_log(f"Table {table_name} dropped successfully.", "info", os.path.basename(__file__))
 
 def show_all_tables():
+    """
+    Lists all tables in the `runs.db` database.
+    """
 
     db_path = os.path.join(db_dir, f"runs.db")
     conn = sqlite3.connect(db_path)
@@ -97,6 +129,14 @@ def show_all_tables():
     print(cursor_obj.fetchall())
 
 def dataframe_to_database(data, table_name="Train"):
+    """
+    Saves a DataFrame to the specified SQLite table.
+
+    Args:
+        data (pd.DataFrame): The DataFrame to store.
+        table_name (str): Name of the target table.
+    """
+
     write_log("Entered function dataframe_to_database.", "info", os.path.basename(__file__))
 
     db_path = os.path.join(db_dir, f"{table_name}.db")
@@ -111,6 +151,16 @@ def dataframe_to_database(data, table_name="Train"):
         conn.close()
 
 def get_data_from_database(table_name="runs"):
+    """
+    Fetches all rows from the specified table.
+
+    Args:
+        table_name (str): The table to query.
+
+    Returns:
+        dict: Contains status code and data or error message.
+    """
+
     write_log("Entered function get_data_from_database.", "info", os.path.basename(__file__))
 
     db_path = os.path.join(db_dir, f"{table_name}.db")
@@ -137,6 +187,17 @@ def get_data_from_database(table_name="runs"):
         conn.close()
 
 def get_record_by_id(record_id: int, table_name: str = "runs"):
+    """
+    Fetches a record from the specified table using its ID.
+
+    Args:
+        record_id (int): ID of the row.
+        table_name (str): Table name to query.
+
+    Returns:
+        dict: The record as a dictionary, or error info if not found.
+    """
+
     write_log("Entered function get_record_by_id.", "info", os.path.basename(__file__))
 
     db_path = os.path.join(db_dir, f"{table_name}.db")
@@ -170,6 +231,17 @@ def get_record_by_id(record_id: int, table_name: str = "runs"):
         conn.close()
 
 def delete_run_by_id(run_id: int, table_name: str = "runs"):
+    """
+    Deletes a training run from the database and its associated folder.
+
+    Args:
+        run_id (int): Run ID to delete.
+        table_name (str): Table to delete from.
+
+    Returns:
+        dict: Result with status code and message.
+    """
+
     write_log("Entered function delete_run_by_id.", "info", os.path.basename(__file__))
 
     db_path = os.path.join(db_dir, f"{table_name}.db")

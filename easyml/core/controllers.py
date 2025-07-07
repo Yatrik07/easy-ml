@@ -8,9 +8,35 @@ from easyml.utils.socket_emitter import emit_progress
 
 
 class MLRegressionController:
+    """
+    Controller class for managing regression ML pipelines.
+
+    This includes loading data, optional preprocessing, training models,
+    and storing run metadata in a database.
+    """
+
     def __init__(self, name, dataset_path, target_column,timestamp,  preprocessing=False, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, categorical_columns=None, path_to_save=None,
                  reduce_features=False, task=None, ignore_columns=None):
+        """
+        Initializes the MLRegressionController with user-defined configuration.
+
+        Args:
+            name (str): Name of the run.
+            dataset_path (str): Path to the dataset file.
+            target_column (str): Name of the target column.
+            timestamp (str): Timestamp of the run.
+            preprocessing (bool): Whether to perform preprocessing.
+            imputation (bool): Whether to apply missing value imputation.
+            scaling (bool): Whether to scale numerical features.
+            models (list): List of model names to train.
+            hyper_parameter_tuning (int): Whether to perform HPT (0/1).
+            categorical_columns (list): List of categorical feature names.
+            path_to_save (str): Output directory path to save results.
+            reduce_features (bool): Whether to apply feature reduction.
+            task (str): Task type (e.g., 'Regression').
+            ignore_columns (list): Columns to ignore during training.
+        """
 
         self.request_body = ML_RequestBody(
             name=name,
@@ -30,6 +56,15 @@ class MLRegressionController:
         )
 
     def run(self):
+        """
+        Executes the end-to-end regression ML workflow.
+
+        Returns:
+            ML_RequestBody: Updated request body with model results and metadata.
+
+        Raises:
+            Exception: If any step fails, logs and re-raises the error.
+        """
         try:
 
             write_log(f"entered {self.__class__.__name__} -  run()", "info", os.path.basename(__file__))
@@ -82,9 +117,35 @@ class MLRegressionController:
 
 
 class MLClassificationController:
+    """
+    Controller class for managing classification ML pipelines.
+
+    This includes loading data, preprocessing, model training,
+    and saving results to a database.
+    """
+
     def __init__(self, name, dataset_path, target_column, timestamp, preprocessing=False, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, categorical_columns=None, path_to_save=None,
                  reduce_features=False, ignore_columns=None, task=None):
+        """
+        Initializes the MLClassificationController with the required configuration.
+
+        Args:
+            name (str): Name of the run.
+            dataset_path (str): Path to the dataset file.
+            target_column (str): Name of the target column.
+            timestamp (str): Timestamp of the run.
+            preprocessing (bool): Whether to perform preprocessing.
+            imputation (bool): Whether to apply missing value imputation.
+            scaling (bool): Whether to scale numerical features.
+            models (list): List of model names to train.
+            hyper_parameter_tuning (int): Whether to perform HPT (0/1).
+            categorical_columns (list): List of categorical feature names.
+            path_to_save (str): Output directory path to save results.
+            reduce_features (bool): Whether to apply feature reduction.
+            ignore_columns (list): Columns to ignore during training.
+            task (str): Task type (e.g., 'Classification').
+        """
 
         self.request_body = ML_RequestBody(
             name=name,
@@ -104,7 +165,15 @@ class MLClassificationController:
         )
 
     def run(self):
+        """
+        Executes the end-to-end classification ML workflow.
 
+        Returns:
+            ML_RequestBody: Updated request body with model results and metadata.
+
+        Raises:
+            Exception: If any step fails, logs and re-raises the error.
+        """
         try:
 
             write_log(f"entered {self.__class__.__name__} -  run()", "info", os.path.basename(__file__))
