@@ -206,8 +206,7 @@ def get_run_data():
         JSON: Run configuration, column data, and list of trained models.
     """
 
-    data = request.get_json()
-    run_id = data['run_id']
+    run_id = request.args['run_id']
     result = get_record_by_id(record_id=run_id)
     if "status_code" not in result:
         result['status_code'] = 200
