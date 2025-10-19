@@ -83,7 +83,8 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 request_body,
                 task=task,
                 y_real_train=request_body.y_train, y_pred_train=grid_search.predict(request_body.X_train).squeeze(),
-                y_real_test=request_body.y_test, y_pred_test=grid_search.predict(request_body.X_test).squeeze()
+                y_real_test=request_body.y_test, y_pred_test=grid_search.predict(request_body.X_test).squeeze(),
+                **({'labels' : list(request_body.target_encodings.keys())} if task == 'classification' else {})
             )
             if task == 'regression':
                 accuracy_train = metrics['train_metrics'].get('r2_score', None)

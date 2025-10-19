@@ -44,7 +44,7 @@ def get_regression_metrics(y_real, y_pred):
             write_log(f"Error in get_classification_metrics for metric {metric}. Error: {e}",level='error', module_name=os.path.basename(__file__))
 
 
-def get_metrics(request_body : ML_RequestBody, task, y_real, y_pred):
+def get_metrics(request_body : ML_RequestBody, task, y_real, y_pred, **kwargs):
     """
     Computes metrics for a given task using real and predicted values.
 
@@ -67,13 +67,19 @@ def get_metrics(request_body : ML_RequestBody, task, y_real, y_pred):
         y_pred = np.array([rev_target_encodings[tmp] for tmp in y_pred])
 
     for metric in metrics_to_include:
+        if metric == 'confusion_matrix':
+            kwargs_ = {'labels' : kwargs['labels']}
+        else:
+            kwargs_ = {}
         try:
-            metrics[metric] = METRICS_MAPPING[metric](*[y_real, y_pred])
+            metrics[metric] = METRICS_MAPPING[metric](*[y_real, y_pred], **kwargs_)
+            if metric == 'confusion_matrix':
+                metrics['confusion_matrix_order'] = kwargs['labels']
         except Exception as e:
             write_log(f"Error in get_metrics for task {task} for metric {metric}. Error: {e}",level='error', module_name=os.path.basename(__file__))
     return metrics
 
-def get_train_test_metrics(request_body : ML_RequestBody,task, y_real_train, y_pred_train, y_real_test, y_pred_test):
+def get_train_test_metrics(request_body : ML_RequestBody,task, y_real_train, y_pred_train, y_real_test, y_pred_test, **kwargs):
     """
     Computes both training and test metrics for a model run.
 
@@ -89,6 +95,6 @@ def get_train_test_metrics(request_body : ML_RequestBody,task, y_real_train, y_p
         dict: Dictionary containing 'train_metrics' and 'test_metrics'.
     """
 
-    train_metrics = get_metrics(request_body, task, y_real_train, y_pred_train)
-    test_metrics = get_metrics(request_body, task, y_real_test, y_pred_test)
+    train_metrics = get_metrics(request_body, task, y_real_train, y_pred_train, **kwargs)
+    test_metrics = get_metrics(request_body, task, y_real_test, y_pred_test, **kwargs)
     return {'train_metrics' : train_metrics, 'test_metrics' : test_metrics}
