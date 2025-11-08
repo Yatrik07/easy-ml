@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easy-ml"
+version = "0.1.0"
+description = "An easy-to-use ML training and inference system built on Flask."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+
+authors = [
+  { name = "Yatrikkumar Shah", email = "yatriksshah@gmail.com" },
+  { name = "Pawan Kumar J", email = "pawanjain72002@gmail.com" },
+  { name = "Esha Mishra", email = "emish8cool@gmail.com" },
+  { name = "Dhruv Jain", email = "djamitjn@gmail.com" }
+]
+
+dependencies = [
+  "Flask==3.1.0",
+  "Flask-SocketIO==5.5.1",
+  "flask-cors==5.0.1",
+  "pandas==2.2.3",
+  "numpy==1.26.4",
+  "scikit-learn==1.6.1",
+  "joblib==1.4.2",
+  "matplotlib==3.10.1",
+  "plotly==6.0.1",
+  "lightgbm==4.6.0",
+  "xgboost==3.0.0",
+  "catboost==1.2.7",
+  "pydantic==2.10.6",
+  "graphviz==0.20.3",
+  "requests==2.32.3",
+  "websocket-client==1.8.0",
+  "python-socketio==5.13.0",
+  "python-engineio==4.12.1",
+  "werkzeug==3.1.3",
+  "Jinja2==3.1.6",
+  "itsdangerous==2.2.0",
+  "certifi==2025.4.26",
+  "charset-normalizer==3.4.2",
+  "idna==3.10",
+  "urllib3==2.4.0",
+  "blinker==1.9.0",
+  "pillow==11.1.0",
+  "six==1.17.0",
+  "threadpoolctl==3.6.0",
+  "typing_extensions==4.13.0"
+]
+
+[project.scripts]
+easy-ml = "easyml.app:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["easyml*"]
+exclude = ["logs*", "runs*", "database*", "test_folder*"]
+
+[tool.setuptools.package-data]
+"easyml" = ["frontend/dist/**/*"]

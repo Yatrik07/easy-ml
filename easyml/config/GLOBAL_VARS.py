@@ -13,12 +13,28 @@ from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.neighbors import KNeighborsRegressor
-
-from typing import Optional, List
+from sklearn.metrics import (confusion_matrix, classification_report, mean_absolute_percentage_error,
+                            mean_absolute_error, r2_score, accuracy_score)
+from functools import partial
+from typing import Optional, List, Any
 import pandas as pd
-import numpy as np
+from sklearn.compose import ColumnTransformer
+import os
 
-save_data_path = "data.csv"
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+REGRESSION_METRICS = ['r2_score', 'mape', 'mae']
+CLASSIFICATION_METRICS = ['accuracy', 'confusion_matrix', 'classification_report']
+METRICS_MAPPING = {
+        'accuracy' : accuracy_score,
+        'classification_report' : partial(classification_report, output_dict=True),
+        'confusion_matrix' : confusion_matrix,
+        'r2_score' : r2_score,
+        'mae' : mean_absolute_error,
+        'mape' : mean_absolute_percentage_error
+    }
+print("Project root:", PROJECT_ROOT)
+
+save_data_path = os.path.join(PROJECT_ROOT,"artifacts","data.csv")
 # ---------------------------------------- ML - Regression Models ----------------------------------------------
 AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
     LinearRegression(),
@@ -217,32 +233,52 @@ ui2back_mappings_regression_models = {
     "linear_regression": LinearRegression(),
     "random_forest": RandomForestRegressor(),
     "xg_boost": XGBRegressor(),
-    "light_gbm": LGBMRegressor(),
-    "cat_boost": CatBoostRegressor(),
+    "light_gbm": LGBMRegressor(verbose=-1),
+    "cat_boost": CatBoostRegressor(
+        logging_level="Silent",  # Disables logs
+    ),
     "knn": KNeighborsRegressor(),
     "ada_boost": AdaBoostRegressor()
 }
 
 ui2back_mappings_classification_models = {
-    "logistic_regression": LogisticRegression(),
+    "logistic_regression": LogisticRegression(solver='newton-cg'),
     "random_forest": RandomForestClassifier(),
     "xg_boost": XGBClassifier(),
-    "light_gbm": LGBMClassifier(),
+    "light_gbm": LGBMClassifier(verbose=-1),
     "cat_boost": CatBoostClassifier(
         task_type="CPU",
         logging_level="Silent",  # Disables logs
-        save_snapshot=False  # Prevents creating temporary files
+        save_snapshot=False,  # Prevents creating temporary files
     ),
     "knn": KNeighborsClassifier(),
     "ada_boost": AdaBoostClassifier()
 }
 
+error_code_mappings = {
+    "DataIngestionError": 5001,
+    "PreProcessingError": 5003,
+    "ModelTrainingError": 5004,
+    "DatabaseError": 5005,
+    "InferenceError": 5006,
+    "OtherError": 5007
+}
+
+# ----------------------------------------Database --------------------------------------------------
+db_runs_columns_config = [
+    "id INTEGER PRIMARY KEY AUTOINCREMENT",
+    "run_name TEXT",
+    "folder_path TEXT",
+    "timestamp TEXT",
+    "task TEXT"
+]
 
 # ---------------------------------------- Request Body ----------------------------------------------
 
 # TODO: re-set all the required datatypes of the available variables in the class - ML_RequestBody
 class ML_RequestBody(BaseModel):
     task: str = ""
+    name: str = ""
 
     dataset_path: Optional[str] = None
     X: Optional[pd.DataFrame] = None
@@ -258,13 +294,12 @@ class ML_RequestBody(BaseModel):
 
     preprocessing: bool = False
     scaling: bool = False
-    categorical_columns: Optional[List[str]] = None
-    ordinal_columns: Optional[List[str]] = None
-    nominal_columns: Optional[List[str]] = None
-    numeric_columns: Optional[List[str]] = None
+    categorical_columns: Optional[List[str]] = []
+    ordinal_columns: Optional[List[str]] = []
+    nominal_columns: Optional[List[str]] = []
+    numeric_columns: Optional[List[str]] = []
     imputation: bool = False
     reduce_features: bool = False
-    handle_imbalanced_data: str = ""
     ignore_columns: Optional[List[str]] = None
 
     hyper_parameter_tuning: int = 0
@@ -272,11 +307,58 @@ class ML_RequestBody(BaseModel):
     performance: Optional[dict] = {}
     path_to_save: Optional[str] = None
 
+    column_transformer: ColumnTransformer = ColumnTransformer(transformers=[], remainder='passthrough')
+    transformers: Optional[List] = []
+
+    status_code: int = 200
+    error_message: Optional[str] = None
+    error_traceback: Optional[str] = None
+
+    timestamp: str = ""
+
     class Config:
         arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
 
     def jsonify(self):
-        # TODO: convert the entire body into the returnable json (dict) for frontend - ML_RequestBody
+        to_dump = dict()
+        to_dump['task'] = self.task
+        to_dump['dataset_path'] = self.dataset_path
+        to_dump['target_column'] = self.target_column
+        to_dump["preprocessing"] = self.preprocessing
+        to_dump["scaling"] = self.scaling
+        to_dump["categorical_columns"] = self.categorical_columns
+        to_dump["ordinal_columns"] = self.ordinal_columns
+        to_dump["nominal_columns"] = self.nominal_columns
+        to_dump["numeric_columns"] = self.numeric_columns
+        to_dump["imputation"] = self.imputation
+        to_dump["reduce_features"] = self.reduce_features
+        to_dump["hyper_parameter_tuning"] = self.hyper_parameter_tuning
+        to_dump["ignore_columns"] = self.ignore_columns
+        to_dump["models"] = self.models
+        to_dump["performance"] = self.performance
+        to_dump["status_code"] = self.status_code
+        to_dump["target_encodings"] = self.target_encodings
+        return to_dump
+
+class ML_InferenceBody(BaseModel):
+    task: str = ""
+    run_id: int = ""
+    data: Any = None
+
+    target_encodings: Optional[dict] = None
+
+    ignore_columns: Optional[List[str]] = None
+
+    model: Any = None
+    model_name: str = None
+    pipeline: Any = None
+
+    status_code: int = 200
+    error_message: Optional[str] = None
+    error_traceback: Optional[str] = None
+
+    class Config:
+        arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
+
+    def jsonify(self):
         pass
-
-

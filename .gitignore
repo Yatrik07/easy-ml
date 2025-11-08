@@ -8,6 +8,18 @@ venv/
 # Ignore IDE-specific files (JetBrains IDEA)  
 .idea/
 
+sample_logs/
+
+runs/
+
+logs/
+
+database/
+
+easy_ml.egg-info/
+
+temp.html
+
 # Ignore Python bytecode files
 __pycache__
 +easyai/Lib/
