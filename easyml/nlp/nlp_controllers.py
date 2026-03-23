@@ -1,0 +1,255 @@
+"""
+NLP Controllers Module
+=======================
+NLP pipeline orchestrators, following the same pattern as
+easyml/core/controllers.py (MLClassificationController / MLRegressionController).
+
+Each controller wires together:
+    data loading → preprocessing → feature engineering → model training → database save
+"""
+
+import os
+import traceback
+import shutil
+import pandas as pd
+import json 
+
+from easyml.nlp.nlp_config import NLP_RequestBody, NLP_ERROR_CODES
+from easyml.nlp.nlp_preprocessing import nlp_preprocessing_controller
+from easyml.nlp.nlp_feature_engineering import vectorizer_controller, embedding_controller
+from easyml.nlp.nlp_model_builder import nlp_model_builder_controller
+from easyml.utils.data_loader import load_data_from_path, encode_categorical_list
+from easyml.utils.database_operations import create_database_table, enter_record_to_table, get_data_from_database
+from easyml.utils.logger import write_log
+from easyml.utils.socket_emitter import emit_progress
+from easyml.config.GLOBAL_VARS import save_data_path
+from easyml.utils.utils import NumpyEncoder
+
+
+def nlp_data_loader(request_body: NLP_RequestBody):
+    """
+    Loads a text dataset and prepares text (X) and target (y) columns.
+
+    Steps:
+    1. Moves data.csv into the run folder
+    2. Reads the CSV
+    3. Drops rows with null text or target
+    4. Separates text column (X) and target column (y)
+    5. Encodes target labels to integers for classification
+
+    Args:
+        request_body (NLP_RequestBody): Data carrier.
+
+    Raises:
+        Exception: Re-raises with NLPDataIngestionError code.
+    """
+    try:
+        write_log("entered nlp_data_loader", "info", os.path.basename(__file__))
+
+        # Move data to run folder
+        run_data_path = os.path.join(request_body.path_to_save, "data.csv")
+        original_path = getattr(request_body, 'dataset_path', save_data_path)
+        if not original_path:
+            original_path = save_data_path
+            
+        if os.path.exists(original_path):
+            shutil.copyfile(original_path, run_data_path)
+        else:
+            write_log(f"Warning: source dataset {original_path} not found.", "error", os.path.basename(__file__))
+            
+        request_body.original_dataset_name = os.path.basename(original_path)
+        request_body.dataset_path = run_data_path
+
+        # Load data
+        request_body.df = load_data_from_path(request_body.dataset_path)
+
+        if request_body.text_column not in request_body.df.columns:
+            raise ValueError(f"Text column '{request_body.text_column}' not found in dataset. "
+                             f"Available columns: {request_body.df.columns.tolist()}")
+
+        if request_body.target_column not in request_body.df.columns:
+            raise ValueError(f"Target column '{request_body.target_column}' not found in dataset. "
+                             f"Available columns: {request_body.df.columns.tolist()}")
+
+        # Drop nulls in text and target columns
+        request_body.df = request_body.df.dropna(subset=[request_body.text_column, request_body.target_column])
+        request_body.df.reset_index(drop=True, inplace=True)
+
+        # If user explicitly disabled imputation, drop all rows with any NaN
+        if not getattr(request_body, 'imputation', True):
+            write_log("dropping all rows with missing data (imputation=False)", "info", os.path.basename(__file__))
+            request_body.df = request_body.df.dropna()
+            request_body.df.reset_index(drop=True, inplace=True)
+
+        # Ensure text column is string
+        request_body.df[request_body.text_column] = request_body.df[request_body.text_column].astype(str)
+
+        # Separate X (text) and y (target)
+        request_body.X = request_body.df[request_body.text_column]
+        request_body.y = request_body.df[request_body.target_column]
+
+        # Encode target labels
+        request_body.target_encodings, encoded_y = encode_categorical_list(request_body.y.tolist())
+        request_body.y = pd.Series(encoded_y)
+
+        write_log(
+            f"NLP data loaded: {len(request_body.df)} rows, "
+            f"text_col='{request_body.text_column}', target_col='{request_body.target_column}', "
+            f"labels={list(request_body.target_encodings.keys())}",
+            "info", os.path.basename(__file__)
+        )
+
+    except Exception as e:
+        if request_body.status_code == 200:
+            request_body.error_message = "NLPDataIngestionError"
+            request_body.status_code = NLP_ERROR_CODES[request_body.error_message]
+            request_body.error_traceback = traceback.format_exc()
+            write_log(f"error occurred - {request_body.error_message} - {request_body.error_traceback}",
+                      "error", os.path.basename(__file__))
+        raise e
+
+
+class NLPTextClassificationController:
+    """
+    Controller for NLP text classification pipeline.
+
+    Orchestrates the full NLP workflow:
+        Step 1: Create/verify database table
+        Step 2: Load text data
+        Step 3: Preprocess text (clean, normalize)
+        Step 4: Feature engineering (vectorize or embed)
+        Step 5: Train and evaluate models
+        Step 6: Save run metadata to database
+
+    This class is dynamically dispatched by MLTrainer when task='NLPTextClassification'.
+    """
+
+    def __init__(self, name, dataset_path, target_column, timestamp, text_column="",
+                 lowercase=True, remove_stopwords=True, lemmatize=False,
+                 regex_clean=True, regex_pattern=r'[^a-zA-Z0-9\s]',
+                 feature_mode="vectorizer",
+                 vectorizer_type="tfidf", max_features=10000, ngram_range=None,
+                 min_df=2, max_df=0.95,
+                 embedding_model="all-MiniLM-L6-v2", embedding_batch_size=32,
+                 embedding_max_length=256,
+                 models=None, hyper_parameter_tuning=0, imputation=True,
+                 path_to_save=None, task=None, **kwargs):
+        """
+        Initialize the NLP text classification controller.
+
+        Args:
+            name: Run name.
+            dataset_path: Path to the uploaded dataset.
+            target_column: Name of the target/label column.
+            timestamp: Run timestamp.
+            text_column: Name of the text column.
+            lowercase: Whether to lowercase text.
+            remove_stopwords: Whether to remove stopwords.
+            lemmatize: Whether to apply lemmatization.
+            regex_clean: Whether to apply regex cleaning.
+            regex_pattern: Regex pattern for cleaning.
+            feature_mode: "vectorizer" or "embedding".
+            vectorizer_type: "count", "tfidf", or "hashing".
+            max_features: Max number of features for vectorizer.
+            ngram_range: N-gram range as [min, max].
+            min_df: Min document frequency for vectorizer.
+            max_df: Max document frequency for vectorizer.
+            embedding_model: Sentence-transformer model name.
+            embedding_batch_size: Batch size for embedding.
+            embedding_max_length: Max sequence length for embedding.
+            models: List of model names to train.
+            hyper_parameter_tuning: HPT level (0, 1, 2).
+            path_to_save: Directory to save run artifacts.
+            task: Task type string.
+        """
+        if ngram_range is None:
+            ngram_range = [1, 2]
+
+        self.request_body = NLP_RequestBody(
+            name=name,
+            task=task or "NLPTextClassification",
+            dataset_path=dataset_path,
+            target_column=target_column,
+            text_column=text_column,
+            timestamp=timestamp,
+            lowercase=lowercase,
+            remove_stopwords=remove_stopwords,
+            lemmatize=lemmatize,
+            regex_clean=regex_clean,
+            regex_pattern=regex_pattern,
+            feature_mode=feature_mode,
+            vectorizer_type=vectorizer_type,
+            max_features=max_features,
+            ngram_range=ngram_range,
+            min_df=min_df,
+            max_df=max_df,
+            embedding_model=embedding_model,
+            embedding_batch_size=embedding_batch_size,
+            embedding_max_length=embedding_max_length,
+            models=models or [],
+            hyper_parameter_tuning=hyper_parameter_tuning,
+            imputation=imputation,
+            path_to_save=path_to_save,
+        )
+
+    def run(self):
+        try:
+            write_log(f"entered {self.__class__.__name__} - run()", "info", os.path.basename(__file__))
+
+            create_database_table("runs")
+            emit_progress("⚙️ Initializing NLP pipeline...", step=1, total_steps=6)
+
+            nlp_data_loader(self.request_body)
+            emit_progress(f"📂 Text data loaded ({len(self.request_body.df)} rows)", step=2, total_steps=6)
+
+            nlp_preprocessing_controller(self.request_body)
+            emit_progress("🔤 Text preprocessing complete (clean, tokenize, stopwords)", step=3, total_steps=6)
+
+            if self.request_body.feature_mode == "embedding":
+                emit_progress("🧠 Generating sentence embeddings (this may take a while)...", step=4, total_steps=6)
+                embedding_controller(self.request_body)
+            else:
+                vectorizer_controller(self.request_body)
+            emit_progress("📊 Feature engineering complete", step=4, total_steps=6)
+
+            emit_progress("🤖 Training NLP models...", step=5, total_steps=6)
+            nlp_model_builder_controller(self.request_body)
+
+            enter_record_to_table("runs", **{
+                "run_name": self.request_body.name,
+                "folder_path": self.request_body.path_to_save,
+                "timestamp": self.request_body.timestamp.replace(" ", "T"),
+                "task": self.request_body.task,
+                "dataset_name": getattr(self.request_body, 'original_dataset_name', os.path.basename(self.request_body.dataset_path or "")),
+                "metrics_json": json.dumps(self.request_body.performance, cls=NumpyEncoder)
+            })
+            emit_progress("💾 Results saved to database", step=6, total_steps=6)
+
+            runs_data = get_data_from_database("runs")
+            if runs_data.get("status_code") == 200 and len(runs_data.get("data", [])) > 0:
+                self.request_body.run_id = runs_data["data"][-1]["id"]
+            else:
+                self.request_body.run_id = -1
+
+            response_payload = {
+                "status_code": 200,
+                "message": "NLP Classification pipeline completed successfully",
+                "run_id": self.request_body.run_id,
+                "performance": self.request_body.performance
+            }
+            emit_progress("✅ NLP pipeline complete!", step=6, total_steps=6, final=True, result=response_payload)
+            return self.request_body
+
+        except Exception as e:
+            if self.request_body.status_code == 200:
+                self.request_body.error_message = "NLPModelTrainingError"
+                self.request_body.status_code = NLP_ERROR_CODES.get(
+                    self.request_body.error_message, NLP_ERROR_CODES["NLPModelTrainingError"]
+                )
+                self.request_body.error_traceback = traceback.format_exc()
+                write_log(f"error occurred - {self.request_body.error_message} - "
+                          f"{self.request_body.error_traceback}",
+                          "error", os.path.basename(__file__))
+            emit_progress(f"❌ Error: {str(e)}", pct=100, final=True,
+                          result={"status": "error", "error": str(e), "message": str(e)})
+            raise e

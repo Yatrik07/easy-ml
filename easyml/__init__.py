@@ -1,4 +1,8 @@
 from easyml.core.controllers import *
+try:
+    from easyml.nlp.nlp_controllers import *
+except ImportError:
+    pass  # NLP deps not installed — skip (user can install with pip install easy-ml[nlp])
 from easyml.utils.logger import write_log
 
 class MLTrainer:
@@ -36,7 +40,7 @@ class MLTrainer:
                 raise ValueError(f"Unsupported task: {args['task']}")
 
         except Exception as e:
-            if self.controller.request_body.status_code == 200:
+            if hasattr(self, 'controller') and hasattr(self.controller, 'request_body') and self.controller.request_body.status_code == 200:
                 self.controller.request_body.error_message = "OtherError"
                 self.controller.request_body.status_code = error_code_mappings[self.controller.request_body.error_message]
                 self.controller.request_body.error_traceback = traceback.format_exc()

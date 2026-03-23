@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "easy-ml"
-version = "0.1.0"
-description = "An easy-to-use ML training and inference system built on Flask."
+version = "0.3.0"
+description = "An easy-to-use, no-code ML training and inference platform with a browser-based UI."
 readme = "README.md"
-license = "Apache-2.0"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 
 authors = [
@@ -17,37 +17,70 @@ authors = [
   { name = "Dhruv Jain", email = "djamitjn@gmail.com" }
 ]
 
+keywords = ["machine-learning", "automl", "nlp", "computer-vision", "no-code", "flask", "training", "inference"]
+
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Education",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Framework :: Flask",
+]
+
+# Core dependencies
 dependencies = [
-  "Flask==3.1.0",
-  "Flask-SocketIO==5.5.1",
-  "flask-cors==5.0.1",
-  "pandas==2.2.3",
-  "numpy==1.26.4",
-  "scikit-learn==1.6.1",
-  "joblib==1.4.2",
-  "matplotlib==3.10.1",
-  "plotly==6.0.1",
-  "lightgbm==4.6.0",
-  "xgboost==3.0.0",
-  "catboost==1.2.7",
-  "pydantic==2.10.6",
-  "graphviz==0.20.3",
-  "requests==2.32.3",
-  "websocket-client==1.8.0",
-  "python-socketio==5.13.0",
-  "python-engineio==4.12.1",
-  "werkzeug==3.1.3",
-  "Jinja2==3.1.6",
-  "itsdangerous==2.2.0",
-  "certifi==2025.4.26",
-  "charset-normalizer==3.4.2",
-  "idna==3.10",
-  "urllib3==2.4.0",
-  "blinker==1.9.0",
-  "pillow==11.1.0",
-  "six==1.17.0",
-  "threadpoolctl==3.6.0",
-  "typing_extensions==4.13.0"
+  "Flask>=3.0.0",
+  "Flask-SocketIO>=5.3.0",
+  "flask-cors>=4.0.0",
+  "eventlet>=0.33.0",
+  "pandas>=2.1.0",
+  "numpy>=1.26.0,<2",
+  "scikit-learn>=1.4.0",
+  "joblib>=1.3.0",
+  "matplotlib>=3.8.0",
+  "plotly>=5.18.0",
+  "lightgbm>=4.0.0",
+  "xgboost>=2.0.0",
+  "catboost>=1.2.0",
+  "pydantic>=2.5.0",
+  "graphviz>=0.20.0",
+  "requests>=2.31.0",
+  "spacy>=3.7.0",
+  "nltk>=3.8.0",
+  "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl"
+]
+
+[project.urls]
+Homepage = "https://github.com/Yatrik07/easy-ml"
+Repository = "https://github.com/Yatrik07/easy-ml"
+"Bug Tracker" = "https://github.com/Yatrik07/easy-ml/issues"
+
+[project.optional-dependencies]
+nlp = [
+  "spacy>=3.7.0",
+  "nltk>=3.8.0",
+  "sentence-transformers>=2.2.0",
+]
+cv = [
+  "torch>=2.0.0",
+  "torchvision>=0.15.0",
+  "Pillow>=10.0.0",
+]
+eda = [
+  "ydata-profiling>=4.6.4",
+  "shap>=0.40.0",
+]
+all = [
+  "easy-ml[nlp]",
+  "easy-ml[cv]",
+  "easy-ml[eda]",
 ]
 
 [project.scripts]
@@ -58,7 +91,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["easyml*"]
-exclude = ["logs*", "runs*", "database*", "test_folder*"]
+exclude = ["logs*", "runs*", "database*", "test_folder*", "artifacts*"]
 
 [tool.setuptools.package-data]
-"easyml" = ["frontend/dist/**/*"]
+"easyml" = ["unified_frontend/dist/**/*"]

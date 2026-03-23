@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 from easyml.utils.database_operations import *
 from datetime import datetime
 from easyml.utils.socket_emitter import emit_progress
+from easyml.utils.utils import NumpyEncoder
 
 
 class MLRegressionController:
@@ -56,63 +57,61 @@ class MLRegressionController:
         )
 
     def run(self):
-        """
-        Executes the end-to-end regression ML workflow.
-
-        Returns:
-            ML_RequestBody: Updated request body with model results and metadata.
-
-        Raises:
-            Exception: If any step fails, logs and re-raises the error.
-        """
         try:
-
             write_log(f"entered {self.__class__.__name__} -  run()", "info", os.path.basename(__file__))
 
             create_database_table("runs")
-            emit_progress("setp1- database created")
+            emit_progress("⚙️ Initializing pipeline...", step=1, total_steps=5)
 
             data_loader(self.request_body)
-            emit_progress("setp2- data loaded successfully")
+            emit_progress("📂 Data loaded and validated", step=2, total_steps=5)
 
             if self.request_body.preprocessing:
                 preprocessing_controller(self.request_body)
-                emit_progress("step3 - preprocessing done")
-
-
             else:
                 self.request_body.X_train, self.request_body.X_test, self.request_body.y_train, self.request_body.y_test = \
                     train_test_split(self.request_body.X, self.request_body.y, test_size=0.2)
+            emit_progress("🔧 Preprocessing & feature engineering complete", step=3, total_steps=5)
 
-            emit_progress("step4 - going to ml model builder")
+            emit_progress("🤖 Training models (this may take a while)...", step=4, total_steps=5)
             ml_model_builder_trainer_controller(self.request_body)
 
             enter_record_to_table("runs", **{"run_name": self.request_body.name,
                                                     "folder_path": self.request_body.path_to_save,
-                                                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                                    "task": self.request_body.task
+                                                    "timestamp": self.request_body.timestamp.replace(" ", "T"),
+                                                    "task": self.request_body.task,
+                                                    "dataset_name": getattr(self.request_body, 'original_dataset_name', os.path.basename(self.request_body.dataset_path or "")),
+                                                    "metrics_json": json.dumps(self.request_body.performance, cls=NumpyEncoder)
                                              }
                                   )
-            emit_progress("LAST step5 - entered into database")
+            emit_progress("💾 Results saved to database", step=4, total_steps=5)
 
+            runs_data = get_data_from_database("runs")
+            if runs_data.get("status_code") == 200 and len(runs_data.get("data", [])) > 0:
+                self.request_body.run_id = runs_data["data"][-1]["id"]
+            else:
+                self.request_body.run_id = -1
 
-            # print("request_body.performance: ", self.request_body)
-            print("request_body.performance: ", {key: value for key, value in self.request_body.dict().items() if
-                   key not in ['X', 'y', 'df', 'X_train', 'X_test', 'y_train', 'y_test']})
+            response_payload = {
+                "status_code": 200,
+                "message": "Regression pipeline completed successfully",
+                "run_id": self.request_body.run_id,
+                "performance": self.request_body.performance
+            }
 
+            emit_progress("✅ Regression pipeline complete!", step=5, total_steps=5, final=True, result=response_payload)
             return self.request_body
-
 
         except Exception as e:
             if self.request_body.status_code == 200:
                 self.request_body.error_message = "OtherError"
                 self.request_body.status_code = error_code_mappings[self.request_body.error_message]
                 self.request_body.error_traceback = traceback.format_exc()
-
                 write_log("error occurred- {} - {}".format(
                     self.request_body.error_message, self.request_body.error_traceback),
                     "error", os.path.basename(__file__))
-
+            emit_progress(f"❌ Error: {str(e)}", pct=100, final=True,
+                          result={"status": "error", "error": str(e), "message": str(e)})
             raise e
 
 
@@ -165,45 +164,45 @@ class MLClassificationController:
         )
 
     def run(self):
-        """
-        Executes the end-to-end classification ML workflow.
-
-        Returns:
-            ML_RequestBody: Updated request body with model results and metadata.
-
-        Raises:
-            Exception: If any step fails, logs and re-raises the error.
-        """
         try:
-
             write_log(f"entered {self.__class__.__name__} -  run()", "info", os.path.basename(__file__))
 
             create_database_table("runs")
-            emit_progress("setp1- database created")
-
+            emit_progress("⚙️ Initializing pipeline...", step=1, total_steps=5)
 
             data_loader(self.request_body)
+            emit_progress("📂 Data loaded and validated", step=2, total_steps=5)
 
             preprocessing_controller(self.request_body)
-            emit_progress("step2 - preprocessing done")
+            emit_progress("🔧 Preprocessing & feature engineering complete", step=3, total_steps=5)
 
-
-            emit_progress("step3 - going to ml model builder")
+            emit_progress("🤖 Training models (this may take a while)...", step=4, total_steps=5)
             ml_model_builder_trainer_controller(self.request_body)
 
             enter_record_to_table("runs", **{"run_name": self.request_body.name,
                                                     "folder_path": self.request_body.path_to_save,
-                                                    "timestamp": self.request_body.timestamp,
-                                                    "task": self.request_body.task
+                                                    "timestamp": self.request_body.timestamp.replace(" ", "T"),
+                                                    "task": self.request_body.task,
+                                                    "dataset_name": getattr(self.request_body, 'original_dataset_name', os.path.basename(self.request_body.dataset_path or "")),
+                                                    "metrics_json": json.dumps(self.request_body.performance, cls=NumpyEncoder)
                                              }
                                   )
-            emit_progress("step4 - entered into database")
+            emit_progress("💾 Results saved to database", step=4, total_steps=5)
 
+            runs_data = get_data_from_database("runs")
+            if runs_data.get("status_code") == 200 and len(runs_data.get("data", [])) > 0:
+                self.request_body.run_id = runs_data["data"][-1]["id"]
+            else:
+                self.request_body.run_id = -1
 
-            # print("request_body.performance: ", self.request_body.performance)
-            print("request_body.performance: ", {key: value for key, value in self.request_body.dict().items() if
-                   key not in ['X', 'y', 'df', 'X_train', 'X_test', 'y_train', 'y_test']})
+            response_payload = {
+                "status_code": 200,
+                "message": "Classification pipeline completed successfully",
+                "run_id": self.request_body.run_id,
+                "performance": self.request_body.performance
+            }
 
+            emit_progress("✅ Classification pipeline complete!", step=5, total_steps=5, final=True, result=response_payload)
             return self.request_body
 
         except Exception as e:
@@ -211,9 +210,9 @@ class MLClassificationController:
                 self.request_body.error_message = "OtherError"
                 self.request_body.status_code = error_code_mappings[self.request_body.error_message]
                 self.request_body.error_traceback = traceback.format_exc()
-
                 write_log("error occurred- {} - {}".format(
                     self.request_body.error_message, self.request_body.error_traceback),
                     "error", os.path.basename(__file__))
-
+            emit_progress(f"❌ Error: {str(e)}", pct=100, final=True,
+                          result={"status": "error", "error": str(e), "message": str(e)})
             raise e

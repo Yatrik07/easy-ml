@@ -34,11 +34,17 @@ def preprocessing_controller(request_body: ML_RequestBody):
         # Process categorical variables (ordinal and nominal) before split
         encode_categorical(request_body)
 
-        # Split data into train/test
+        # Split data — use stratify for classification but guard against rare classes
         write_log("splitting the data into train-test-split", "info", os.path.basename(__file__))
+        is_classification = "classification" in request_body.task.lower()
+        stratify = None
+        if is_classification:
+            import pandas as pd
+            counts = pd.Series(request_body.y).value_counts()
+            stratify = request_body.y if counts.min() >= 2 else None
         request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
             train_test_split(request_body.X, request_body.y, test_size=0.2, random_state=42,
-                             stratify=request_body.y if "classification" in request_body.task.lower() else None)
+                             stratify=stratify)
 
         # Process numerical variables after split
         process_numerical(request_body)

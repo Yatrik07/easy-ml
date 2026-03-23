@@ -1,7 +1,7 @@
 from datetime import datetime
 import os
 import logging
-from easyml.config.GLOBAL_VARS import PROJECT_ROOT
+from easyml.config.paths import LOGS_DIR
 
 #TODO : this the final logger class, now just need to apply throughout our code to keep the track
 class Logging:
@@ -40,7 +40,7 @@ class Logging:
         self.file.close()
 
 
-os.makedirs(os.path.join(PROJECT_ROOT, "artifacts", "logs"), exist_ok=True)
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 class InfoLevelFilter(logging.Filter):
     """
@@ -55,14 +55,14 @@ class InfoLevelFilter(logging.Filter):
 logger = logging.getLogger('custom_logger')
 logger.setLevel(logging.INFO)
 
-file_handler = logging.FileHandler(os.path.join(PROJECT_ROOT, "artifacts", "logs", "logs.log"), encoding='utf-8')
+file_handler = logging.FileHandler(os.path.join(LOGS_DIR, "logs.log"), encoding='utf-8')
 file_handler.setFormatter(logging.Formatter(
     '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'))
 file_handler.addFilter(InfoLevelFilter())
 file_handler.setLevel(logging.INFO)
 
-error_handler = logging.FileHandler(os.path.join(PROJECT_ROOT, "artifacts", "logs", "error_logs.log"),  encoding='utf-8')
+error_handler = logging.FileHandler(os.path.join(LOGS_DIR, "error_logs.log"), encoding='utf-8')
 error_handler.setFormatter(logging.Formatter(
     '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'))

@@ -7,12 +7,13 @@ from easyml.utils.utils import *
 from easyml.config.GLOBAL_VARS import *
 import shutil
 
-def get_data_info(data):
+def get_data_info(data, dataset_path=None):
     """
     Generates metadata and sample data from a given DataFrame.
 
     Args:
         data (pd.DataFrame): The dataset to analyze.
+        dataset_path (str, optional): The path to the saved CSV file.
 
     Returns:
         dict: Contains sample data, shape, column names, and file size (in KB).
@@ -20,19 +21,28 @@ def get_data_info(data):
 
     rows, cols = data.shape
 
+    # Ensure NaN values are replaced with None to produce strict valid JSON (null)
+    import numpy as np
+    safe_data = data.replace({np.nan: None})
+
     if rows < 5:
-        data_sample = data.to_dict(orient="records")   # Convert DataFrame to a dictionary
-        data_head = data.to_dict(orient="records")
-        data_tail = data.to_dict(orient="records") 
+        data_sample = safe_data.to_dict(orient="records")   # Convert DataFrame to a dictionary
+        data_head = safe_data.to_dict(orient="records")
+        data_tail = safe_data.to_dict(orient="records") 
     else:
-        data_sample = data.sample(5).to_dict(orient="records") 
-        data_head = data.head(5).to_dict(orient="records") 
-        data_tail = data.tail(5).to_dict(orient="records")
+        data_sample = safe_data.sample(5).to_dict(orient="records") 
+        data_head = safe_data.head(5).to_dict(orient="records") 
+        data_tail = safe_data.tail(5).to_dict(orient="records")
     
     columns = data.columns.tolist()
 
     # Get dataset file size in bytes
-    dataset_size = os.path.getsize(save_data_path)  # Size in bytes
+    dataset_size = 0
+    if dataset_path and os.path.exists(dataset_path):
+        dataset_size = os.path.getsize(dataset_path)
+    elif os.path.exists(save_data_path):
+        dataset_size = os.path.getsize(save_data_path)
+        
     dataset_size_kb = round(dataset_size / 1024, 2)  # Convert to KB
 
     data_info = {"data_sample": data_sample, "data_head": data_head,
@@ -72,9 +82,21 @@ def move_to_runs(request_body):
         request_body (ML_RequestBody): The request context containing save paths.
     """
 
-    # moving dataset into artifacts/runs/
-    request_body.dataset_path = os.path.join(request_body.path_to_save, "data.csv")
-    shutil.move(save_data_path, request_body.dataset_path)
+    # Copy the dataset into artifacts/runs/ instead of moving it
+    # This ensures concurrent training tasks can use the same base uploaded data
+    original_path = getattr(request_body, 'dataset_path', save_data_path)
+    if not original_path:
+        original_path = save_data_path
+        
+    run_specific_path = os.path.join(request_body.path_to_save, "data.csv")
+    
+    if os.path.exists(original_path):
+        shutil.copyfile(original_path, run_specific_path)
+    else:
+        write_log(f"Warning: source dataset {original_path} not found.", "error", os.path.basename(__file__))
+        
+    request_body.original_dataset_name = os.path.basename(original_path)
+    request_body.dataset_path = run_specific_path
 
 
 def data_loader(request_body):
@@ -102,7 +124,8 @@ def data_loader(request_body):
         request_body.df = load_data_from_path(request_body.dataset_path)
         
         if request_body.target_column not in request_body.df.columns:
-            raise
+            raise ValueError(f"Target column '{request_body.target_column}' not found in dataset. "
+                             f"Available columns: {request_body.df.columns.tolist()}")
         
         if request_body.ignore_columns is None:
             request_body.ignore_columns = []
@@ -110,9 +133,15 @@ def data_loader(request_body):
         # Drop rows where y is null
         request_body.df = request_body.df.dropna(subset=[request_body.target_column])
         request_body.df.reset_index(drop=True, inplace=True)
+        
+        # If user explicitly disabled imputation, drop all rows with any NaN
+        if not getattr(request_body, 'imputation', True):
+            write_log("dropping all rows with missing data (imputation=False)", "info", os.path.basename(__file__))
+            request_body.df = request_body.df.dropna()
+            request_body.df.reset_index(drop=True, inplace=True)
             
         drop_columns = [request_body.target_column] + request_body.ignore_columns
-        request_body.X = request_body.df.drop(columns=drop_columns)
+        request_body.X = request_body.df.drop(columns=drop_columns, errors='ignore')
         request_body.y = request_body.df[request_body.target_column]
 
         write_log("read dataframe in python", "info", os.path.basename(__file__))
@@ -120,7 +149,7 @@ def data_loader(request_body):
         # Encode target if it's a classification task
         if "classification" in request_body.task.lower():
             request_body.target_encodings, request_body.y = encode_categorical_list(request_body.y.tolist())
-            write_log(f"classification task - encoded target variable : {json.dumps(request_body.target_encodings)}", "info",
+            write_log(f"classification task - encoded target variable : {json.dumps(request_body.target_encodings, cls=NumpyEncoder)}", "info",
                       os.path.basename(__file__))
 
     except Exception as e:

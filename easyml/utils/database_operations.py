@@ -2,13 +2,12 @@ import sqlite3
 from easyml.utils.logger import write_log
 import os
 from easyml.config.GLOBAL_VARS import *
+from easyml.config.paths import DB_DIR
 import json
 import shutil
 
-# Connect to the SQLite database with proper string formatting
-db_dir = os.path.join(PROJECT_ROOT, "artifacts", "database")
-print("db_dir: ", db_dir)
-os.makedirs(db_dir, exist_ok=True)  # Ensure the folder exists
+# Use centralized database directory
+db_dir = DB_DIR
 
 
 def create_database_table(table_name):
@@ -83,9 +82,9 @@ def show_table(table_name):
     conn = sqlite3.connect(db_path)
 
     cursor_obj = conn.cursor()
-    output = cursor_obj.execute("select * from Train")
+    output = cursor_obj.execute(f"select * from {table_name}")
 
-    data = cursor_obj.execute('''SELECT * FROM Train''')
+    data = cursor_obj.execute(f'''SELECT * FROM {table_name}''')
     for column in data.description:
         print(column[0] , end="\t")
     print("")
@@ -219,7 +218,7 @@ def get_record_by_id(record_id: int, table_name: str = "runs"):
             return result
         else:
             write_log(f"No record found with ID {record_id} in '{table_name}'.", "warning", os.path.basename(__file__))
-            raise
+            raise ValueError(f"No record found with ID {record_id} in '{table_name}'.")
 
     except Exception as e:
         write_log(f"Error retrieving ID {record_id} from table '{table_name}': {str(e)}", "error", os.path.basename(__file__))

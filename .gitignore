@@ -4,24 +4,33 @@ test_folder/
 
 # Ignore the virtual environment  
 venv/
+.venv/
 
-# Ignore IDE-specific files (JetBrains IDEA)  
+# Ignore IDE-specific files  
 .idea/
+.vscode/
 
-sample_logs/
-
-runs/
-
-logs/
-
-database/
-
+# Build artifacts
+dist/
+build/
 easy_ml.egg-info/
+*.egg-info/
 
+# Logs and runtime artifacts
+logs/
+runs/
+database/
+artifacts/
+sample_logs/
+application_logs.log
+error.log
+
+# One-time scripts
 temp.html
+dummy.csv
+ws_client_and_trigger.py
 
-# Ignore Python bytecode files
-__pycache__
-+easyai/Lib/
-+easyai/Scripts/
-+easyai/pyvenv.cfg
+# Python bytecode files
+__pycache__/
+*.py[cod]
+*$py.class

@@ -20,8 +20,11 @@ from typing import Optional, List, Any
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 import os
+from easyml.config.paths import DATA_DIR, DB_DIR, RUNS_DIR, LOGS_DIR, UPLOADS_DIR, EDA_DIR, PACKAGE_ROOT
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# Keep PROJECT_ROOT as alias for backward compatibility (points to package dir)
+PROJECT_ROOT = PACKAGE_ROOT
+
 REGRESSION_METRICS = ['r2_score', 'mape', 'mae']
 CLASSIFICATION_METRICS = ['accuracy', 'confusion_matrix', 'classification_report']
 METRICS_MAPPING = {
@@ -32,9 +35,8 @@ METRICS_MAPPING = {
         'mae' : mean_absolute_error,
         'mape' : mean_absolute_percentage_error
     }
-print("Project root:", PROJECT_ROOT)
 
-save_data_path = os.path.join(PROJECT_ROOT,"artifacts","data.csv")
+save_data_path = os.path.join(UPLOADS_DIR, "data.csv")
 # ---------------------------------------- ML - Regression Models ----------------------------------------------
 AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
     LinearRegression(),
@@ -86,7 +88,7 @@ PARAM_GRID_LEVEL1_FOR_REGRESSION = {
 PARAM_GRID_LEVEL2_FOR_REGRESSION = {
     "LinearRegression": {
         "fit_intercept": [True, False],
-        "normalize": [True, False]
+        "copy_X": [True, False]
     },
     "RandomForestRegressor": {
         "n_estimators": [50, 100, 200],
@@ -261,7 +263,12 @@ error_code_mappings = {
     "ModelTrainingError": 5004,
     "DatabaseError": 5005,
     "InferenceError": 5006,
-    "OtherError": 5007
+    "OtherError": 5007,
+    "NLPDataIngestionError": 6000,
+    "NLPPreProcessingError": 6001,
+    "NLPFeatureEngineeringError": 6002,
+    "NLPModelTrainingError": 6003,
+    "NLPInferenceError": 6004,
 }
 
 # ----------------------------------------Database --------------------------------------------------
@@ -270,7 +277,9 @@ db_runs_columns_config = [
     "run_name TEXT",
     "folder_path TEXT",
     "timestamp TEXT",
-    "task TEXT"
+    "task TEXT",
+    "dataset_name TEXT",
+    "metrics_json TEXT"
 ]
 
 # ---------------------------------------- Request Body ----------------------------------------------
@@ -315,6 +324,8 @@ class ML_RequestBody(BaseModel):
     error_traceback: Optional[str] = None
 
     timestamp: str = ""
+    run_id: Optional[int] = None
+    original_dataset_name: Optional[str] = None
 
     class Config:
         arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
@@ -338,6 +349,7 @@ class ML_RequestBody(BaseModel):
         to_dump["performance"] = self.performance
         to_dump["status_code"] = self.status_code
         to_dump["target_encodings"] = self.target_encodings
+        to_dump["run_id"] = getattr(self, "run_id", None)
         return to_dump
 
 class ML_InferenceBody(BaseModel):

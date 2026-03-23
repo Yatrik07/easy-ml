@@ -88,19 +88,17 @@ class MLInferenceController:
                 if hasattr(self.inference_body.model, "predict_proba") else None
 
             if "classification" in self.inference_body.task.lower():
-                print("in")
                 output = {
-                "prediction": self.inference_body.target_encodings[convert_numpy(prediction[0])],
-                "probabilities": convert_numpy( max(probabilities[0])) if probabilities is not None else None
-            }
-
+                    "prediction": self.inference_body.target_encodings[convert_numpy(prediction[0])],
+                    "probabilities": float(max(probabilities[0])) if probabilities is not None else None
+                }
             else:
                 output = {
                     "prediction": convert_numpy(prediction[0]),
-                    "probabilities": convert_numpy(max(probabilities[0])) if probabilities is not None else None
+                    "probabilities": None
                 }
 
-            print("final return: ", output, type(output['prediction']), self.inference_body.target_encodings, self.inference_body.task.lower(), sep="\n")
+            write_log(f"prediction complete: {output['prediction']}", "info", os.path.basename(__file__))
 
             return output
 
@@ -114,6 +112,34 @@ class MLInferenceController:
                     self.inference_body.error_message, self.inference_body.error_traceback),
                     "error", os.path.basename(__file__))
 
+            raise e
+
+    def predict_batch(self, df: pd.DataFrame):
+        """
+        Applies the pipeline and model to predict multiple records from a DataFrame.
+        Returns the original DataFrame with an appended 'Prediction' column.
+        """
+        write_log("entered predict_batch", "info", os.path.basename(__file__))
+        try:
+            self.inference_body.model, self.inference_body.pipeline, self.inference_body.target_encodings = self.load_objects(self.inference_body)
+            
+            output_df = df.copy()
+            transformed_input = self.inference_body.pipeline.transform(df)
+            predictions = self.inference_body.model.predict(transformed_input)
+            
+            if "classification" in self.inference_body.task.lower():
+                mapped_preds = [self.inference_body.target_encodings.get(convert_numpy(p), convert_numpy(p)) for p in predictions]
+                output_df['Prediction'] = mapped_preds
+            else:
+                output_df['Prediction'] = [convert_numpy(p) for p in predictions]
+                
+            return output_df
+
+        except Exception as e:
+            if self.inference_body.status_code == 200:
+                self.inference_body.error_message = "InferenceError"
+                self.inference_body.status_code = error_code_mappings[self.inference_body.error_message]
+                self.inference_body.error_traceback = traceback.format_exc()
             raise e
 
     def load_objects(self, inference_body):

@@ -11,6 +11,9 @@ import traceback
 import json
 from easyml.utils.socket_emitter import emit_progress
 
+# Import shared cancel event
+from easyml.cv.cv_model_builder import training_cancel_event
+
 def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
     """
     Handles model training and evaluation for classification or regression tasks.
@@ -53,6 +56,13 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
         for single_model in models_to_apply:
 
             print(type(single_model).__name__)
+            # Check for cancellation before each model
+            if training_cancel_event.is_set():
+                write_log("Training cancelled by user", "info", os.path.basename(__file__))
+                emit_progress("⚠️ Training cancelled by user", pct=100, final=True,
+                              result={"status": "cancelled", "message": "Training was cancelled by the user."})
+                raise InterruptedError("Training cancelled by user")
+
             param_grid = grid[type(single_model).__name__] if grid and type(single_model).__name__ in grid else {}
             write_log(f"training - {single_model} - grid - {param_grid}", "info", os.path.basename(__file__))
 
@@ -120,19 +130,23 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 'train_metrics' : metrics['train_metrics'],
                 "test_metrics" : metrics['test_metrics'],
             }
-            column_data = {}
-            column_data['numerical_columns'] = request_body.numeric_columns
-            column_data['categorical_columns'] = request_body.categorical_columns
-            column_data['unique_values'] = {}
-            for col in request_body.categorical_columns:
-                column_data['unique_values'][col] = request_body.df[col].unique().tolist()
-
-            json_path = os.path.join(request_body.path_to_save, "config_json.json")
-            column_data_path = os.path.join(request_body.path_to_save, "column_data.json")
-            json.dump(request_body.jsonify(), open(json_path, "w"), cls=NumpyEncoder)
-            json.dump(column_data, open(column_data_path, "w"), cls=NumpyEncoder)
             emit_progress(f"done with model - {type(single_model).__name__}")
 
+        # Write column_data.json and config_json.json ONCE after all models are done
+        column_data = {}
+        column_data['numerical_columns'] = request_body.numeric_columns
+        column_data['categorical_columns'] = request_body.categorical_columns
+        column_data['unique_values'] = {}
+        for col in request_body.categorical_columns:
+            try:
+                column_data['unique_values'][col] = request_body.df[col].unique().tolist()
+            except Exception:
+                column_data['unique_values'][col] = []
+
+        json_path = os.path.join(request_body.path_to_save, "config_json.json")
+        column_data_path = os.path.join(request_body.path_to_save, "column_data.json")
+        json.dump(request_body.jsonify(), open(json_path, "w"), cls=NumpyEncoder)
+        json.dump(column_data, open(column_data_path, "w"), cls=NumpyEncoder)
 
     except Exception as e:
         if request_body.status_code == 200:
