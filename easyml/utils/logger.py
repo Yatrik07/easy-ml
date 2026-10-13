@@ -1,92 +1,160 @@
-from datetime import datetime
 import os
 import logging
+import tempfile
+from threading import Lock
+
 from easyml.config.paths import LOGS_DIR
 
-#TODO : this the final logger class, now just need to apply throughout our code to keep the track
-class Logging:
-    def __init__(self, filename, logger_filename):
-        self.filename = filename or os.path.basename(__file__)
-        self.file = open(logger_filename, "a")
 
-    def create_log(self, message: str, logging_level: str) -> str:
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        log_level = logging_level.upper()
-
-        # Highlight WARNINGS and ERRORS
-        if log_level == "WARNING":
-            log_level = f"⚠️  {log_level}"
-        elif log_level == "ERROR":
-            log_level = f"❌ {log_level}"
-
-        return f"{timestamp} | {log_level} | {self.filename} | {message}\n"
-
-    def log(self, message):
-        log = self.create_log(message, "info")
-        self.file.write(log)
-        self.file.flush()
-
-    def warning(self, message):
-        log = self.create_log(message, "warning")
-        self.file.write(log)
-        self.file.flush()
-
-    def error(self, message):
-        log = self.create_log(message, "error")
-        self.file.write(log)
-        self.file.flush()
-
-    def close(self):
-        self.file.close()
-
-
-os.makedirs(LOGS_DIR, exist_ok=True)
+_LOGGER_LOCK = Lock()
+_ACTIVE_LOG_DIR = None
 
 class InfoLevelFilter(logging.Filter):
     """
-    Filter logs based on minimum log level
+    Keep INFO and WARNING records for logs.log; errors go to error_logs.log.
     """
-    def __init__(self):
-        super().__init__()
-
     def filter(self, record):
-        return record.levelno == 20
+        return logging.INFO <= record.levelno < logging.ERROR
 
 logger = logging.getLogger('custom_logger')
 logger.setLevel(logging.INFO)
+logger.propagate = False
 
-file_handler = logging.FileHandler(os.path.join(LOGS_DIR, "logs.log"), encoding='utf-8')
-file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'))
-file_handler.addFilter(InfoLevelFilter())
-file_handler.setLevel(logging.INFO)
+def _resolve_log_dir(preferred_dir=LOGS_DIR):
+    candidates = [
+        preferred_dir,
+        os.path.join(tempfile.gettempdir(), "easy-ml", "logs"),
+    ]
 
-error_handler = logging.FileHandler(os.path.join(LOGS_DIR, "error_logs.log"), encoding='utf-8')
-error_handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'))
-error_handler.setLevel(logging.ERROR)
+    for candidate in candidates:
+        try:
+            os.makedirs(candidate, exist_ok=True)
+            probe_path = os.path.join(candidate, ".write_test")
+            with open(probe_path, "a", encoding="utf-8"):
+                pass
+            try:
+                os.remove(probe_path)
+            except OSError:
+                pass
+            return candidate
+        except OSError:
+            continue
 
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'))
-console_handler.setLevel(logging.INFO)
+    return None
 
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
-logger.addHandler(console_handler)
-logger.addHandler(error_handler)
+
+def _build_formatter():
+    return logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
+
+
+def _build_file_handler(filename, level, add_info_filter=False):
+    global _ACTIVE_LOG_DIR
+
+    if _ACTIVE_LOG_DIR is None:
+        _ACTIVE_LOG_DIR = _resolve_log_dir()
+
+    if _ACTIVE_LOG_DIR is None:
+        return None
+
+    try:
+        handler = logging.FileHandler(os.path.join(_ACTIVE_LOG_DIR, filename), encoding='utf-8')
+    except OSError:
+        fallback_dir = _resolve_log_dir(os.path.join(tempfile.gettempdir(), "easy-ml", "logs"))
+        if fallback_dir is None:
+            return None
+        _ACTIVE_LOG_DIR = fallback_dir
+        handler = logging.FileHandler(os.path.join(_ACTIVE_LOG_DIR, filename), encoding='utf-8')
+
+    handler.setFormatter(_build_formatter())
+    handler.setLevel(level)
+    if add_info_filter:
+        handler.addFilter(InfoLevelFilter())
+    return handler
+
+
+def configure_logger(force=False):
+    global _ACTIVE_LOG_DIR
+
+    with _LOGGER_LOCK:
+        if force:
+            for handler in logger.handlers[:]:
+                handler.close()
+                logger.removeHandler(handler)
+
+        if logger.handlers and not force:
+            return logger
+
+        _ACTIVE_LOG_DIR = _resolve_log_dir()
+
+        file_handler = _build_file_handler("logs.log", logging.INFO, add_info_filter=True)
+        error_handler = _build_file_handler("error_logs.log", logging.ERROR)
+
+        if file_handler is not None:
+            logger.addHandler(file_handler)
+        if error_handler is not None:
+            logger.addHandler(error_handler)
+
+        # Library users only see warnings on the console; the `easy-ml` CLI raises this to INFO.
+        if os.environ.get("EASYML_NO_CONSOLE_LOGS") != "1":
+            console_level = os.environ.get("EASYML_CONSOLE_LOG_LEVEL", "WARNING").upper()
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(_build_formatter())
+            console_handler.setLevel(getattr(logging, console_level, logging.WARNING))
+            logger.addHandler(console_handler)
+
+        return logger
 
 
 def get_logger():
-    return logger
+    """
+    Retrieves the global custom logger instance.
 
-def write_log(message, level, module_name):
+    Returns:
+        logging.Logger: The configured custom logger object.
+    """
+    return configure_logger()
+
+
+def get_log_directory():
+    configure_logger()
+    return _ACTIVE_LOG_DIR or LOGS_DIR
+
+def write_log(message: str, level: str, module_name: str):
+    """
+    Writes a log message to the configured log files and console.
+
+    Args:
+        message (str): The log message content.
+        level (str): The logging level ('info', 'error', 'warning'). Defaults to 'info'.
+        module_name (str): The name of the module or file where the log originated (often os.path.basename(__file__)).
+    """
     level_map = {
-        'info' : logging.INFO,
-        'error' : logging.ERROR
+        'info': logging.INFO,
+        'error': logging.ERROR,
+        'warning': logging.WARNING
     }
-    message = f"{module_name} - {message}"
-    logger.log(level_map.get(level, logging.INFO), message)
+    formatted_message = f"{module_name} - {message}"
+    configure_logger()
+    logger.log(level_map.get(level, logging.INFO), formatted_message)
+
+
+def close_all_file_handlers():
+    """
+    Closes the Easy-ML log file handlers.
+    Call this BEFORE deleting the logs directory to avoid WinError 32 on Windows.
+    """
+    for handler in logger.handlers[:]:
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
+            logger.removeHandler(handler)
+
+
+def reinit_file_handlers():
+    """
+    Re-creates file handlers after the logs directory has been recreated.
+    Call this AFTER os.makedirs(LOGS_DIR) to restore logging.
+    """
+    configure_logger(force=True)

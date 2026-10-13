@@ -2,177 +2,187 @@ import os
 import shutil
 import tempfile
 import zipfile
+from importlib import metadata
+
+from easyml.core.artifacts import model_file_path, validate_model_name
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.logger import write_log
+
+# Model class name -> (distribution name, import needed in the generated app)
+_MODEL_PACKAGES = {
+    "XGBClassifier": "xgboost", "XGBRegressor": "xgboost",
+    "LGBMClassifier": "lightgbm", "LGBMRegressor": "lightgbm",
+    "CatBoostClassifier": "catboost", "CatBoostRegressor": "catboost",
+}
+
 
 def create_deployment_package(run_id: int, model_name: str) -> str:
     """
     Creates a ZIP file containing a ready-to-deploy FastAPI application for the specified model.
     Returns the absolute path to the generated ZIP file.
     """
+    validate_model_name(model_name)
     write_log(f"Creating deployment package for run {run_id}, model {model_name}", "info", "export_utils.py")
     record = get_record_by_id(run_id)
     folder_path = record["folder_path"]
     task = record["task"]
-    
-    # Identify model file
-    model_file_name = f"{model_name}.pkl"
-    if "CatBoost" in model_name:
-        model_file_name = f"{model_name}.cbm"
-        
-    model_source = os.path.join(folder_path, model_file_name)
+
+    if task not in ("MLClassification", "MLRegression"):
+        raise ValueError("Export is currently available for tabular classification and regression runs only.")
+
+    model_source = model_file_path(folder_path, model_name)
     pipeline_source = os.path.join(folder_path, "preprocessing_pipeline.pkl")
-    config_source = os.path.join(folder_path, "config_json.json")
-    
-    if not os.path.exists(model_source) or not os.path.exists(pipeline_source):
-        raise FileNotFoundError(f"Model or pipeline artifacts not found in {folder_path}")
+    if not os.path.exists(pipeline_source):
+        raise FileNotFoundError("The preprocessing pipeline for this run is missing.")
 
-    # Create a temporary directory to build the package
+    model_filename = "model" + os.path.splitext(model_source)[1]
     temp_dir = tempfile.mkdtemp(prefix="easyml_export_")
-    
-    # 1. Copy artifacts
-    shutil.copy(model_source, os.path.join(temp_dir, "model" + os.path.splitext(model_file_name)[1]))
-    shutil.copy(pipeline_source, os.path.join(temp_dir, "pipeline.pkl"))
-    if os.path.exists(config_source):
-        shutil.copy(config_source, os.path.join(temp_dir, "config.json"))
+    try:
+        shutil.copy(model_source, os.path.join(temp_dir, model_filename))
+        shutil.copy(pipeline_source, os.path.join(temp_dir, "pipeline.pkl"))
+        for name in ("config_json.json", "column_data.json"):
+            source = os.path.join(folder_path, name)
+            if os.path.exists(source):
+                shutil.copy(source, os.path.join(temp_dir, "config.json" if name == "config_json.json" else name))
 
-    # 2. Generate FastAPI main.py
-    main_py_content = generate_fastapi_app(task, model_name, "model" + os.path.splitext(model_file_name)[1])
-    with open(os.path.join(temp_dir, "main.py"), "w") as f:
-        f.write(main_py_content)
-        
-    # 3. Generate requirements.txt
-    reqs_content = generate_requirements(task, model_name)
-    with open(os.path.join(temp_dir, "requirements.txt"), "w") as f:
-        f.write(reqs_content)
-        
-    # 4. Generate Dockerfile
-    docker_content = generate_dockerfile()
-    with open(os.path.join(temp_dir, "Dockerfile"), "w") as f:
-        f.write(docker_content)
-        
-    # 5. Generate README.md
-    readme_content = generate_readme(task, model_name)
-    with open(os.path.join(temp_dir, "README.md"), "w") as f:
-        f.write(readme_content)
+        files = {
+            "main.py": generate_fastapi_app(task, model_name, model_filename),
+            "requirements.txt": generate_requirements(model_name),
+            "Dockerfile": generate_dockerfile(model_name),
+            "README.md": generate_readme(task, model_name),
+        }
+        for filename, content in files.items():
+            with open(os.path.join(temp_dir, filename), "w", encoding="utf-8") as handle:
+                handle.write(content)
 
-    # Zip it up
-    zip_path = os.path.join(tempfile.gettempdir(), f"deploy_{model_name}_{run_id}.zip")
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        for root, dirs, files in os.walk(temp_dir):
-            for file in files:
-                file_path = os.path.join(root, file)
-                arcname = os.path.relpath(file_path, temp_dir)
-                zipf.write(file_path, arcname)
+        zip_path = os.path.join(tempfile.gettempdir(), f"easyml_deploy_{model_name}_{run_id}.zip")
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, _, filenames in os.walk(temp_dir):
+                for filename in filenames:
+                    file_path = os.path.join(root, filename)
+                    zipf.write(file_path, os.path.relpath(file_path, temp_dir))
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
-    # Clean up temp dir
-    shutil.rmtree(temp_dir)
-    
     write_log(f"Deployment package created at {zip_path}", "info", "export_utils.py")
     return zip_path
 
+
 def generate_fastapi_app(task: str, model_name: str, model_filename: str) -> str:
-    is_nlp = "nlp" in task.lower()
     is_classification = "classification" in task.lower()
-    is_catboost = "catboost" in model_name.lower()
-    
-    imports = ["from fastapi import FastAPI, HTTPException", "from pydantic import BaseModel", "import joblib", "import pandas as pd", "import json", "import os", "from typing import Dict, Any"]
+    is_catboost = model_name.startswith("CatBoost")
+
+    lines = [
+        '"""FastAPI service generated by Easy-ML Studio."""',
+        "import json",
+        "import os",
+        "from typing import Any, Dict",
+        "",
+        "import joblib",
+        "import numpy as np",
+        "import pandas as pd",
+        "from fastapi import FastAPI, HTTPException",
+        "from pydantic import BaseModel",
+    ]
     if is_catboost:
-        if is_classification:
-            imports.append("from catboost import CatBoostClassifier")
-        else:
-            imports.append("from catboost import CatBoostRegressor")
-
-    code = "\n".join(imports) + "\n\n"
-    code += "app = FastAPI(title='Easy-ML Exported Model API', version='1.0.0')\n\n"
-    
-    # Input schema
-    if is_nlp:
-        code += "class InferenceInput(BaseModel):\n    text: str\n\n"
-    else:
-        code += "class InferenceInput(BaseModel):\n    features: Dict[str, Any]\n\n"
-        
-    # Load function
-    code += "@app.on_event('startup')\n"
-    code += "def load_artifacts():\n"
-    code += "    global model, pipeline, target_encodings\n"
-    code += "    try:\n"
-    code += "        pipeline = joblib.load('pipeline.pkl')\n"
+        lines.append(f"from catboost import {model_name}")
+    lines += [
+        "",
+        "app = FastAPI(title='Easy-ML Exported Model API', version='1.0.0')",
+        "",
+        "",
+        "class InferenceInput(BaseModel):",
+        "    features: Dict[str, Any]",
+        "",
+        "",
+        "def _read_json(path):",
+        "    if not os.path.exists(path):",
+        "        return {}",
+        "    with open(path, 'r', encoding='utf-8') as handle:",
+        "        return json.load(handle)",
+        "",
+        "",
+        "pipeline = joblib.load('pipeline.pkl')",
+    ]
     if is_catboost:
-        if is_classification:
-            code += f"        model = CatBoostClassifier()\n"
-        else:
-            code += f"        model = CatBoostRegressor()\n"
-        code += f"        model.load_model('{model_filename}')\n"
+        lines += [f"model = {model_name}()", f"model.load_model('{model_filename}')"]
     else:
-        code += f"        model = joblib.load('{model_filename}')\n"
-        
+        lines.append(f"model = joblib.load('{model_filename}')")
+    lines += [
+        "column_dtypes = _read_json('column_data.json').get('column_dtypes', {})",
+        "target_decoder = {int(v): k for k, v in (_read_json('config.json').get('target_encodings') or {}).items()}",
+        "",
+        "",
+        "def _prepare(features):",
+        "    df = pd.DataFrame([features]).replace(r'^\\s*$', np.nan, regex=True)",
+        "    for col, dtype in column_dtypes.items():",
+        "        if col not in df.columns:",
+        "            df[col] = np.nan",
+        "        elif dtype.startswith(('int', 'float', 'uint')):",
+        "            values = pd.to_numeric(df[col], errors='coerce')",
+        "            if dtype.startswith(('int', 'uint')) and values.notna().all():",
+        "                values = values.astype('int64')",
+        "            df[col] = values",
+        "    return df",
+        "",
+        "",
+        "@app.post('/predict')",
+        "def predict(data: InferenceInput):",
+        "    try:",
+        "        transformed = pipeline.transform(_prepare(data.features))",
+        "        prediction = np.asarray(model.predict(transformed)).reshape(-1)[0]",
+    ]
     if is_classification:
-        code += "        if os.path.exists('config.json'):\n"
-        code += "            with open('config.json', 'r') as f:\n"
-        code += "                conf = json.load(f)\n"
-        code += "                target_encodings = conf.get('target_encodings', {})\n"
-        code += "                target_encodings = {v: k for k, v in target_encodings.items()}\n"
-        code += "        else:\n"
-        code += "            target_encodings = None\n"
+        lines += [
+            "        confidence = None",
+            "        if hasattr(model, 'predict_proba'):",
+            "            confidence = float(np.max(model.predict_proba(transformed)[0]))",
+            "        label = target_decoder.get(int(prediction), prediction.item() if hasattr(prediction, 'item') else prediction)",
+            "        return {'prediction': label, 'confidence': confidence}",
+        ]
     else:
-        code += "        target_encodings = None\n"
-        
-    code += "    except Exception as e:\n"
-    code += "        print(f'Error loading artifacts: {e}')\n"
-    code += "        raise e\n\n"
+        lines += [
+            "        return {'prediction': float(prediction)}",
+        ]
+    lines += [
+        "    except Exception as e:",
+        "        raise HTTPException(status_code=400, detail=str(e))",
+        "",
+        "",
+        "@app.get('/health')",
+        "def health():",
+        "    return {'status': 'ok'}",
+        "",
+    ]
+    return "\n".join(lines)
 
-    # Prediction endpoint
-    code += "@app.post('/predict')\n"
-    code += "def predict(data: InferenceInput):\n"
-    code += "    try:\n"
-    if is_nlp:
-        code += "        input_df = pd.DataFrame([{'text': data.text}])\n"
-    else:
-        code += "        input_df = pd.DataFrame([data.features])\n"
-        
-    code += "        transformed = pipeline.transform(input_df)\n"
-    code += "        prediction = model.predict(transformed)\n"
-    
-    if is_classification:
-        code += "        prob = None\n"
-        code += "        if hasattr(model, 'predict_proba'):\n"
-        code += "            prob_arr = model.predict_proba(transformed)\n"
-        code += "            prob = float(max(prob_arr[0]))\n"
-        code += "        pred_val = int(prediction[0]) if hasattr(prediction[0], 'item') else prediction[0]\n"
-        code += "        if target_encodings and pred_val in target_encodings:\n"
-        code += "            pred_val = target_encodings[pred_val]\n"
-        code += "        return {'prediction': pred_val, 'confidence': prob}\n"
-    else:
-        code += "        pred_val = float(prediction[0]) if hasattr(prediction[0], 'item') else prediction[0]\n"
-        code += "        return {'prediction': pred_val}\n"
-        
-    code += "    except Exception as e:\n"
-    code += "        raise HTTPException(status_code=500, detail=str(e))\n\n"
-    
-    code += "@app.get('/health')\n"
-    code += "def health():\n"
-    code += "    return {'status': 'ok'}\n"
-    return code
-    
-def generate_requirements(task: str, model_name: str) -> str:
-    reqs = ["fastapi", "uvicorn", "pydantic", "scikit-learn==1.6.1", "pandas==2.2.3", "joblib==1.4.2", "numpy==1.26.4"]
-    if "nlp" in task.lower():
-        reqs.extend(["sentence-transformers", "nltk", "spacy"])
-    if "xgboost" in model_name.lower():
-        reqs.append("xgboost==3.0.0")
-    if "catboost" in model_name.lower():
-        reqs.append("catboost==1.2.7")
-    if "lightgbm" in model_name.lower():
-        reqs.append("lightgbm==4.6.0")
-    return "\n".join(reqs)
 
-def generate_dockerfile() -> str:
-    return """FROM python:3.10-slim
+def _pinned(dist):
+    try:
+        return f"{dist}=={metadata.version(dist)}"
+    except metadata.PackageNotFoundError:
+        return dist
+
+
+def generate_requirements(model_name: str) -> str:
+    """Pin the libraries that unpickle the model to the versions that trained it."""
+    reqs = ["fastapi", "uvicorn", "pydantic"]
+    reqs += [_pinned(dist) for dist in ("scikit-learn", "pandas", "numpy", "joblib")]
+    if model_name in _MODEL_PACKAGES:
+        reqs.append(_pinned(_MODEL_PACKAGES[model_name]))
+    return "\n".join(reqs) + "\n"
+
+
+def generate_dockerfile(model_name: str = "") -> str:
+    system_deps = ""
+    if model_name.startswith("LGBM"):
+        # LightGBM needs the OpenMP runtime, which slim images do not ship.
+        system_deps = "RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*\n\n"
+    return f"""FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
+{system_deps}COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
@@ -182,15 +192,22 @@ EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 """
 
+
 def generate_readme(task: str, model_name: str) -> str:
     return f"""# Generated Deployment for {model_name}
 
-This package contains a production-ready FastAPI wrapper for your Easy-ML model.
+This package contains a FastAPI wrapper for your Easy-ML Studio model ({task}).
 
 ## Running Locally
 1. `pip install -r requirements.txt`
 2. `uvicorn main:app --reload`
 3. Visit `http://127.0.0.1:8000/docs` to test the API.
+
+## Example request
+```bash
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" \\
+     -d '{{"features": {{"column_a": 1.5, "column_b": "value"}}}}'
+```
 
 ## Running via Docker
 1. `docker build -t my-model-api .`

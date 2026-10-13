@@ -1,48 +1,7 @@
-from functools import partial
 import os
 import numpy as np
 from easyml.config.GLOBAL_VARS import REGRESSION_METRICS, CLASSIFICATION_METRICS, METRICS_MAPPING, ML_RequestBody
 from easyml.utils.logger import write_log
-
-def get_classification_metrics(y_real, y_pred):
-    """
-    Computes all classification metrics defined in CLASSIFICATION_METRICS.
-
-    Args:
-        y_real (array-like): True labels.
-        y_pred (array-like): Predicted labels.
-
-    Returns:
-        dict: Computed classification metrics.
-    """
-
-    metrics = {}
-    for metric in CLASSIFICATION_METRICS:
-        try:
-            metrics[metric] = METRICS_MAPPING[metric](*[y_real, y_pred])
-        except Exception as e:
-            write_log(f"Error in get_classification_metrics for metric {metric}. Error: {e}",level='error', module_name=os.path.basename(__file__))
-
-
-def get_regression_metrics(y_real, y_pred):
-    """
-    Computes all regression metrics defined in REGRESSION_METRICS.
-
-    Args:
-        y_real (array-like): True values.
-        y_pred (array-like): Predicted values.
-
-    Returns:
-        dict: Computed regression metrics.
-    """
-
-    metrics = {}
-    for metric in REGRESSION_METRICS:
-        try:
-            metrics[metric] = METRICS_MAPPING[metric](*[y_real, y_pred])
-        except Exception as e:
-            write_log(f"Error in get_classification_metrics for metric {metric}. Error: {e}",level='error', module_name=os.path.basename(__file__))
-
 
 def get_metrics(request_body : ML_RequestBody, task, y_real, y_pred, **kwargs):
     """

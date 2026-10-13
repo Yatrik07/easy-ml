@@ -1,36 +1,56 @@
-# Ignore the test folder  
-test_folder/
-*.csv
-
-# Ignore the virtual environment  
+# Core Environmental Exclusions
 venv/
 .venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+.DS_Store
 
-# Ignore IDE-specific files  
+# IDE and Editor files
 .idea/
 .vscode/
+*.swp
+*.swo
 
-# Build artifacts
-dist/
-build/
-easy_ml.egg-info/
-*.egg-info/
-
-# Logs and runtime artifacts
+# Easy-ML Runtime Artifacts
+# We ignore root-level directories but allow easyml/internal data if any
 logs/
 runs/
 database/
 artifacts/
+easyml/artifacts/
+eda/
 sample_logs/
 application_logs.log
 error.log
-
-# One-time scripts
 temp.html
 dummy.csv
-ws_client_and_trigger.py
+actual_index.html
+actual_index_v2.html
+script_only.js
 
-# Python bytecode files
-__pycache__/
-*.py[cod]
-*$py.class
+# Data and Testing
+test_folder/
+*.csv
+*.xlsx
+*.db
+*.pkl
+*.pth
+*.cbm
+*.zip
+
+# Build and Packaging (root-level only: easyml/unified_frontend/dist is the shipped UI)
+/dist/
+/dist - Copy/
+/build/
+*.egg-info/
+
+# Local Dev Scripts
+ws_client_and_trigger.py
+test_imbalance.py
+test_workflow.py
+test_nlp_pipeline.py
+note.txt
+.pytest_cache/

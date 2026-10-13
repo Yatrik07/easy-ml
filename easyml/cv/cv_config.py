@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 AVAILABLE_CV_MODELS: List[str] = [
     "SimpleCNN",
@@ -20,12 +20,18 @@ class CV_RequestBody(BaseModel):
     image_size: tuple = (224, 224)
     batch_size: int = 32
     validation_split: float = 0.2
+    test_split: float = 0.15  # held out for the reported metrics, never used for model selection
     augment: bool = True
     
     # Model & Training Config
     models: List[str] = Field(default_factory=list)
     epochs: int = 10
     learning_rate: float = 0.001
+    
+    # Early Stopping & LR Scheduler Config
+    early_stopping_patience: int = 5
+    reduce_lr_patience: int = 3
+    reduce_lr_factor: float = 0.5
     
     # Internal state managed during pipeline execution
     status_code: int = 200
@@ -37,6 +43,7 @@ class CV_RequestBody(BaseModel):
     path_to_save: str = ""
     custom_layers: Optional[List[Dict[str, Any]]] = None  # For CustomCNN layer spec
     use_gpu: bool = False  # GPU toggle
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     
 class CV_InferenceBody(BaseModel):
     """
@@ -51,3 +58,4 @@ class CV_InferenceBody(BaseModel):
     error_traceback: Optional[str] = None
     task: str = ""
     classes: List[str] = Field(default_factory=list)
+    model_config = ConfigDict(arbitrary_types_allowed=True)

@@ -7,10 +7,9 @@ Pydantic data carriers, and UI-to-backend mappings.
 Mirrors the structure of easyml/config/GLOBAL_VARS.py for NLP tasks.
 """
 
-from pydantic import BaseModel
-from typing import Optional, List, Any, Dict
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, List, Any
 import pandas as pd
-import os
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB, ComplementNB
@@ -24,7 +23,7 @@ from functools import partial
 try:
     from lightgbm import LGBMClassifier
     LIGHTGBM_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
     LIGHTGBM_AVAILABLE = False
 
 # ---------------------------------------- NLP Metrics ----------------------------------------
@@ -203,6 +202,7 @@ class NLP_RequestBody(BaseModel):
     # Preprocessing flags
     lowercase: bool = True
     remove_stopwords: bool = True
+    stopwords_source: str = "sklearn"  # runs created before 0.4.0 used NLTK's list
     lemmatize: bool = False
     regex_clean: bool = True
     regex_pattern: str = r'[^a-zA-Z0-9\s]'
@@ -214,7 +214,7 @@ class NLP_RequestBody(BaseModel):
     # Vectorizer config
     vectorizer_type: str = "tfidf"     # "count", "tfidf", "hashing"
     max_features: int = 10000
-    ngram_range: List[int] = [1, 2]
+    ngram_range: List[int] = Field(default_factory=lambda: [1, 2])
     min_df: int = 2
     max_df: float = 0.95
 
@@ -224,9 +224,10 @@ class NLP_RequestBody(BaseModel):
     embedding_max_length: int = 256
 
     # Model training
-    models: Optional[List[str]] = []
+    models: Optional[List[str]] = Field(default_factory=list)
     hyper_parameter_tuning: int = 0
-    performance: Optional[dict] = {}
+    imbalance_handling: str = "none"  # "none", "smote", "tomek", "smotetomek"
+    performance: Optional[dict] = Field(default_factory=dict)
 
     # Paths
     path_to_save: Optional[str] = None
@@ -242,8 +243,7 @@ class NLP_RequestBody(BaseModel):
     run_id: Optional[int] = None
     original_dataset_name: Optional[str] = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def jsonify(self):
         """Serialize key fields for config_json.json storage."""
@@ -255,6 +255,7 @@ class NLP_RequestBody(BaseModel):
             "target_encodings": self.target_encodings,
             "lowercase": self.lowercase,
             "remove_stopwords": self.remove_stopwords,
+            "stopwords_source": self.stopwords_source,
             "lemmatize": self.lemmatize,
             "regex_clean": self.regex_clean,
             "regex_pattern": self.regex_pattern,
@@ -269,6 +270,7 @@ class NLP_RequestBody(BaseModel):
             "embedding_max_length": self.embedding_max_length,
             "models": self.models,
             "hyper_parameter_tuning": self.hyper_parameter_tuning,
+            "imbalance_handling": self.imbalance_handling,
             "performance": self.performance,
             "status_code": self.status_code,
             "run_id": getattr(self, "run_id", None)
@@ -295,5 +297,4 @@ class NLP_InferenceBody(BaseModel):
     error_message: Optional[str] = None
     error_traceback: Optional[str] = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

@@ -31,6 +31,34 @@ import torch.nn as nn
 from typing import List, Dict, Any
 
 
+def _pair(value):
+    return tuple(value) if isinstance(value, (list, tuple)) else (value, value)
+
+
+def _output_size(size, kernel_size, stride, padding, dilation=1, ceil_mode=False):
+    """
+    Spatial output size of a Conv2d / MaxPool2d / AvgPool2d layer along one axis (PyTorch formula).
+    """
+    span = size + 2 * padding - dilation * (kernel_size - 1) - 1
+    out = (-(-span // stride) if ceil_mode else span // stride) + 1
+    # PyTorch drops a last window that would start entirely inside the right padding.
+    if ceil_mode and (out - 1) * stride >= size + padding:
+        out -= 1
+    return out
+
+
+def _spatial_after(layer_type, index, size, kernel_size, stride, padding, dilation=1, ceil_mode=False):
+    out = tuple(
+        _output_size(size[axis], _pair(kernel_size)[axis], _pair(stride)[axis], _pair(padding)[axis],
+                     _pair(dilation)[axis], ceil_mode)
+        for axis in (0, 1)
+    )
+    if min(out) < 1:
+        raise ValueError(f"Layer {index + 1} ({layer_type}) shrinks the {size[0]}x{size[1]} feature map to "
+                         f"{out[0]}x{out[1]}. Use a larger image size, padding, or fewer pooling layers.")
+    return out
+
+
 def build_custom_cnn(layer_specs: List[Dict[str, Any]],
                      input_channels: int = 3,
                      input_size: tuple = (224, 224),
@@ -38,8 +66,8 @@ def build_custom_cnn(layer_specs: List[Dict[str, Any]],
     """
     Builds a ``nn.Sequential`` model from a list of layer dicts.
 
-    The final ``Linear`` layer's ``out_features`` is overridden by
-    *num_classes* if supplied.
+    The last ``Linear`` layer's ``out_features`` is overridden by *num_classes* if supplied, even
+    when activation or dropout layers follow it.
 
     Parameters
     ----------
@@ -59,23 +87,28 @@ def build_custom_cnn(layer_specs: List[Dict[str, Any]],
     """
     layers: list[nn.Module] = []
     current_channels = input_channels
-    current_h, current_w = input_size
+    spatial = (int(input_size[0]), int(input_size[1]))
     flattened = False
+    linear_indices = [i for i, spec in enumerate(layer_specs) if spec.get("type") == "Linear"]
+    last_linear = linear_indices[-1] if linear_indices else None
 
     for i, spec in enumerate(layer_specs):
         spec = dict(spec)  # copy so we don't mutate the original
         layer_type = spec.pop("type")
+
+        if layer_type in ("Conv2d", "MaxPool2d", "AvgPool2d") and flattened:
+            raise ValueError(f"Layer {i + 1} ({layer_type}) cannot come after Flatten or Linear.")
 
         if layer_type == "Conv2d":
             out_ch = spec.pop("out_channels", 32)
             ks = spec.pop("kernel_size", 3)
             pad = spec.pop("padding", 0)
             stride = spec.pop("stride", 1)
+            dilation = spec.get("dilation", 1)
             layer = nn.Conv2d(current_channels, out_ch, kernel_size=ks,
                               padding=pad, stride=stride, **spec)
             current_channels = out_ch
-            current_h = (current_h + 2 * pad - ks) // stride + 1
-            current_w = (current_w + 2 * pad - ks) // stride + 1
+            spatial = _spatial_after(layer_type, i, spatial, ks, stride, pad, dilation)
             layers.append(layer)
 
         elif layer_type == "BatchNorm2d":
@@ -87,20 +120,14 @@ def build_custom_cnn(layer_specs: List[Dict[str, Any]],
         elif layer_type in ("LeakyReLU", "leakyrelu"):
             layers.append(nn.LeakyReLU(negative_slope=spec.get("negative_slope", 0.01), inplace=True))
 
-        elif layer_type == "MaxPool2d":
+        elif layer_type in ("MaxPool2d", "AvgPool2d"):
             ks = spec.pop("kernel_size", 2)
-            stride = spec.pop("stride", ks)
-            layer = nn.MaxPool2d(kernel_size=ks, stride=stride, **spec)
-            current_h = current_h // stride
-            current_w = current_w // stride
-            layers.append(layer)
-
-        elif layer_type == "AvgPool2d":
-            ks = spec.pop("kernel_size", 2)
-            stride = spec.pop("stride", ks)
-            layer = nn.AvgPool2d(kernel_size=ks, stride=stride, **spec)
-            current_h = current_h // stride
-            current_w = current_w // stride
+            stride = spec.pop("stride", None) or ks
+            pad = spec.get("padding", 0)
+            dilation = spec.get("dilation", 1) if layer_type == "MaxPool2d" else 1
+            pool_class = nn.MaxPool2d if layer_type == "MaxPool2d" else nn.AvgPool2d
+            layer = pool_class(kernel_size=ks, stride=stride, **spec)
+            spatial = _spatial_after(layer_type, i, spatial, ks, stride, pad, dilation, spec.get("ceil_mode", False))
             layers.append(layer)
 
         elif layer_type == "Dropout":
@@ -114,20 +141,12 @@ def build_custom_cnn(layer_specs: List[Dict[str, Any]],
             if not flattened:
                 layers.append(nn.Flatten())
                 flattened = True
-            in_features = current_channels * current_h * current_w if layers[-1].__class__.__name__ in ("Flatten",) or len([l for l in layers if isinstance(l, nn.Flatten)]) == 1 and not any(isinstance(l, nn.Linear) for l in layers) else spec.get("in_features", 128)
-            # For the first Linear after Flatten, compute in_features from spatial dims
-            if not any(isinstance(l, nn.Linear) for l in layers):
-                in_features = current_channels * current_h * current_w
-            else:
-                # For subsequent Linear layers, use the previous Linear's out_features
-                for l in reversed(layers):
-                    if isinstance(l, nn.Linear):
-                        in_features = l.out_features
-                        break
+            previous_linear = next((layer for layer in reversed(layers) if isinstance(layer, nn.Linear)), None)
+            # The first Linear sees the flattened feature map; later ones the previous Linear's output.
+            in_features = previous_linear.out_features if previous_linear else current_channels * spatial[0] * spatial[1]
 
             out_features = spec.get("out_features", 128)
-            # Override last Linear with num_classes if this is the last layer
-            if num_classes is not None and i == len(layer_specs) - 1:
+            if num_classes is not None and i == last_linear:
                 out_features = num_classes
 
             layers.append(nn.Linear(in_features, out_features))

@@ -19,7 +19,6 @@ Directory layout
 """
 
 import os
-import sys
 import platform
 
 # ── resolve DATA_DIR ────────────────────────────────────────────────
@@ -42,8 +41,13 @@ UPLOADS_DIR = os.path.join(DATA_DIR, "uploads")
 EDA_DIR     = os.path.join(DATA_DIR, "eda")
 
 # ── create them eagerly so the rest of the app never has to ─────────
+# A read-only home directory must not break ``import easyml``; uploads and
+# logs fall back to the temp directory when their folder is not writable.
 for _d in (DB_DIR, RUNS_DIR, LOGS_DIR, UPLOADS_DIR, EDA_DIR):
-    os.makedirs(_d, exist_ok=True)
+    try:
+        os.makedirs(_d, exist_ok=True)
+    except OSError:
+        pass
 
 # ── package root (for locating bundled static/frontend files) ───────
 PACKAGE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))

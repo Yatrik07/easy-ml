@@ -1,7 +1,6 @@
 import os
 import torch
-import torch.nn as nn
-from torchvision import transforms, models
+from torchvision import transforms
 from PIL import Image
 import base64
 import io
@@ -46,7 +45,8 @@ class CVInferenceController:
             
             return {
                 "prediction": prediction,
-                "confidence": confidence
+                "probability": confidence,
+                "confidence": confidence,
             }
             
         except Exception as e:
@@ -62,7 +62,7 @@ class CVInferenceController:
         
         # Load Config
         config_path = os.path.join(folder_path, "config_json.json")
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             conf = json.load(f)
             
         class_names = conf["classes"]
@@ -71,9 +71,10 @@ class CVInferenceController:
         custom_layers = conf.get("custom_layers", None)
         
         # Load Model architecture and weights
-        model = get_cv_model(self.inference_body.model_name, num_classes, custom_layers=custom_layers)
+        model = get_cv_model(self.inference_body.model_name, num_classes, custom_layers=custom_layers,
+                             image_size=img_size, pretrained=False)
         model_path = os.path.join(folder_path, f"{self.inference_body.model_name}.pth")
-        model.load_state_dict(torch.load(model_path, map_location=self.device))
+        model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
         
         return model, class_names, img_size
         

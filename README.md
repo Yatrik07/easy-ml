@@ -1,129 +1,128 @@
-# Easy-ML 🚀
+# Easy-ML Studio
 
-An **easy-to-use, no-code ML training and inference platform** with a modern browser-based UI. Upload your data, pick your models, train, evaluate, and deploy — all without writing a single line of code.
+Easy-ML Studio is a no-code machine learning studio that runs on your own machine. Upload a dataset in the browser, train several models side by side, compare their metrics, make predictions, explain them with SHAP, and export a trained model as a ready-to-run FastAPI service.
 
-## ✨ Features
+It covers three workflows:
 
-| Feature | Description |
-|---------|-------------|
-| 📊 **Tabular Classification** | Train Random Forest, XGBoost, LightGBM, CatBoost, SVM, and more on CSV data |
-| 📈 **Tabular Regression** | Predict continuous values with Linear Regression, Decision Trees, and ensemble models |
-| 📝 **NLP Text Classification** | Classify text using TF-IDF or sentence embeddings with pre-trained transformers |
-| 🖼️ **Image Classification** | Train SimpleCNN, ResNet18, MobileNetV2, or build your own **Custom CNN** |
-| 🧪 **EDA Reports** | One-click exploratory data analysis with interactive HTML reports |
-| 🔮 **Inference** | Run predictions on new data with trained models |
-| 🧠 **XAI / Explainability** | SHAP-based feature importance plots for model interpretability |
-| 📦 **Model Export** | Export trained models as deployable FastAPI packages |
-| ⚡ **GPU/CUDA Support** | Auto-detects NVIDIA GPUs for accelerated deep learning training |
-| ⚙️ **Settings & Storage** | Centralized data storage with path visibility and one-click data clearing |
+- **Tabular** classification and regression (CSV / Excel)
+- **Text** classification (TF-IDF or sentence embeddings)
+- **Image** classification (SimpleCNN, ResNet18, MobileNetV2, or your own CNN)
 
-## 🏗️ Quick Start
+Everything stays local: the UI, the models and your data never leave your computer.
 
-### Option 1: pip install (recommended)
+## Install
 
 ```bash
-# Core (tabular ML only — lightweight)
-pip install easy-ml
-
-# With NLP support
-pip install "easy-ml[nlp]"
-
-# With Computer Vision support
-pip install "easy-ml[cv]"
-
-# Everything
-pip install "easy-ml[all]"
+pip install easy-ml-studio
 ```
 
-Then run:
+The core install covers tabular ML with scikit-learn models and TF-IDF text classification. Add extras for more:
+
+| Extra | Adds |
+|---|---|
+| `[boost]` | XGBoost, LightGBM, CatBoost models |
+| `[nlp]` | Lemmatization (spaCy) and sentence-embedding features |
+| `[cv]` | Image classification with PyTorch |
+| `[eda]` | SHAP explanations and automatic EDA reports |
+| `[all]` | Everything above |
+
+```bash
+pip install "easy-ml-studio[all]"
+easy-ml download-models   # spaCy English model, needed for lemmatization
+```
+
+Python 3.10 – 3.12 is supported. Features whose extra is not installed are greyed out in the UI with the command to enable them.
+
+## Launch
+
 ```bash
 easy-ml
 ```
-Open **http://localhost:5010** in your browser.
 
-### Option 2: Docker
+The studio opens in your browser at <http://127.0.0.1:5010>. Useful options:
 
 ```bash
-# Build and run
-docker-compose up --build
-
-# Or pull and run
-docker build -t easyml .
-docker run -p 5010:5010 -v easyml-data:/data/easy-ml easyml
+easy-ml --port 8080          # use another port
+easy-ml --no-browser         # don't open a browser tab
+easy-ml --host 0.0.0.0       # expose on your network (see Security below)
+python -m easyml             # same as easy-ml
 ```
 
-### Option 3: From Source
+## Features
+
+- Train several models in one run and compare accuracy, confusion matrices and classification reports
+- Light or thorough hyperparameter search (GridSearchCV)
+- Missing-value imputation, scaling, PCA, one-hot encoding, and SMOTE / Tomek Links for imbalanced classes
+- Live progress and training curves while models train; stop a run at any time
+- Run history stored in SQLite, so every model can be reused later
+- Single-record and batch (CSV) predictions
+- SHAP waterfall explanations for tabular predictions
+- One-click export of a tabular model as a FastAPI app with Dockerfile
+- Automatic EDA reports with ydata-profiling
+
+## Use it from Python
+
+```python
+from easyml import MLTrainer
+
+run = MLTrainer(
+    task="MLClassification",          # or "MLRegression", "NLPTextClassification"
+    name="churn",
+    dataset_path="churn.csv",
+    target_column="churned",
+    models=["logistic_regression", "random_forest"],
+).run()
+
+print(run.run_id, run.performance)
+```
+
+Runs trained from Python appear in the studio's Run History and can be used for predictions there.
+
+## Where data is stored
+
+Uploads, trained models, the run database and logs live outside the package, so upgrading never deletes them:
+
+| OS | Default location |
+|---|---|
+| Windows | `%LOCALAPPDATA%\easy-ml` |
+| macOS | `~/Library/Application Support/easy-ml` |
+| Linux | `~/.local/share/easy-ml` |
+
+Set the `EASYML_DATA_DIR` environment variable to use another folder. **Settings → Clear Data** in the studio deletes everything stored there.
+
+## Security
+
+Easy-ML Studio is a local, single-user tool with no login.
+
+- By default it only listens on `127.0.0.1`, so other machines cannot reach it.
+- Requests from other websites are rejected, so a page you visit cannot drive the studio.
+- Only use `--host 0.0.0.0` on a network you trust: anyone who can reach the port can use the studio and its data.
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+The image targets `base`, `ml`, `nlp`, `cv` and `full` (default) select which extras are installed. Data is kept in the `easyml-data` volume.
+
+## Documentation
+
+- [User guide](https://github.com/Yatrik07/easy-ml/blob/main/docs/USER_GUIDE.md)
+- [Developer guide](https://github.com/Yatrik07/easy-ml/blob/main/docs/DEVELOPER_GUIDE.md)
+
+## Development
 
 ```bash
 git clone https://github.com/Yatrik07/easy-ml.git
 cd easy-ml
 python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install -e ".[all]"
-python easyml/app.py
+venv\Scripts\activate            # Windows; use `source venv/bin/activate` on macOS/Linux
+pip install -e ".[all,dev]"
+pytest
+easy-ml
 ```
 
-## 📂 Data Storage
-
-Easy-ML stores all runtime data (databases, runs, logs, uploads) in a **centralized, platform-standard directory** — not inside the library installation:
-
-| Platform | Location |
-|----------|----------|
-| Windows | `%LOCALAPPDATA%\easy-ml\` |
-| macOS | `~/Library/Application Support/easy-ml/` |
-| Linux | `~/.local/share/easy-ml/` |
-| Docker | `/data/easy-ml` (mounted volume) |
-
-Override with: `EASYML_DATA_DIR=/your/custom/path`
-
-View the path and clear all data from the **Settings** page in the UI.
-
-## 🎯 Usage Guide
-
-### For Non-Technical Users
-
-1. **Open the app** at http://localhost:5010
-2. **Choose a task** (Classification, Regression, NLP, or Image Classification)
-3. **Upload your data** (CSV file or folder path)
-4. **Configure** — select your target column, models, and options
-5. **Train** — click "Start Training" and watch the progress
-6. **View Results** — see accuracy, metrics, and confusion matrices
-7. **Run Predictions** — use trained models on new data
-
-### Custom CNN Builder
-
-When selecting Image Classification, choose "CustomCNN" to build your own architecture:
-- Add layers (Conv2d, BatchNorm2d, ReLU, MaxPool2d, Dropout, Flatten, Linear)
-- Configure parameters for each layer
-- Validate the architecture before training
-
-## 🐳 Docker Volumes
-
-Data persists across container rebuilds using a named Docker volume:
-
-```yaml
-volumes:
-  - easyml-data:/data/easy-ml
-```
-
-## 📦 Optional Dependencies
-
-| Extra | Packages | Use Case |
-|-------|----------|----------|
-| `[nlp]` | spaCy, NLTK, sentence-transformers | Text classification |
-| `[cv]` | PyTorch, torchvision, Pillow | Image classification |
-| `[eda]` | ydata-profiling, SHAP | EDA reports, XAI |
-| `[all]` | All of the above | Full functionality |
-
-## 👥 Developers
-
-- **Yatrikkumar Shah** — [LinkedIn](https://www.linkedin.com/in/yatrikkumar-shah/)
-- **Pawan Kumar J** — [LinkedIn](https://www.linkedin.com/in/pawankumarj15/)
-- **Dhruv Jain** — [LinkedIn](https://www.linkedin.com/in/dhruv-jain-3b1539212/)
-- **Esha Mishra** — [LinkedIn](https://www.linkedin.com/in/eshamishra28/)
-
-📧 **Contact:** contact.easyml@gmail.com
-
-## 📄 License
+## License
 
 Apache License 2.0

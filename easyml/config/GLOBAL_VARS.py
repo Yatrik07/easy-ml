@@ -1,26 +1,34 @@
-from pydantic import BaseModel
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
-from catboost import CatBoostClassifier
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import AdaBoostRegressor, AdaBoostClassifier
-
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-from catboost import CatBoostRegressor
-from sklearn.neighbors import KNeighborsRegressor
+from pydantic import BaseModel, Field, ConfigDict
+from sklearn.linear_model import LogisticRegression, LinearRegression
+from sklearn.ensemble import (RandomForestClassifier, RandomForestRegressor,
+                              AdaBoostClassifier, AdaBoostRegressor)
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.metrics import (confusion_matrix, classification_report, mean_absolute_percentage_error,
                             mean_absolute_error, r2_score, accuracy_score)
 from functools import partial
 from typing import Optional, List, Any
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-import os
-from easyml.config.paths import DATA_DIR, DB_DIR, RUNS_DIR, LOGS_DIR, UPLOADS_DIR, EDA_DIR, PACKAGE_ROOT
+from easyml.config.paths import PACKAGE_ROOT
+
+# Gradient-boosting libraries ship in the optional [boost] extra.
+try:
+    from xgboost import XGBClassifier, XGBRegressor
+    XGBOOST_AVAILABLE = True
+except (ImportError, OSError):
+    XGBOOST_AVAILABLE = False
+
+try:
+    from lightgbm import LGBMClassifier, LGBMRegressor
+    LIGHTGBM_AVAILABLE = True
+except (ImportError, OSError):
+    LIGHTGBM_AVAILABLE = False
+
+try:
+    from catboost import CatBoostClassifier, CatBoostRegressor
+    CATBOOST_AVAILABLE = True
+except (ImportError, OSError):
+    CATBOOST_AVAILABLE = False
 
 # Keep PROJECT_ROOT as alias for backward compatibility (points to package dir)
 PROJECT_ROOT = PACKAGE_ROOT
@@ -36,25 +44,7 @@ METRICS_MAPPING = {
         'mape' : mean_absolute_percentage_error
     }
 
-save_data_path = os.path.join(UPLOADS_DIR, "data.csv")
 # ---------------------------------------- ML - Regression Models ----------------------------------------------
-AVAILABLE_ML_MODELS_LIST_FOR_REGRESSION = [
-    LinearRegression(),
-    RandomForestRegressor(),
-    XGBRegressor(),
-    LGBMRegressor(),
-    CatBoostRegressor(),
-    KNeighborsRegressor(),
-    AdaBoostRegressor()
-]
-
-DEFAULT_ML_MODELS_LIST_FOR_REGRESSION = [
-    LinearRegression(),
-    RandomForestRegressor(),
-    LGBMRegressor(),
-    KNeighborsRegressor(),
-]
-
 PARAM_GRID_LEVEL1_FOR_REGRESSION = {
     "LinearRegression": {
         "fit_intercept": [True, False]
@@ -133,24 +123,6 @@ PARAM_GRID_LEVEL2_FOR_REGRESSION = {
 
 # ---------------------------------------- ML - Classification Models ----------------------------------------------
 
-AVAILABLE_ML_MODELS_LIST_FOR_CLASSIFICATION = [
-    LogisticRegression(),
-    RandomForestClassifier(),
-    XGBClassifier(),
-    LGBMClassifier(),
-    CatBoostClassifier(),
-    KNeighborsClassifier(),
-    AdaBoostClassifier()
-]
-
-DEFAULT_ML_MODELS_LIST_FOR_CLASSIFICATION = [
-    LogisticRegression(),
-    RandomForestClassifier(),
-    LGBMClassifier(),
-    KNeighborsClassifier(),
-]
-
-
 PARAM_GRID_LEVEL1_FOR_CLASSIFICATION = {
     "LogisticRegression": {
         "penalty": ["l2"],  # Regularization type
@@ -224,38 +196,69 @@ PARAM_GRID_LEVEL2_FOR_CLASSIFICATION = {
     },
     "AdaBoostClassifier": {
         "n_estimators": [50, 100, 200],
-        "learning_rate": [0.01, 0.05, 0.1],
-        "algorithm": ["SAMME", "SAMME.R"]
+        "learning_rate": [0.01, 0.05, 0.1]
     }
 }
 
 # ---------------------------------------- ui2back_mappings ----------------------------------------------
-# Classification Adaboost
+# Only models whose libraries are installed are registered, so /get_models reflects the installation.
 ui2back_mappings_regression_models = {
     "linear_regression": LinearRegression(),
     "random_forest": RandomForestRegressor(),
-    "xg_boost": XGBRegressor(),
-    "light_gbm": LGBMRegressor(verbose=-1),
-    "cat_boost": CatBoostRegressor(
-        logging_level="Silent",  # Disables logs
-    ),
-    "knn": KNeighborsRegressor(),
-    "ada_boost": AdaBoostRegressor()
 }
-
 ui2back_mappings_classification_models = {
-    "logistic_regression": LogisticRegression(solver='newton-cg'),
+    "logistic_regression": LogisticRegression(solver='newton-cg', max_iter=1000),
     "random_forest": RandomForestClassifier(),
-    "xg_boost": XGBClassifier(),
-    "light_gbm": LGBMClassifier(verbose=-1),
-    "cat_boost": CatBoostClassifier(
-        task_type="CPU",
-        logging_level="Silent",  # Disables logs
-        save_snapshot=False,  # Prevents creating temporary files
-    ),
-    "knn": KNeighborsClassifier(),
-    "ada_boost": AdaBoostClassifier()
 }
+if XGBOOST_AVAILABLE:
+    ui2back_mappings_regression_models["xg_boost"] = XGBRegressor()
+    ui2back_mappings_classification_models["xg_boost"] = XGBClassifier()
+if LIGHTGBM_AVAILABLE:
+    ui2back_mappings_regression_models["light_gbm"] = LGBMRegressor(verbose=-1)
+    ui2back_mappings_classification_models["light_gbm"] = LGBMClassifier(verbose=-1)
+if CATBOOST_AVAILABLE:
+    ui2back_mappings_regression_models["cat_boost"] = CatBoostRegressor(logging_level="Silent")
+    ui2back_mappings_classification_models["cat_boost"] = CatBoostClassifier(
+        task_type="CPU",
+        logging_level="Silent",
+        save_snapshot=False,  # Prevents creating temporary files
+    )
+ui2back_mappings_regression_models["knn"] = KNeighborsRegressor()
+ui2back_mappings_regression_models["ada_boost"] = AdaBoostRegressor()
+ui2back_mappings_classification_models["knn"] = KNeighborsClassifier()
+ui2back_mappings_classification_models["ada_boost"] = AdaBoostClassifier()
+
+DEFAULT_ML_MODELS_FOR_REGRESSION = ["linear_regression", "random_forest", "light_gbm", "knn"]
+DEFAULT_ML_MODELS_FOR_CLASSIFICATION = ["logistic_regression", "random_forest", "light_gbm", "knn"]
+
+# Model classes saved with CatBoost's native format (.cbm) instead of joblib (.pkl)
+CATBOOST_MODEL_NAMES = {"CatBoostClassifier", "CatBoostRegressor"}
+
+
+def get_model_mappings(task: str):
+    return ui2back_mappings_regression_models if task == "regression" else ui2back_mappings_classification_models
+
+
+def get_ml_model_instance(task: str, model_name: str):
+    model = get_model_mappings(task).get(model_name)
+    if model is None:
+        raise ValueError(f"Unknown or unavailable model '{model_name}' for task '{task}'")
+    return model.__class__(**model.get_params())
+
+
+def get_default_ml_models(task: str):
+    defaults = DEFAULT_ML_MODELS_FOR_REGRESSION if task == "regression" else DEFAULT_ML_MODELS_FOR_CLASSIFICATION
+    return [get_ml_model_instance(task, name) for name in defaults if name in get_model_mappings(task)]
+
+
+def get_param_grid(task: str, level: int) -> dict:
+    grids = {
+        ("regression", 1): PARAM_GRID_LEVEL1_FOR_REGRESSION,
+        ("regression", 2): PARAM_GRID_LEVEL2_FOR_REGRESSION,
+        ("classification", 1): PARAM_GRID_LEVEL1_FOR_CLASSIFICATION,
+        ("classification", 2): PARAM_GRID_LEVEL2_FOR_CLASSIFICATION,
+    }
+    return grids.get((task, int(level or 0)), {})
 
 error_code_mappings = {
     "DataIngestionError": 5001,
@@ -303,21 +306,24 @@ class ML_RequestBody(BaseModel):
 
     preprocessing: bool = False
     scaling: bool = False
-    categorical_columns: Optional[List[str]] = []
-    ordinal_columns: Optional[List[str]] = []
-    nominal_columns: Optional[List[str]] = []
-    numeric_columns: Optional[List[str]] = []
+    categorical_columns: Optional[List[str]] = Field(default_factory=list)
+    ordinal_columns: Optional[List[str]] = Field(default_factory=list)
+    nominal_columns: Optional[List[str]] = Field(default_factory=list)
+    numeric_columns: Optional[List[str]] = Field(default_factory=list)
     imputation: bool = False
     reduce_features: bool = False
     ignore_columns: Optional[List[str]] = None
 
     hyper_parameter_tuning: int = 0
-    models: Optional[List[str]] = []  # List of model names
-    performance: Optional[dict] = {}
+    imbalance_handling: str = "none"  # "none", "smote", "tomek", "smotetomek"
+    models: Optional[List[str]] = Field(default_factory=list)  # List of model names
+    performance: Optional[dict] = Field(default_factory=dict)
     path_to_save: Optional[str] = None
 
-    column_transformer: ColumnTransformer = ColumnTransformer(transformers=[], remainder='passthrough')
-    transformers: Optional[List] = []
+    column_transformer: ColumnTransformer = Field(
+        default_factory=lambda: ColumnTransformer(transformers=[], remainder='passthrough')
+    )
+    transformers: Optional[List] = Field(default_factory=list)
 
     status_code: int = 200
     error_message: Optional[str] = None
@@ -327,8 +333,7 @@ class ML_RequestBody(BaseModel):
     run_id: Optional[int] = None
     original_dataset_name: Optional[str] = None
 
-    class Config:
-        arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def jsonify(self):
         to_dump = dict()
@@ -344,6 +349,7 @@ class ML_RequestBody(BaseModel):
         to_dump["imputation"] = self.imputation
         to_dump["reduce_features"] = self.reduce_features
         to_dump["hyper_parameter_tuning"] = self.hyper_parameter_tuning
+        to_dump["imbalance_handling"] = self.imbalance_handling
         to_dump["ignore_columns"] = self.ignore_columns
         to_dump["models"] = self.models
         to_dump["performance"] = self.performance
@@ -354,7 +360,7 @@ class ML_RequestBody(BaseModel):
 
 class ML_InferenceBody(BaseModel):
     task: str = ""
-    run_id: int = ""
+    run_id: Optional[int] = None
     data: Any = None
 
     target_encodings: Optional[dict] = None
@@ -362,15 +368,14 @@ class ML_InferenceBody(BaseModel):
     ignore_columns: Optional[List[str]] = None
 
     model: Any = None
-    model_name: str = None
+    model_name: Optional[str] = None
     pipeline: Any = None
 
     status_code: int = 200
     error_message: Optional[str] = None
     error_traceback: Optional[str] = None
 
-    class Config:
-        arbitrary_types_allowed = True  # Allows non-standard types like DataFrame
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def jsonify(self):
         pass

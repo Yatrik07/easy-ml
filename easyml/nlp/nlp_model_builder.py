@@ -13,18 +13,23 @@ import traceback
 import joblib
 import scipy.sparse
 
-from sklearn.model_selection import GridSearchCV
 
 from easyml.nlp.nlp_config import (
     NLP_RequestBody, NLP_ERROR_CODES,
     get_nlp_model_instance, DEFAULT_NLP_MODELS,
     NLP_PARAM_GRID_LEVEL1, NLP_PARAM_GRID_LEVEL2,
-    SPARSE_COMPATIBLE_MODELS, DENSE_ONLY_MODELS,
+    DENSE_ONLY_MODELS,
 )
+from easyml.core.cancellable_search import CancellableGridSearchCV
+from easyml.core.imbalance_handler import unwrap_model, with_resampling
 from easyml.nlp.nlp_evaluator import get_nlp_train_test_metrics
 from easyml.utils.logger import write_log
 from easyml.utils.utils import NumpyEncoder
 from easyml.utils.socket_emitter import emit_progress
+from easyml.utils.cancellation import is_cancelled
+
+# Naive Bayes needs non-negative features (counts / tf-idf), which embeddings are not.
+NON_NEGATIVE_ONLY_MODELS = {"naive_bayes", "complement_nb"}
 
 
 def nlp_model_builder_controller(request_body: NLP_RequestBody):
@@ -61,9 +66,26 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
         # Determine if input is sparse
         is_sparse = scipy.sparse.issparse(request_body.X_train)
 
-        for model_name in model_names:
+        # Resampling (SMOTE/Tomek) is part of each model's pipeline, so it only ever sees training folds.
+        imbalance_method = request_body.imbalance_handling or "none"
+        if imbalance_method.lower() != "none":
+            emit_progress(f"⚖️ Balancing training data with {imbalance_method.upper()} inside each training fold...", pct=44)
+
+        has_negative_features = (not is_sparse) and bool((request_body.X_train < 0).any())
+
+        total_models = len(model_names)
+        for idx, model_name in enumerate(model_names):
+            if is_cancelled():
+                raise InterruptedError("Training cancelled by user")
+
+            if has_negative_features and model_name in NON_NEGATIVE_ONLY_MODELS:
+                write_log(f"skipping {model_name}: it cannot be trained on embeddings", "warning", os.path.basename(__file__))
+                emit_progress(f"⚠️ Skipped {model_name}: Naive Bayes cannot use embedding features", pct=int(45 + (idx / max(1, total_models)) * 50))
+                continue
+
+            model_base_pct = int(45 + (idx / max(1, total_models)) * 50)
             write_log(f"training NLP model: {model_name}", "info", os.path.basename(__file__))
-            emit_progress(f"training NLP model: {model_name}")
+            emit_progress(f"🤖 Training NLP model {idx+1}/{total_models}: {model_name}...", pct=model_base_pct)
 
             try:
                 model = get_nlp_model_instance(model_name)
@@ -87,20 +109,28 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
 
             write_log(f"GridSearchCV for {class_name} with params: {param_grid}", "info", os.path.basename(__file__))
 
-            grid_search = GridSearchCV(
-                estimator=model,
-                param_grid=param_grid,
-                cv=4,
-                scoring='accuracy',
-                n_jobs=-1,
-                error_score='raise'
-            )
-
-            grid_search.fit(X_train, request_body.y_train)
+            estimator, search_grid = with_resampling(model, param_grid, imbalance_method)
+            best_params = {}
+            if search_grid:
+                grid_search = CancellableGridSearchCV(
+                    estimator=estimator,
+                    param_grid=search_grid,
+                    cv=4,
+                    scoring='accuracy',
+                    n_jobs=-1,
+                    error_score='raise'
+                )
+                grid_search.fit(X_train, request_body.y_train)
+                fitted, best_params = grid_search.best_estimator_, grid_search.best_params_
+            else:
+                # No tuning requested: a single fit instead of a 4-fold search over an empty grid.
+                fitted = estimator.fit(X_train, request_body.y_train)
+            # Save and evaluate the bare model: metrics below use the original (not resampled) data.
+            best_estimator, best_params = unwrap_model(fitted, best_params)
 
             # Predict
-            y_pred_train = grid_search.predict(X_train)
-            y_pred_test = grid_search.predict(X_test)
+            y_pred_train = best_estimator.predict(X_train)
+            y_pred_test = best_estimator.predict(X_test)
 
             # Evaluate
             labels = list(request_body.target_encodings.keys()) if request_body.target_encodings else None
@@ -125,7 +155,7 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
 
             # Save model
             model_path = os.path.join(request_body.path_to_save, f"{class_name}.pkl")
-            joblib.dump(grid_search.best_estimator_, model_path, protocol=5)
+            joblib.dump(best_estimator, model_path, protocol=5)
 
             write_log(
                 f"trained {class_name}: train_acc={accuracy_train}, test_acc={accuracy_test}, "
@@ -142,14 +172,15 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
                 "f1_test": f1_test,
                 "train_metrics": metrics['train_metrics'],
                 "test_metrics": metrics['test_metrics'],
-                "best_params": grid_search.best_params_,
+                "best_params": best_params,
             }
 
-            emit_progress(f"done with NLP model: {class_name} (test_acc={accuracy_test})")
+            emit_progress(f"✅ Finished NLP model: {class_name} (test_acc={accuracy_test})", pct=model_base_pct + int(50/max(1, total_models)))
 
         # Save run config and column data
         config_path = os.path.join(request_body.path_to_save, "config_json.json")
-        json.dump(request_body.jsonify(), open(config_path, "w"), cls=NumpyEncoder)
+        with open(config_path, "w", encoding="utf-8") as handle:
+            json.dump(request_body.jsonify(), handle, cls=NumpyEncoder)
 
         column_data = {
             "text_column": request_body.text_column,
@@ -157,10 +188,13 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
             "task_type": "nlp_classification",
         }
         column_data_path = os.path.join(request_body.path_to_save, "column_data.json")
-        json.dump(column_data, open(column_data_path, "w"), cls=NumpyEncoder)
+        with open(column_data_path, "w", encoding="utf-8") as handle:
+            json.dump(column_data, handle, cls=NumpyEncoder)
 
         write_log("nlp_model_builder_controller completed", "info", os.path.basename(__file__))
 
+    except InterruptedError:
+        raise
     except Exception as e:
         if request_body.status_code == 200:
             request_body.error_message = "NLPModelTrainingError"

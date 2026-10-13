@@ -19,10 +19,10 @@ from easyml.nlp.nlp_preprocessing import nlp_preprocessing_controller
 from easyml.nlp.nlp_feature_engineering import vectorizer_controller, embedding_controller
 from easyml.nlp.nlp_model_builder import nlp_model_builder_controller
 from easyml.utils.data_loader import load_data_from_path, encode_categorical_list
-from easyml.utils.database_operations import create_database_table, enter_record_to_table, get_data_from_database
+from easyml.utils.cancellation import is_cancelled
+from easyml.utils.database_operations import create_database_table, enter_record_to_table
 from easyml.utils.logger import write_log
 from easyml.utils.socket_emitter import emit_progress
-from easyml.config.GLOBAL_VARS import save_data_path
 from easyml.utils.utils import NumpyEncoder
 
 
@@ -48,15 +48,11 @@ def nlp_data_loader(request_body: NLP_RequestBody):
 
         # Move data to run folder
         run_data_path = os.path.join(request_body.path_to_save, "data.csv")
-        original_path = getattr(request_body, 'dataset_path', save_data_path)
-        if not original_path:
-            original_path = save_data_path
-            
-        if os.path.exists(original_path):
-            shutil.copyfile(original_path, run_data_path)
-        else:
-            write_log(f"Warning: source dataset {original_path} not found.", "error", os.path.basename(__file__))
-            
+        original_path = request_body.dataset_path
+        if not original_path or not os.path.exists(original_path):
+            raise FileNotFoundError(f"Dataset '{original_path}' was not found. Please upload it again.")
+        shutil.copyfile(original_path, run_data_path)
+
         request_body.original_dataset_name = os.path.basename(original_path)
         request_body.dataset_path = run_data_path
 
@@ -78,7 +74,7 @@ def nlp_data_loader(request_body: NLP_RequestBody):
         # If user explicitly disabled imputation, drop all rows with any NaN
         if not getattr(request_body, 'imputation', True):
             write_log("dropping all rows with missing data (imputation=False)", "info", os.path.basename(__file__))
-            request_body.df = request_body.df.dropna()
+            request_body.df = request_body.df.dropna(subset=[request_body.text_column, request_body.target_column])
             request_body.df.reset_index(drop=True, inplace=True)
 
         # Ensure text column is string
@@ -133,7 +129,7 @@ class NLPTextClassificationController:
                  embedding_model="all-MiniLM-L6-v2", embedding_batch_size=32,
                  embedding_max_length=256,
                  models=None, hyper_parameter_tuning=0, imputation=True,
-                 path_to_save=None, task=None, **kwargs):
+                 path_to_save=None, task=None, imbalance_handling="none", **kwargs):
         """
         Initialize the NLP text classification controller.
 
@@ -158,12 +154,15 @@ class NLPTextClassificationController:
             embedding_batch_size: Batch size for embedding.
             embedding_max_length: Max sequence length for embedding.
             models: List of model names to train.
-            hyper_parameter_tuning: HPT level (0, 1, 2).
+            hyper_parameter_tuning (int): HPT level (0, 1, 2).
             path_to_save: Directory to save run artifacts.
             task: Task type string.
+            imbalance_handling: SMOTE, Tomek, etc.
         """
         if ngram_range is None:
             ngram_range = [1, 2]
+        if feature_mode not in ("vectorizer", "embedding"):
+            raise ValueError(f"Unknown feature_mode '{feature_mode}'. Use 'vectorizer' or 'embedding'.")
 
         self.request_body = NLP_RequestBody(
             name=name,
@@ -188,58 +187,89 @@ class NLPTextClassificationController:
             embedding_max_length=embedding_max_length,
             models=models or [],
             hyper_parameter_tuning=hyper_parameter_tuning,
+            imbalance_handling=imbalance_handling,
             imputation=imputation,
             path_to_save=path_to_save,
         )
+
+    @staticmethod
+    def _check_cancelled():
+        if is_cancelled():
+            raise InterruptedError("Training cancelled by user")
 
     def run(self):
         try:
             write_log(f"entered {self.__class__.__name__} - run()", "info", os.path.basename(__file__))
 
             create_database_table("runs")
-            emit_progress("⚙️ Initializing NLP pipeline...", step=1, total_steps=6)
+            emit_progress("⚙️ Initializing NLP pipeline...", pct=5)
 
             nlp_data_loader(self.request_body)
-            emit_progress(f"📂 Text data loaded ({len(self.request_body.df)} rows)", step=2, total_steps=6)
+            emit_progress(f"📂 Text data loaded ({len(self.request_body.df)} rows)", pct=10)
+            self._check_cancelled()
 
             nlp_preprocessing_controller(self.request_body)
-            emit_progress("🔤 Text preprocessing complete (clean, tokenize, stopwords)", step=3, total_steps=6)
+            emit_progress("🔤 Text preprocessing complete (clean, tokenize, stopwords)", pct=20)
+            self._check_cancelled()
 
             if self.request_body.feature_mode == "embedding":
-                emit_progress("🧠 Generating sentence embeddings (this may take a while)...", step=4, total_steps=6)
+                emit_progress("🧠 Generating sentence embeddings (this may take a while)...", pct=25)
                 embedding_controller(self.request_body)
             else:
                 vectorizer_controller(self.request_body)
-            emit_progress("📊 Feature engineering complete", step=4, total_steps=6)
+            emit_progress("📊 Feature engineering complete", pct=35)
+            self._check_cancelled()
 
-            emit_progress("🤖 Training NLP models...", step=5, total_steps=6)
+            emit_progress("🤖 Training NLP models...", pct=45)
             nlp_model_builder_controller(self.request_body)
 
-            enter_record_to_table("runs", **{
-                "run_name": self.request_body.name,
-                "folder_path": self.request_body.path_to_save,
-                "timestamp": self.request_body.timestamp.replace(" ", "T"),
-                "task": self.request_body.task,
-                "dataset_name": getattr(self.request_body, 'original_dataset_name', os.path.basename(self.request_body.dataset_path or "")),
-                "metrics_json": json.dumps(self.request_body.performance, cls=NumpyEncoder)
-            })
-            emit_progress("💾 Results saved to database", step=6, total_steps=6)
+            self.request_body.run_id = enter_record_to_table(
+                "runs",
+                run_name=self.request_body.name,
+                folder_path=self.request_body.path_to_save,
+                timestamp=self.request_body.timestamp.replace(" ", "T"),
+                task=self.request_body.task,
+                dataset_name=self.request_body.original_dataset_name or os.path.basename(self.request_body.dataset_path or ""),
+                metrics_json=json.dumps(self.request_body.performance, cls=NumpyEncoder),
+            )
+            emit_progress("💾 Results saved to database", pct=95)
 
-            runs_data = get_data_from_database("runs")
-            if runs_data.get("status_code") == 200 and len(runs_data.get("data", [])) > 0:
-                self.request_body.run_id = runs_data["data"][-1]["id"]
-            else:
-                self.request_body.run_id = -1
+            pipeline_summary = {
+                "dataset": {
+                    "name": getattr(self.request_body, 'original_dataset_name', os.path.basename(self.request_body.dataset_path or '')),
+                    "rows": len(self.request_body.df) if self.request_body.df is not None else 0,
+                    "cols": len(self.request_body.df.columns) if self.request_body.df is not None else 0,
+                },
+                "preprocessing": {
+                    "lowercase": getattr(self.request_body, 'lowercase', True),
+                    "remove_stopwords": getattr(self.request_body, 'remove_stopwords', True),
+                    "lemmatize": getattr(self.request_body, 'lemmatize', False),
+                    "regex_clean": getattr(self.request_body, 'regex_clean', True),
+                },
+                "feature_engineering": {
+                    "mode": getattr(self.request_body, 'feature_mode', 'vectorizer'),
+                    "vectorizer_type": getattr(self.request_body, 'vectorizer_type', 'tfidf'),
+                    "embedding_model": getattr(self.request_body, 'embedding_model', ''),
+                },
+                "imbalance_handling": getattr(self.request_body, 'imbalance_handling', 'none'),
+                "split": "80/20",
+                "task": self.request_body.task,
+                "models_trained": list(self.request_body.performance.keys()),
+                "hyper_parameter_tuning": bool(getattr(self.request_body, 'hyper_parameter_tuning', False)),
+            }
 
             response_payload = {
                 "status_code": 200,
                 "message": "NLP Classification pipeline completed successfully",
                 "run_id": self.request_body.run_id,
-                "performance": self.request_body.performance
+                "performance": self.request_body.performance,
+                "pipeline_summary": pipeline_summary
             }
-            emit_progress("✅ NLP pipeline complete!", step=6, total_steps=6, final=True, result=response_payload)
+            emit_progress("✅ NLP pipeline complete!", pct=100, final=True, result=response_payload)
             return self.request_body
 
+        except InterruptedError:
+            raise
         except Exception as e:
             if self.request_body.status_code == 200:
                 self.request_body.error_message = "NLPModelTrainingError"
@@ -250,6 +280,4 @@ class NLPTextClassificationController:
                 write_log(f"error occurred - {self.request_body.error_message} - "
                           f"{self.request_body.error_traceback}",
                           "error", os.path.basename(__file__))
-            emit_progress(f"❌ Error: {str(e)}", pct=100, final=True,
-                          result={"status": "error", "error": str(e), "message": str(e)})
             raise e

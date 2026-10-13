@@ -14,7 +14,6 @@ import os
 import json
 import traceback
 import joblib
-import numpy as np
 
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer, HashingVectorizer
 from sklearn.model_selection import train_test_split
@@ -163,16 +162,10 @@ def embedding_controller(request_body: NLP_RequestBody):
             from sentence_transformers import SentenceTransformer
         except ImportError:
             raise ImportError(
-                "sentence-transformers is required for embedding mode. "
-                "Install it with: pip install sentence-transformers"
+                "Embedding mode needs sentence-transformers. "
+                'Install it with: pip install "easy-ml-studio[nlp]"'
             )
 
-        # Yield to event loop before heavy work
-        try:
-            import eventlet
-            eventlet.sleep(0)
-        except ImportError:
-            pass
 
         # Split text before embedding
         text_train, text_test, y_train, y_test = train_test_split(
@@ -188,17 +181,13 @@ def embedding_controller(request_body: NLP_RequestBody):
         write_log(f"loading sentence-transformer model: {model_name}", "info", os.path.basename(__file__))
 
         model = SentenceTransformer(model_name)
+        model.max_seq_length = request_body.embedding_max_length
 
-        # Yield after model load to keep socket alive
-        try:
-            eventlet.sleep(0)
-        except NameError:
-            pass
 
         write_log(f"encoding {len(text_train)} train texts", "info", os.path.basename(__file__))
         try:
             from easyml.utils.socket_emitter import emit_progress
-            emit_progress(f"Encoding {len(text_train)} train texts (this may take a while)...", pct=40)
+            emit_progress(f"🔠 Encoding {len(text_train)} train texts (this may take a while)...", pct=28)
         except Exception:
             pass
 
@@ -209,15 +198,10 @@ def embedding_controller(request_body: NLP_RequestBody):
             normalize_embeddings=True
         )
 
-        # Yield between train and test encoding
-        try:
-            eventlet.sleep(0)
-        except NameError:
-            pass
 
         write_log(f"encoding {len(text_test)} test texts", "info", os.path.basename(__file__))
         try:
-            emit_progress(f"Encoding {len(text_test)} test texts...", pct=55)
+            emit_progress(f"🔠 Encoding {len(text_test)} test texts...", pct=33)
         except Exception:
             pass
 
@@ -228,11 +212,6 @@ def embedding_controller(request_body: NLP_RequestBody):
             normalize_embeddings=True
         )
 
-        # Yield after encoding completes
-        try:
-            eventlet.sleep(0)
-        except NameError:
-            pass
 
         request_body.y_train = y_train.reset_index(drop=True)
         request_body.y_test = y_test.reset_index(drop=True)
@@ -290,6 +269,18 @@ def load_fe_config(run_folder: str) -> dict:
     raise FileNotFoundError(f"No fe_config.json found in {run_folder}")
 
 
+_INFERENCE_CACHE = {}
+
+
+def _cached(key, loader):
+    """Keep loaded vectorizers / embedding models in memory between inference requests."""
+    if key not in _INFERENCE_CACHE:
+        if len(_INFERENCE_CACHE) > 8:
+            _INFERENCE_CACHE.clear()
+        _INFERENCE_CACHE[key] = loader()
+    return _INFERENCE_CACHE[key]
+
+
 def transform_text_for_inference(text: str, run_folder: str, fe_config: dict):
     """
     Transform a single text string into features for inference.
@@ -303,18 +294,24 @@ def transform_text_for_inference(text: str, run_folder: str, fe_config: dict):
         Feature array suitable for model.predict().
     """
     if fe_config["feature_mode"] == "vectorizer":
-        vectorizer = load_vectorizer_for_inference(run_folder)
+        vectorizer = _cached(("vectorizer", os.path.abspath(run_folder)),
+                             lambda: load_vectorizer_for_inference(run_folder))
         return vectorizer.transform([text])
 
     elif fe_config["feature_mode"] == "embedding":
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError:
-            raise ImportError("sentence-transformers required for embedding inference.")
+            raise ImportError('Embedding inference needs sentence-transformers: pip install "easy-ml-studio[nlp]"')
 
-        model = SentenceTransformer(fe_config["model_name"])
-        embedding = model.encode([text], show_progress_bar=False, normalize_embeddings=True)
-        return embedding
+        def _load():
+            model = SentenceTransformer(fe_config["model_name"])
+            if fe_config.get("max_length"):
+                model.max_seq_length = fe_config["max_length"]
+            return model
+
+        model = _cached(("embedding", fe_config["model_name"], fe_config.get("max_length")), _load)
+        return model.encode([text], show_progress_bar=False, normalize_embeddings=True)
 
     else:
         raise ValueError(f"Unknown feature_mode: {fe_config['feature_mode']}")

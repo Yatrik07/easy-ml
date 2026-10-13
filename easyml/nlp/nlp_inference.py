@@ -13,9 +13,10 @@ import traceback
 import joblib
 import scipy.sparse
 
-from easyml.nlp.nlp_config import NLP_InferenceBody, NLP_ERROR_CODES, DENSE_ONLY_MODELS
+from easyml.nlp.nlp_config import NLP_InferenceBody, NLP_ERROR_CODES
 from easyml.nlp.nlp_preprocessing import apply_preprocessing_for_inference
 from easyml.nlp.nlp_feature_engineering import load_fe_config, transform_text_for_inference
+from easyml.core.artifacts import validate_model_name
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.logger import write_log
 from easyml.utils.utils import convert_numpy
@@ -42,7 +43,7 @@ class NLPInferenceController:
         self.inference_body = NLP_InferenceBody(
             run_id=run_id,
             data=data,
-            model_name=model_name,
+            model_name=validate_model_name(model_name),
         )
 
     def get_inference(self):
@@ -85,8 +86,6 @@ class NLPInferenceController:
 
         # Get run record from database
         record = get_record_by_id(self.inference_body.run_id)
-        if isinstance(record, dict) and record.get("status_code", 200) != 200:
-            raise RuntimeError(f"Failed to load run record for ID {self.inference_body.run_id}")
 
         folder_path = record["folder_path"]
         self.inference_body.task = record["task"]
@@ -94,21 +93,21 @@ class NLPInferenceController:
         # Load model
         model_path = os.path.join(folder_path, f"{self.inference_body.model_name}.pkl")
         if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file not found: {model_path}")
+            raise FileNotFoundError(f"Model '{self.inference_body.model_name}' was not found for this run.")
 
         self.inference_body.model = joblib.load(model_path)
         write_log(f"loaded model from {model_path}", "info", os.path.basename(__file__))
 
         # Load config_json.json for preprocessing config and target encodings
         config_path = os.path.join(folder_path, "config_json.json")
-        with open(config_path, 'r') as f:
+        with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
         self.inference_body.preprocessing_config = config
 
         # Load target encodings (reverse: encoded_value -> label)
         if config.get("target_encodings"):
-            self.inference_body.target_encodings = {v: k for k, v in config["target_encodings"].items()}
+            self.inference_body.target_encodings = {int(v): k for k, v in config["target_encodings"].items()}
         write_log("loaded preprocessing config and target encodings", "info", os.path.basename(__file__))
 
         # Load feature engineering config
@@ -147,32 +146,16 @@ class NLPInferenceController:
         # Step 3: Predict
         prediction = self.inference_body.model.predict(features)
 
-        # Step 4: Get probability if available
+        # Step 4: Get probability if available (LinearSVC has none; decision scores are not probabilities)
         probability = None
         if hasattr(self.inference_body.model, "predict_proba"):
             try:
-                probabilities = self.inference_body.model.predict_proba(features)
-                probability = convert_numpy(float(probabilities[0].max()))
+                probability = float(self.inference_body.model.predict_proba(features)[0].max())
             except Exception:
-                pass  # Some models don't support predict_proba reliably
-        elif hasattr(self.inference_body.model, "decision_function"):
-            try:
-                decision = self.inference_body.model.decision_function(features)
-                # Normalize to [0,1] range as pseudo-probability
-                import numpy as np
-                if decision.ndim == 1:
-                    raw_prob = float(abs(decision[0]))
-                else:
-                    raw_prob = float(decision[0].max())
-                probability = convert_numpy(min(1.0, max(0.0, raw_prob)))
-            except Exception:
-                pass
-        
-        if probability is not None:
-             probability = convert_numpy(min(1.0, max(0.0, float(probability))))
+                probability = None
 
         # Decode prediction label
-        pred_value = convert_numpy(prediction[0])
+        pred_value = convert_numpy(prediction.reshape(-1)[0])
         if self.inference_body.target_encodings:
             pred_label = self.inference_body.target_encodings.get(pred_value, str(pred_value))
         else:

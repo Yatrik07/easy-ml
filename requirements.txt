@@ -1,0 +1,4 @@
+# Everything: equivalent to `pip install "easy-ml-studio[all]"`
+-r requirements-ml.txt
+-r requirements-nlp.txt
+-r requirements-cv.txt

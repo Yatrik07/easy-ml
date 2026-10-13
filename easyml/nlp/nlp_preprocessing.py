@@ -16,36 +16,52 @@ from easyml.utils.logger import write_log
 from easyml.nlp.nlp_config import NLP_RequestBody, NLP_ERROR_CODES
 
 # Lazy-loaded globals to avoid import overhead when not used
-_STOPWORDS = None
+_STOPWORDS = {}
 _NLP_SPACY = None
 
 
-def _get_stopwords():
-    """Lazy-load NLTK English stopwords."""
-    global _STOPWORDS
-    if _STOPWORDS is None:
-        import nltk
-        try:
-            from nltk.corpus import stopwords
-            _STOPWORDS = set(stopwords.words('english'))
-        except LookupError:
-            nltk.download('stopwords', quiet=True)
-            from nltk.corpus import stopwords
-            _STOPWORDS = set(stopwords.words('english'))
-    return _STOPWORDS
+class LemmatizerUnavailableError(RuntimeError):
+    """spaCy or its English model is not installed."""
+
+
+def _get_stopwords(source="sklearn"):
+    """
+    English stopword list.
+
+    New runs use scikit-learn's built-in list (no download needed). Runs created before 0.4.0
+    recorded NLTK's list; it is used for them when NLTK and its corpus are available.
+    """
+    if source not in _STOPWORDS:
+        words = None
+        if source == "nltk":
+            try:
+                from nltk.corpus import stopwords
+                words = set(stopwords.words('english'))
+            except (ImportError, LookupError):
+                words = None
+        if words is None:
+            from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+            words = set(ENGLISH_STOP_WORDS)
+        _STOPWORDS[source] = words
+    return _STOPWORDS[source]
 
 
 def _get_spacy_nlp():
     """Lazy-load spaCy English model for lemmatization."""
     global _NLP_SPACY
     if _NLP_SPACY is None:
-        import spacy
+        try:
+            import spacy
+        except Exception as exc:  # ImportError, or a broken install (e.g. incompatible typer/click)
+            raise LemmatizerUnavailableError(
+                'Lemmatization needs a working spaCy install: pip install "easy-ml-studio[nlp]"'
+            ) from exc
         try:
             _NLP_SPACY = spacy.load("en_core_web_sm", disable=["parser", "ner"])
-        except OSError:
-            from spacy.cli import download
-            download("en_core_web_sm")
-            _NLP_SPACY = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+        except OSError as exc:
+            raise LemmatizerUnavailableError(
+                "Lemmatization needs the spaCy English model. Install it with: easy-ml download-models"
+            ) from exc
     return _NLP_SPACY
 
 
@@ -61,9 +77,9 @@ def apply_regex_clean(series: pd.Series, pattern: str = r'[^a-zA-Z0-9\s]') -> pd
     return series.apply(lambda text: re.sub(pattern, ' ', str(text)))
 
 
-def remove_stopwords_from_text(series: pd.Series) -> pd.Series:
+def remove_stopwords_from_text(series: pd.Series, source: str = "sklearn") -> pd.Series:
     """Remove English stopwords from text."""
-    stops = _get_stopwords()
+    stops = _get_stopwords(source)
     return series.apply(
         lambda text: ' '.join(word for word in str(text).split() if word.lower() not in stops)
     )
@@ -73,11 +89,8 @@ def lemmatize_series(series: pd.Series) -> pd.Series:
     """Lemmatize text using spaCy."""
     nlp = _get_spacy_nlp()
 
-    def _lemmatize(text):
-        doc = nlp(str(text))
-        return ' '.join(token.lemma_ for token in doc)
-
-    return series.apply(_lemmatize)
+    lemmas = [' '.join(token.lemma_ for token in doc) for doc in nlp.pipe(series.astype(str), batch_size=256)]
+    return pd.Series(lemmas, index=series.index)
 
 
 def strip_extra_whitespace(series: pd.Series) -> pd.Series:
@@ -115,6 +128,8 @@ def nlp_preprocessing_controller(request_body: NLP_RequestBody):
 
         text_series = request_body.X.copy()
         steps_applied = []
+        from easyml.utils.socket_emitter import emit_progress
+        emit_progress("🔤 Applying NLP preprocessing rules...", pct=15)
 
         # Step 1: Lowercase
         if request_body.lowercase:
@@ -130,21 +145,21 @@ def nlp_preprocessing_controller(request_body: NLP_RequestBody):
 
         # Step 3: Stopword removal
         if request_body.remove_stopwords:
-            text_series = remove_stopwords_from_text(text_series)
+            text_series = remove_stopwords_from_text(text_series, request_body.stopwords_source)
             steps_applied.append("remove_stopwords")
             write_log("applied stopword removal", "info", os.path.basename(__file__))
 
         # Step 4: Lemmatization
         if request_body.lemmatize:
-            text_series = lemmatize_series(text_series)
-            steps_applied.append("lemmatize")
-            write_log("applied lemmatization", "info", os.path.basename(__file__))
-            # Yield to event loop after CPU-heavy lemmatization
             try:
-                import eventlet
-                eventlet.sleep(0)
-            except ImportError:
-                pass
+                text_series = lemmatize_series(text_series)
+                steps_applied.append("lemmatize")
+                write_log("applied lemmatization", "info", os.path.basename(__file__))
+            except LemmatizerUnavailableError as exc:
+                # Skip the step and record it, so inference applies exactly the same cleaning.
+                request_body.lemmatize = False
+                write_log(f"skipping lemmatization: {exc}", "warning", os.path.basename(__file__))
+                emit_progress(f"⚠️ Skipped lemmatization: {exc}", pct=18)
 
         # Step 5: Whitespace normalization (always applied)
         text_series = strip_extra_whitespace(text_series)
@@ -187,7 +202,7 @@ def apply_preprocessing_for_inference(text: str, config: dict) -> str:
         result = re.sub(pattern, ' ', result)
 
     if config.get("remove_stopwords", True):
-        stops = _get_stopwords()
+        stops = _get_stopwords(config.get("stopwords_source", "nltk"))
         result = ' '.join(word for word in result.split() if word.lower() not in stops)
 
     if config.get("lemmatize", False):

@@ -1,18 +1,18 @@
 services:
   easy-ml:
-    build: .
-    image: easyml
+    build:
+      context: .
+      # Change target to 'base', 'ml', 'nlp', or 'cv' for leaner images
+      target: full
+    image: easyml-full
     ports:
-      - "5010:5010"
+      - "127.0.0.1:5010:5010"
     volumes:
       # Named volume for persistent data (database, runs, logs, uploads)
       - easyml-data:/data/easy-ml
       # Mount test_folder so CV image datasets are accessible inside the container
       - ./test_folder:/app/test_folder
     environment:
-      - FLASK_APP=easyml/app.py
-      - FLASK_ENV=production
-      - PYTHONPATH=/app
       - EASYML_DATA_DIR=/data/easy-ml
     restart: unless-stopped
 

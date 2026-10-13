@@ -1,0 +1,4 @@
+# Core + [nlp] extra
+-r requirements-core.txt
+spacy>=3.7.0
+sentence-transformers>=2.2.0

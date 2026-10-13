@@ -2,46 +2,64 @@
 venv/
 .venv/
 env/
+.env
 
 # Python cache and compiled files
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
+.ipynb_checkpoints/
 
 # Git repository
 .git/
 .gitignore
 .github/
 
-# Project data and artifacts (root-level only, not easyml/artifacts/)
-/artifacts/
-easyml_data/
-runs.db
-datasets/
-models/
-*.csv
-*.zip
-*.db
-
-# Build and distribution files (NOT easyml/unified_frontend/dist which is our frontend)
-build/
-*.egg-info/
-/dist/
-
 # IDE and Editor files
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# Temporary and local files
 .DS_Store
-temp.html
-dummy.csv
-ws_client_and_trigger.py
-test_folder/
-test_nlp_pipeline.py
+
+# Easy-ML Runtime Artifacts (at any depth, including easyml/artifacts)
+**/logs/
+**/runs/
+**/database/
+**/artifacts/
+**/eda/
+tests/
+docs/
 application_logs.log
 error.log
-logs/
-database/
+*.db
+*.csv
+*.xlsx
+*.zip
+*.pkl
+*.pth
+*.cbm
+
+# Build and Packaging (root-level only: easyml/unified_frontend/dist is needed)
+/dist/
+/dist - Copy/
+/build/
+*.egg-info/
+
+# Local HTML/JS development backups
+actual_index.html
+actual_index_v2.html
+script_only.js
+temp.html
+dummy.csv
+
+# Local Dev Scripts and Testing
+test_folder/
+ws_client_and_trigger.py
+test_imbalance.py
+test_workflow.py
+test_nlp_pipeline.py
+fast_install.py
+
+# Docker-specific files
+docker-compose.yml

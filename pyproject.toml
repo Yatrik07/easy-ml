@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "easy-ml"
-version = "0.3.0"
-description = "An easy-to-use, no-code ML training and inference platform with a browser-based UI."
+name = "easy-ml-studio"
+dynamic = ["version"]
+description = "A no-code machine learning studio: train, evaluate, explain and export tabular, NLP and image models from your browser."
 readme = "README.md"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 
 authors = [
@@ -24,74 +25,91 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: Science/Research",
   "Intended Audience :: Education",
-  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
-  "Topic :: Software Development :: Libraries :: Python Modules",
   "Framework :: Flask",
 ]
 
-# Core dependencies
+# Core install: the studio UI plus tabular ML and TF-IDF text classification with scikit-learn.
 dependencies = [
   "Flask>=3.0.0",
   "Flask-SocketIO>=5.3.0",
-  "flask-cors>=4.0.0",
-  "eventlet>=0.33.0",
+  "simple-websocket>=1.0.0",
   "pandas>=2.1.0",
-  "numpy>=1.26.0,<2",
+  "numpy>=1.26.0",
   "scikit-learn>=1.4.0",
+  "scipy>=1.10.0",
   "joblib>=1.3.0",
-  "matplotlib>=3.8.0",
-  "plotly>=5.18.0",
-  "lightgbm>=4.0.0",
-  "xgboost>=2.0.0",
-  "catboost>=1.2.0",
   "pydantic>=2.5.0",
-  "graphviz>=0.20.0",
-  "requests>=2.31.0",
-  "spacy>=3.7.0",
-  "nltk>=3.8.0",
-  "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl"
+  "imbalanced-learn>=0.11.0",
+  "openpyxl>=3.1.0",
 ]
-
-[project.urls]
-Homepage = "https://github.com/Yatrik07/easy-ml"
-Repository = "https://github.com/Yatrik07/easy-ml"
-"Bug Tracker" = "https://github.com/Yatrik07/easy-ml/issues"
 
 [project.optional-dependencies]
+# Gradient-boosting models: XGBoost, LightGBM, CatBoost
+boost = [
+  "xgboost>=2.0.0",
+  "lightgbm>=4.0.0",
+  "catboost>=1.2.0",
+]
+# Lemmatization (spaCy) and sentence-embedding features. Run `easy-ml download-models` afterwards.
 nlp = [
   "spacy>=3.7.0",
-  "nltk>=3.8.0",
   "sentence-transformers>=2.2.0",
 ]
+# Image classification with PyTorch
 cv = [
   "torch>=2.0.0",
   "torchvision>=0.15.0",
   "Pillow>=10.0.0",
 ]
+# Explainability (SHAP) and automatic EDA reports
 eda = [
+  "shap>=0.42.0",
+  "matplotlib>=3.7.0",
   "ydata-profiling>=4.6.4",
-  "shap>=0.40.0",
 ]
 all = [
-  "easy-ml[nlp]",
-  "easy-ml[cv]",
-  "easy-ml[eda]",
+  "easy-ml-studio[boost,nlp,cv,eda]",
 ]
+dev = [
+  "pytest>=7.0",
+  "flake8>=6.0",
+  "build>=1.0",
+  "twine>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Yatrik07/easy-ml"
+Repository = "https://github.com/Yatrik07/easy-ml"
+Documentation = "https://github.com/Yatrik07/easy-ml/tree/main/docs"
+"Bug Tracker" = "https://github.com/Yatrik07/easy-ml/issues"
 
 [project.scripts]
 easy-ml = "easyml.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "easyml.__version__" }
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["easyml*"]
-exclude = ["logs*", "runs*", "database*", "test_folder*", "artifacts*"]
+exclude = ["easyml.artifacts*"]
 
 [tool.setuptools.package-data]
 "easyml" = ["unified_frontend/dist/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::FutureWarning",
+]

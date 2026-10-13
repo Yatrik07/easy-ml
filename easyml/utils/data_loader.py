@@ -1,11 +1,14 @@
-import pandas as pd
-import os, json
-from easyml.utils.logger import write_log
-import traceback
-from easyml.config.GLOBAL_VARS import error_code_mappings
-from easyml.utils.utils import *
-from easyml.config.GLOBAL_VARS import *
+import json
+import os
 import shutil
+import traceback
+
+import numpy as np
+import pandas as pd
+
+from easyml.config.GLOBAL_VARS import error_code_mappings
+from easyml.utils.logger import write_log
+from easyml.utils.utils import NumpyEncoder
 
 def get_data_info(data, dataset_path=None):
     """
@@ -19,37 +22,40 @@ def get_data_info(data, dataset_path=None):
         dict: Contains sample data, shape, column names, and file size (in KB).
     """
 
-    rows, cols = data.shape
+    write_log("entered get_data_info", "info", os.path.basename(__file__))
+    try:
+        rows, cols = data.shape
 
-    # Ensure NaN values are replaced with None to produce strict valid JSON (null)
-    import numpy as np
-    safe_data = data.replace({np.nan: None})
+        # Ensure NaN values are replaced with None to produce strict valid JSON (null)
+        safe_data = data.replace({np.nan: None})
 
-    if rows < 5:
-        data_sample = safe_data.to_dict(orient="records")   # Convert DataFrame to a dictionary
-        data_head = safe_data.to_dict(orient="records")
-        data_tail = safe_data.to_dict(orient="records") 
-    else:
-        data_sample = safe_data.sample(5).to_dict(orient="records") 
-        data_head = safe_data.head(5).to_dict(orient="records") 
-        data_tail = safe_data.tail(5).to_dict(orient="records")
-    
-    columns = data.columns.tolist()
-
-    # Get dataset file size in bytes
-    dataset_size = 0
-    if dataset_path and os.path.exists(dataset_path):
-        dataset_size = os.path.getsize(dataset_path)
-    elif os.path.exists(save_data_path):
-        dataset_size = os.path.getsize(save_data_path)
+        if rows < 5:
+            data_sample = safe_data.to_dict(orient="records")   # Convert DataFrame to a dictionary
+            data_head = safe_data.to_dict(orient="records")
+            data_tail = safe_data.to_dict(orient="records") 
+        else:
+            data_sample = safe_data.sample(5).to_dict(orient="records") 
+            data_head = safe_data.head(5).to_dict(orient="records") 
+            data_tail = safe_data.tail(5).to_dict(orient="records")
         
-    dataset_size_kb = round(dataset_size / 1024, 2)  # Convert to KB
+        columns = data.columns.tolist()
 
-    data_info = {"data_sample": data_sample, "data_head": data_head,
-                 "data_tail": data_tail, "rows": rows, "cols": cols, 
-                 "column_names": columns,"dataset_size_kb": dataset_size_kb}
+        # Get dataset file size in bytes
+        dataset_size = 0
+        if dataset_path and os.path.exists(dataset_path):
+            dataset_size = os.path.getsize(dataset_path)
 
-    return data_info
+        dataset_size_kb = round(dataset_size / 1024, 2)  # Convert to KB
+
+        data_info = {"data_sample": data_sample, "data_head": data_head,
+                     "data_tail": data_tail, "rows": rows, "cols": cols, 
+                     "column_names": columns,"dataset_size_kb": dataset_size_kb}
+
+        write_log("successfully generated data info", "info", os.path.basename(__file__))
+        return data_info
+    except Exception as e:
+        write_log(f"error generating data info: {str(e)}", "error", os.path.basename(__file__))
+        raise e
 
 def load_data_from_path(path):
     """
@@ -67,9 +73,10 @@ def load_data_from_path(path):
 
     write_log("entered to load_data_from_path", "info", os.path.basename(__file__))
 
-    if path.endswith(".csv"):
+    lowered = path.lower()
+    if lowered.endswith(".csv"):
         return pd.read_csv(path)
-    elif path.endswith(".xlsx"):
+    elif lowered.endswith((".xlsx", ".xls")):
         return pd.read_excel(path)
     else:
         raise ValueError("Unsupported file format. Please provide a .csv or .xlsx file.")
@@ -84,19 +91,21 @@ def move_to_runs(request_body):
 
     # Copy the dataset into artifacts/runs/ instead of moving it
     # This ensures concurrent training tasks can use the same base uploaded data
-    original_path = getattr(request_body, 'dataset_path', save_data_path)
-    if not original_path:
-        original_path = save_data_path
-        
-    run_specific_path = os.path.join(request_body.path_to_save, "data.csv")
-    
-    if os.path.exists(original_path):
+    write_log("entered move_to_runs", "info", os.path.basename(__file__))
+    try:
+        original_path = request_body.dataset_path
+        if not original_path or not os.path.exists(original_path):
+            raise FileNotFoundError(f"Dataset '{original_path}' was not found. Please upload it again.")
+
+        run_specific_path = os.path.join(request_body.path_to_save, "data.csv")
         shutil.copyfile(original_path, run_specific_path)
-    else:
-        write_log(f"Warning: source dataset {original_path} not found.", "error", os.path.basename(__file__))
-        
-    request_body.original_dataset_name = os.path.basename(original_path)
-    request_body.dataset_path = run_specific_path
+        write_log(f"successfully copied dataset to {run_specific_path}", "info", os.path.basename(__file__))
+
+        request_body.original_dataset_name = os.path.basename(original_path)
+        request_body.dataset_path = run_specific_path
+    except Exception as e:
+        write_log(f"error copying dataset: {str(e)}", "error", os.path.basename(__file__))
+        raise e
 
 
 def data_loader(request_body):
@@ -137,7 +146,8 @@ def data_loader(request_body):
         # If user explicitly disabled imputation, drop all rows with any NaN
         if not getattr(request_body, 'imputation', True):
             write_log("dropping all rows with missing data (imputation=False)", "info", os.path.basename(__file__))
-            request_body.df = request_body.df.dropna()
+            used_columns = [c for c in request_body.df.columns if c not in request_body.ignore_columns]
+            request_body.df = request_body.df.dropna(subset=used_columns)
             request_body.df.reset_index(drop=True, inplace=True)
             
         drop_columns = [request_body.target_column] + request_body.ignore_columns

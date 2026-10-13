@@ -1,0 +1,8 @@
+# Core + [boost] + [eda] extras
+-r requirements-core.txt
+xgboost>=2.0.0
+lightgbm>=4.0.0
+catboost>=1.2.0
+shap>=0.42.0
+matplotlib>=3.7.0
+ydata-profiling>=4.6.4
