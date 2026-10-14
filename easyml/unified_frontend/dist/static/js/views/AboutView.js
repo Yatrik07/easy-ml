@@ -9,6 +9,7 @@ export default {
   setup() {
     const credits = ref(null);
     const error = ref('');
+    const contactOpen = ref(false);
     onMounted(async () => {
       try { credits.value = await getJSON('/settings/credits', 'Could not load project information'); }
       catch (e) { error.value = e.message; }
@@ -19,7 +20,7 @@ export default {
       if (!c || !c.python_guide) return null;
       return c.links.some((link) => link.url === c.python_guide.url) ? null : c.python_guide;
     });
-    return { credits, guide, error, session, initials, LINK_ICONS };
+    return { credits, guide, error, contactOpen, session, initials, LINK_ICONS };
   },
   template: /* html */ `
     <div class="page">
@@ -55,7 +56,7 @@ export default {
           <a v-if="guide" class="btn btn-secondary" :href="guide.url" target="_blank" rel="noopener noreferrer">
             <Icon name="terminal" />{{ guide.label }}
           </a>
-          <a class="btn btn-ghost" :href="'mailto:' + credits.contact_email"><Icon name="mail_outline" />Contact the team</a>
+          <button class="btn btn-ghost" @click="contactOpen = true"><Icon name="mail_outline" />Contact the team</button>
         </div>
       </section>
 
@@ -88,5 +89,17 @@ export default {
           </div>
         </div>
       </section>
+
+      <ModalDialog v-if="credits" :open="contactOpen" title="Contact the team" @close="contactOpen = false">
+        <div class="stack-sm">
+          <p class="muted text-sm">Questions, ideas or bug reports are welcome. Write to:</p>
+          <CopyField :text="credits.contact.email" label="Copy email address" />
+          <p class="subtle text-xs">If no email app opens, copy the address or use Gmail in your browser.</p>
+        </div>
+        <template #footer>
+          <a class="btn btn-secondary" :href="credits.contact.mailto" @click="contactOpen = false"><Icon name="mail_outline" />Open email app</a>
+          <a class="btn btn-primary" :href="credits.contact.gmail" target="_blank" rel="noopener noreferrer" @click="contactOpen = false"><Icon name="open_in_new" />Open in Gmail</a>
+        </template>
+      </ModalDialog>
     </div>`,
 };

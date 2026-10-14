@@ -97,6 +97,7 @@ def settings_credits():
             "summary": project_info.SUMMARY,
             "license": project_info.LICENSE,
             "contact_email": project_info.CONTACT_EMAIL,
+            "contact": project_info.contact_links(),
             "links": project_info.visible_links(),
             "python_guide": project_info.python_guide(),
             "show_repo_links": project_info.REPO_PUBLIC,

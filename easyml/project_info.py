@@ -14,6 +14,7 @@ SUMMARY = (
 )
 LICENSE = "Apache-2.0"
 CONTACT_EMAIL = "contact.easyml@gmail.com"
+CONTACT_SUBJECT = "Easy-ML Studio"
 PYPI_URL = "https://pypi.org/project/easy-ml-studio/"
 REPO_URL = "https://github.com/Yatrik07/easy-ml"
 
@@ -45,6 +46,22 @@ CUDA_INSTALL_HINT = (
     "pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126  "
     "# pick the CUDA version that matches `nvidia-smi`"
 )
+
+
+def contact_links():
+    """
+    Ways to reach the team. A bare mailto: link does nothing on computers without a default email app,
+    so the About page also offers copying the address and a Gmail compose link.
+    """
+    from urllib.parse import quote, urlencode
+
+    return {
+        "email": CONTACT_EMAIL,
+        "subject": CONTACT_SUBJECT,
+        "mailto": f"mailto:{CONTACT_EMAIL}?subject={quote(CONTACT_SUBJECT)}",
+        "gmail": "https://mail.google.com/mail/?" + urlencode(
+            {"view": "cm", "fs": "1", "to": CONTACT_EMAIL, "su": CONTACT_SUBJECT}, quote_via=quote),
+    }
 
 
 def python_guide():

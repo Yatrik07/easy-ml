@@ -119,6 +119,10 @@ def test_credits_hide_repo_links_and_personal_emails(client, monkeypatch):
     assert [link["id"] for link in body["links"]] == ["pypi"]
     assert all("email" not in dev for dev in body["developers"])
     assert body["python_guide"]["url"].startswith("https://pypi.org/")
+    contact = body["contact"]
+    assert contact["mailto"].startswith("mailto:" + contact["email"])
+    assert contact["gmail"].startswith("https://mail.google.com/mail/?view=cm")
+    assert "to=contact.easyml%40gmail.com" in contact["gmail"] and "su=Easy-ML%20Studio" in contact["gmail"]
 
     from easyml import project_info
     monkeypatch.setattr(project_info, "REPO_PUBLIC", True)
