@@ -1,4 +1,4 @@
-import { onMounted, ref } from '../lib/vue.js';
+import { computed, onMounted, ref } from '../lib/vue.js';
 import { getJSON } from '../lib/api.js';
 import { initials } from '../lib/format.js';
 import { session } from '../store/session.js';
@@ -13,7 +13,13 @@ export default {
       try { credits.value = await getJSON('/settings/credits', 'Could not load project information'); }
       catch (e) { error.value = e.message; }
     });
-    return { credits, error, session, initials, LINK_ICONS };
+    // While the repo is private the guide is the PyPI page, which already has its own button.
+    const guide = computed(() => {
+      const c = credits.value;
+      if (!c || !c.python_guide) return null;
+      return c.links.some((link) => link.url === c.python_guide.url) ? null : c.python_guide;
+    });
+    return { credits, guide, error, session, initials, LINK_ICONS };
   },
   template: /* html */ `
     <div class="page">
@@ -46,8 +52,8 @@ export default {
           <a v-for="link in credits.links" :key="link.id" class="btn btn-secondary" :href="link.url" target="_blank" rel="noopener noreferrer">
             <Icon :name="LINK_ICONS[link.id] || 'open_in_new'" />{{ link.label }}
           </a>
-          <a v-if="credits.python_guide" class="btn btn-secondary" :href="credits.python_guide.url" target="_blank" rel="noopener noreferrer">
-            <Icon name="terminal" />{{ credits.python_guide.label }}
+          <a v-if="guide" class="btn btn-secondary" :href="guide.url" target="_blank" rel="noopener noreferrer">
+            <Icon name="terminal" />{{ guide.label }}
           </a>
           <a class="btn btn-ghost" :href="'mailto:' + credits.contact_email"><Icon name="mail_outline" />Contact the team</a>
         </div>
