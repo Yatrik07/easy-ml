@@ -4,6 +4,8 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml                      start the studio on http://127.0.0.1:5010 and open the browser
     easy-ml --port 8080 --no-browser
     easy-ml download-models      fetch the spaCy English model used for lemmatization
+    easy-ml runs                 list trained runs
+    easy-ml predict 5 data.csv   predict with run #5 (see `easy-ml predict --help`)
 """
 
 import argparse
@@ -34,6 +36,19 @@ def _build_parser():
 
     subcommands = parser.add_subparsers(dest="command")
     subcommands.add_parser("download-models", help="Download the spaCy English model used for NLP lemmatization.")
+
+    runs = subcommands.add_parser("runs", help="List trained runs with their best model.")
+    runs.add_argument("--task", choices=["MLClassification", "MLRegression", "NLPTextClassification", "ImageClassification"],
+                      help="Only show runs of this task.")
+    runs.add_argument("--limit", type=int, default=20, help="Maximum number of runs to show (default: 20).")
+    runs.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+
+    predict = subcommands.add_parser("predict", help="Make predictions with a trained run.")
+    predict.add_argument("run_id", type=int, help="Run number (see `easy-ml runs`).")
+    predict.add_argument("input", help="CSV/Excel file, text, image file or image folder.")
+    predict.add_argument("--model", help="Model class name (default: the run's best model).")
+    predict.add_argument("-o", "--output", help="Write the predictions to this CSV file instead of the console.")
+    predict.add_argument("--text-column", help="Text column of the input CSV (text runs; default: the training column).")
     return parser
 
 
@@ -91,6 +106,12 @@ def main(argv=None):
     args = _build_parser().parse_args(argv)
     if args.command == "download-models":
         return download_models()
+    if args.command == "runs":
+        from easyml.cli import list_runs
+        return list_runs(task=args.task, limit=args.limit, as_json=args.json)
+    if args.command == "predict":
+        from easyml.cli import predict
+        return predict(args.run_id, args.input, model=args.model, output=args.output, text_column=args.text_column)
     return run_server(
         host=args.host,
         port=args.port,

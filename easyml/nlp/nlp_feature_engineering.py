@@ -282,11 +282,16 @@ def _cached(key, loader):
 
 
 def transform_text_for_inference(text: str, run_folder: str, fe_config: dict):
+    """Transform a single preprocessed text string into a one-row feature matrix."""
+    return transform_texts_for_inference([text], run_folder, fe_config)
+
+
+def transform_texts_for_inference(texts, run_folder: str, fe_config: dict):
     """
-    Transform a single text string into features for inference.
+    Transform preprocessed text strings into features for inference.
 
     Args:
-        text: Preprocessed text string.
+        texts: Preprocessed text strings.
         run_folder: Path to the run artifacts folder.
         fe_config: Feature engineering configuration dict.
 
@@ -296,7 +301,7 @@ def transform_text_for_inference(text: str, run_folder: str, fe_config: dict):
     if fe_config["feature_mode"] == "vectorizer":
         vectorizer = _cached(("vectorizer", os.path.abspath(run_folder)),
                              lambda: load_vectorizer_for_inference(run_folder))
-        return vectorizer.transform([text])
+        return vectorizer.transform(list(texts))
 
     elif fe_config["feature_mode"] == "embedding":
         try:
@@ -311,7 +316,7 @@ def transform_text_for_inference(text: str, run_folder: str, fe_config: dict):
             return model
 
         model = _cached(("embedding", fe_config["model_name"], fe_config.get("max_length")), _load)
-        return model.encode([text], show_progress_bar=False, normalize_embeddings=True)
+        return model.encode(list(texts), show_progress_bar=False, normalize_embeddings=True)
 
     else:
         raise ValueError(f"Unknown feature_mode: {fe_config['feature_mode']}")

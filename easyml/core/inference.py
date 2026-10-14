@@ -105,6 +105,25 @@ class MLInferenceController:
         write_log(f"prediction complete: {output['prediction']}", "info", os.path.basename(__file__))
         return output
 
+    def predict_frame(self, df: pd.DataFrame):
+        """
+        Predict every row of ``df``.
+
+        Returns:
+            tuple: (predictions, confidences). Classification predictions are decoded to the original
+            labels; confidences is None when the model has no predict_proba (and for regression).
+        """
+        self.load_objects()
+        transformed = self._transform(df)
+        model = self.inference_body.model
+        predictions = flatten_predictions(model.predict(transformed))
+        if "classification" not in self.inference_body.task.lower():
+            return [convert_numpy(p) for p in predictions], None
+        confidences = None
+        if hasattr(model, "predict_proba"):
+            confidences = [float(row.max()) for row in np.asarray(model.predict_proba(transformed))]
+        return [self._decode(p) for p in predictions], confidences
+
     def predict_batch(self, df: pd.DataFrame):
         """
         Applies the pipeline and model to predict multiple records from a DataFrame.
@@ -112,14 +131,9 @@ class MLInferenceController:
         """
         write_log("entered predict_batch", "info", os.path.basename(__file__))
         try:
-            self.load_objects()
-            predictions = flatten_predictions(self.inference_body.model.predict(self._transform(df)))
-
+            predictions, _ = self.predict_frame(df)
             output_df = df.copy()
-            if "classification" in self.inference_body.task.lower():
-                output_df['Prediction'] = [self._decode(p) for p in predictions]
-            else:
-                output_df['Prediction'] = [convert_numpy(p) for p in predictions]
+            output_df['Prediction'] = predictions
             return output_df
         except Exception:
             self._record_error()
@@ -130,6 +144,8 @@ class MLInferenceController:
         Loads the saved model, preprocessing pipeline, column metadata and target encodings from disk.
         """
 
+        if self.inference_body.model is not None:
+            return  # already loaded (e.g. a Predictor reused for several calls)
         write_log("entered load_objects", "info", os.path.basename(__file__))
 
         record = get_record_by_id(self.inference_body.run_id)

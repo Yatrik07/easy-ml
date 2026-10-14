@@ -9,7 +9,7 @@ It is based on the active repository structure as it exists now:
 - a modular Flask application created by `easyml.app_factory.create_app`
 - task-specific controllers for tabular ML, NLP, and CV
 - persisted run artifacts under an external data directory
-- a bundled built frontend at `easyml/unified_frontend/dist`
+- a no-build Vue 3 frontend (ES modules) at `easyml/unified_frontend/dist`
 
 It is distributed on PyPI as `easy-ml-studio`; the import package is `easyml` and the CLI is `easy-ml`.
 
@@ -846,19 +846,36 @@ This is how the frontend receives live training feedback.
 
 ## Frontend Architecture
 
-The repository includes a bundled frontend at `easyml/unified_frontend/dist`.
+The UI in `easyml/unified_frontend/dist` is the source itself: Vue 3 written as native ES modules,
+with **no build step** and **no CDN** (everything works offline).
 
-Observations from the bundle:
+```
+index.html                 thin shell: theme bootstrap, CSS links, vendor scripts, boot guard, #app
+static/vendor/             Vue (prod + dev build), Socket.IO client, Chart.js, fonts (do not edit)
+static/css/                tokens.css (light/dark design tokens), base.css (shell, layout helpers),
+                           components.css (buttons, cards, forms, tables, dialogs…), views.css (page layouts)
+static/js/main.js          registers the shared components and mounts App.js
+static/js/lib/             vue.js (re-exports window.Vue/Chart/io), api.js (fetch helpers), format.js,
+                           theme.js, clipboard.js
+static/js/store/           ui, session (capabilities, labels), wizard (new-run state), training
+                           (job + Socket.IO), inference, runs
+static/js/components/      small shared components (ui.js, overlays.js, code.js, results.js, shell.js, images.js)
+static/js/views/           one module per page (HomeView.js, HistoryView.js, …)
+```
 
-- the UI is a Vue 3 single-page app served as static HTML
-- it uses Socket.IO for live training progress
-- it covers home, upload, config, models, training, inference, history, settings, and about views
-- it calls the Flask endpoints documented above
+Rules that keep it working:
 
-Important contributor note:
-
-- the repository contains the built frontend bundle, not the original source project structure
-- if you plan to make major frontend changes, first confirm whether the source app lives in another branch or repository history
+- **Templates are template strings** (`` template: /* html */ `...` ``). Never use `${` or backticks inside them;
+  put logic in `setup()` and expose the result. `tests/test_frontend_assets.py` enforces this.
+- **Stores are plain reactive objects.** Import the object and read its fields; never destructure them.
+  Long-lived things (the training socket) live in stores, never in a view, so they survive navigation.
+- **Styling** uses the CSS tokens in `tokens.css` (they switch with `<html data-theme>`); avoid inline styles
+  and hard-coded colors.
+- **Adding a page:** create `static/js/views/MyView.js`, add it to the `VIEWS` map in `App.js`, and link it
+  from `components/shell.js`. Every module must be reachable from `main.js` (the asset test checks it).
+- **Debugging:** run with `EASYML_FRONTEND_DEBUG=1` (or `--debug`) to load Vue's development build, which
+  prints template warnings in the browser console. `serve_index` also stamps `?v=<version>` on the entry
+  module and stylesheets so upgrades are not served from a stale cache.
 
 ## Optional Dependencies and Feature Gating
 

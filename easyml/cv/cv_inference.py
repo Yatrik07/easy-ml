@@ -82,15 +82,44 @@ class CVInferenceController:
         # Remove data URI prefix if present
         if "," in b64_str:
             b64_str = b64_str.split(",")[1]
-            
+
         img_bytes = base64.b64decode(b64_str)
-        img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-        
+        return self._preprocess_pil(Image.open(io.BytesIO(img_bytes)), img_size)
+
+    @staticmethod
+    def _preprocess_pil(img, img_size):
         transform = transforms.Compose([
             transforms.Resize(img_size),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
-        
-        tensor = transform(img).unsqueeze(0) # Add batch dimension
-        return tensor
+        return transform(img.convert("RGB")).unsqueeze(0)  # Add batch dimension
+
+    def predict_images(self, paths, batch_size=32):
+        """
+        Classify image files.
+
+        Returns:
+            tuple: (labels, confidences) in the order of ``paths``.
+        """
+        if not hasattr(self, "_loaded"):
+            model, class_names, img_size = self.load_objects()
+            model = model.to(self.device)
+            model.eval()
+            self._loaded = (model, class_names, img_size)
+        model, class_names, img_size = self._loaded
+
+        labels, confidences = [], []
+        for start in range(0, len(paths), batch_size):
+            chunk = paths[start:start + batch_size]
+            tensors = []
+            for path in chunk:
+                with Image.open(path) as img:
+                    tensors.append(self._preprocess_pil(img, img_size))
+            batch = torch.cat(tensors).to(self.device)
+            with torch.no_grad():
+                probabilities = torch.nn.functional.softmax(model(batch), dim=1)
+                top_prob, top_idx = torch.max(probabilities, 1)
+            labels.extend(class_names[i] for i in top_idx.tolist())
+            confidences.extend(float(p) for p in top_prob.tolist())
+        return labels, confidences

@@ -15,7 +15,11 @@ import scipy.sparse
 
 from easyml.nlp.nlp_config import NLP_InferenceBody, NLP_ERROR_CODES
 from easyml.nlp.nlp_preprocessing import apply_preprocessing_for_inference
-from easyml.nlp.nlp_feature_engineering import load_fe_config, transform_text_for_inference
+from easyml.nlp.nlp_feature_engineering import (
+    load_fe_config,
+    transform_text_for_inference,
+    transform_texts_for_inference,
+)
 from easyml.core.artifacts import validate_model_name
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.logger import write_log
@@ -78,6 +82,32 @@ class NLPInferenceController:
                           f"{self.inference_body.error_traceback}",
                           "error", os.path.basename(__file__))
             raise e
+
+    def predict_texts(self, texts):
+        """
+        Classify several texts at once.
+
+        Returns:
+            tuple: (labels, confidences); confidences is None for models without predict_proba.
+        """
+        if self.inference_body.model is None:
+            self._load_artifacts()
+        config = self.inference_body.preprocessing_config
+        cleaned = [apply_preprocessing_for_inference(str(t), config) for t in texts]
+        features = transform_texts_for_inference(cleaned, self._folder_path, self.inference_body.embedding_config)
+        if any(dm in self.inference_body.model_name.lower() for dm in ['mlp', 'lgbm']) and scipy.sparse.issparse(features):
+            features = features.toarray()
+        model = self.inference_body.model
+        predictions = model.predict(features).reshape(-1)
+        decoder = self.inference_body.target_encodings or {}
+        labels = [decoder.get(convert_numpy(p), str(convert_numpy(p))) for p in predictions]
+        confidences = None
+        if hasattr(model, "predict_proba"):
+            try:
+                confidences = [float(row.max()) for row in model.predict_proba(features)]
+            except Exception:
+                confidences = None
+        return labels, confidences
 
     def _load_artifacts(self):
         """Load model, config, vectorizer/embedding config, and target encodings."""
