@@ -1,4 +1,6 @@
+import contextvars
 import math
+from contextlib import contextmanager
 from datetime import datetime
 
 import numpy as np
@@ -9,6 +11,19 @@ from easyml.utils.cancellation import current_job, get_job
 
 # Will be initialized in app.py
 socketio = None
+
+# Receives progress entries emitted outside a background job (e.g. `easy-ml retrain` in a terminal).
+_progress_listener = contextvars.ContextVar("easyml_progress_listener", default=None)
+
+
+@contextmanager
+def progress_listener(callback):
+    """Call ``callback(entry)`` for every progress update emitted outside a job in this context."""
+    token = _progress_listener.set(callback)
+    try:
+        yield
+    finally:
+        _progress_listener.reset(token)
 
 def init_socketio(app, allowed_origins=None):
     """
@@ -140,5 +155,11 @@ def emit_progress(msg: str, step: int = None, total_steps: int = None, pct: int 
         if final:
             job.finished = True
     else:
+        listener = _progress_listener.get()
+        if listener is not None:
+            try:
+                listener(entry)
+            except Exception:
+                pass  # a display problem must never stop training
         from easyml.utils.logger import write_log
         write_log(f"[Progress] {entry['message']}", "info", "socket_emitter.py")

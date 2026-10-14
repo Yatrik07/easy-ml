@@ -6,6 +6,7 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml download-models      fetch the spaCy English model used for lemmatization
     easy-ml runs                 list trained runs
     easy-ml predict 5 data.csv   predict with run #5 (see `easy-ml predict --help`)
+    easy-ml retrain 5 new.csv    train run #5's recipe on new data
 """
 
 import argparse
@@ -49,6 +50,13 @@ def _build_parser():
     predict.add_argument("--model", help="Model class name (default: the run's best model).")
     predict.add_argument("-o", "--output", help="Write the predictions to this CSV file instead of the console.")
     predict.add_argument("--text-column", help="Text column of the input CSV (text runs; default: the training column).")
+
+    retrain = subcommands.add_parser("retrain", help="Train a run's recipe again on new data.")
+    retrain.add_argument("run_id", type=int, help="Run to retrain (see `easy-ml runs`).")
+    retrain.add_argument("input", help="New CSV/Excel file, or image folder for image runs.")
+    retrain.add_argument("--name", help="Name of the new run (default: '<run name>-retrain').")
+    retrain.add_argument("--models", help="Comma-separated model keys to train instead of the run's models.")
+    retrain.add_argument("--json", action="store_true", help="Print the result as JSON.")
     return parser
 
 
@@ -112,6 +120,10 @@ def main(argv=None):
     if args.command == "predict":
         from easyml.cli import predict
         return predict(args.run_id, args.input, model=args.model, output=args.output, text_column=args.text_column)
+    if args.command == "retrain":
+        from easyml.cli import retrain
+        models = [m.strip() for m in args.models.split(",") if m.strip()] if args.models else None
+        return retrain(args.run_id, args.input, name=args.name, models=models, as_json=args.json)
     return run_server(
         host=args.host,
         port=args.port,

@@ -19,4 +19,18 @@ def load_model(run_id, model_name=None):
     return _load_model(run_id, model_name=model_name)
 
 
-__all__ = ["MLTrainer", "load_model", "__version__"]
+def retrain(run_id, dataset_path, name=None, models=None):
+    """
+    Train a new run on new data with the same settings as an earlier run.
+
+        result = easyml.retrain(5, "customers_october.csv")
+        result.load_model().predict("new_customers.csv")
+
+    See :func:`easyml.retraining.retrain`.
+    """
+    from easyml.retraining import retrain as _retrain
+
+    return _retrain(run_id, dataset_path, name=name, models=models)
+
+
+__all__ = ["MLTrainer", "load_model", "retrain", "__version__"]

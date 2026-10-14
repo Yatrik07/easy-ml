@@ -5,11 +5,13 @@
     easy-ml predict 5 new_data.csv -o out.csv       # tabular / text CSV: adds a Prediction column
     easy-ml predict 5 "great phone, fast delivery"  # text: prints the label
     easy-ml predict 7 photos/                       # images: one row per image
+    easy-ml retrain 5 october.csv --name churn-oct  # same settings as run #5, new data
 """
 
 import csv
 import json
 import os
+import re
 import sys
 
 
@@ -124,3 +126,60 @@ def predict(run_id, source, model=None, output=None, text_column=None, out=None)
 
     print(f"Unsupported task {predictor.task!r}", file=sys.stderr)
     return 1
+
+
+def _console_text(message, stream):
+    """Progress messages start with an emoji; drop it and anything the console cannot print."""
+    text = re.sub(r"^[^\w(\[]+", "", str(message)).strip()
+    encoding = getattr(stream, "encoding", None) or "utf-8"
+    return text.encode(encoding, "replace").decode(encoding)
+
+
+def _print_leaderboard(task, performance, out):
+    from easyml.utils.run_summary import primary_metric, rank_models
+
+    metric = primary_metric(task)
+    ranked = rank_models(task, performance)
+    width = max([len(m["label"]) for m in ranked] + [5])
+    print(f"  {'MODEL'.ljust(width)}  TEST {metric['name']}", file=out)
+    for m in ranked:
+        print(f"  {m['label'].ljust(width)}  {_format_score(m['test_score'], metric)}", file=out)
+
+
+def retrain(run_id, data, name=None, models=None, as_json=False, out=None):
+    _quiet_logs()
+    from easyml.retraining import DatasetMismatchError, retrain as retrain_run
+    from easyml.utils.database_operations import RunNotFoundError
+    from easyml.utils.socket_emitter import progress_listener
+
+    out = out or sys.stdout
+
+    def show(entry):
+        pct = entry.get("pct")
+        prefix = f"[{pct:>3}%] " if isinstance(pct, int) else ""
+        print(prefix + _console_text(entry.get("message", ""), sys.stderr), file=sys.stderr)
+
+    try:
+        with progress_listener(show):
+            result = retrain_run(run_id, data, name=name, models=models)
+    except RunNotFoundError:
+        print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except DatasetMismatchError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except (ValueError, TypeError, FileNotFoundError, ImportError) as exc:
+        print(f"Retrain failed: {exc}", file=sys.stderr)
+        return 1
+
+    if as_json:
+        json.dump({"run_id": result.run_id, "parent_run_id": result.parent_run_id, "task": result.task,
+                   "run_name": result.run_name, "best_model": result.best_model, "warnings": result.warnings,
+                   "performance": result.performance}, out, indent=2, default=str)
+        out.write("\n")
+        return 0
+    for warning in result.warnings:
+        print(f"Note: {warning}", file=sys.stderr)
+    print(f"New run #{result.run_id} ({result.run_name}), retrained from run #{result.parent_run_id}:", file=out)
+    _print_leaderboard(result.task, result.performance, out)
+    return 0
