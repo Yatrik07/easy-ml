@@ -18,7 +18,7 @@ const TASKS = [
 const UPCOMING = [
   { icon: 'cleaning_services', title: 'Data prep (ETL)', text: 'Clean, transform and export a dataset without training a model.', badge: 'Planned' },
   { icon: 'timeline', title: 'Time-series forecasting', text: 'Forecast future values from dated data.', badge: 'Planned' },
-  { icon: 'autorenew', title: 'Auto-retraining', text: 'Retrain a saved run on new data, on a schedule or a trigger.', badge: 'Planned' },
+  { icon: 'autorenew', title: 'Scheduled retraining', text: 'Retrain a run automatically on a schedule or when new data arrives. Manual retraining is already in Run history.', badge: 'Planned' },
   { icon: 'psychology', title: 'LLM fine-tuning', text: 'Fine-tune small language models on your own text.', badge: 'Exploring' },
 ];
 
@@ -26,6 +26,7 @@ const SDK_POINTS = [
   'Load any run and predict on a dict, a DataFrame, a CSV or a folder of images',
   'Train tabular and text models from a script',
   'Batch predictions from the terminal, no code needed',
+  'Retrain a run on new data, and move runs between computers',
 ];
 
 // Code lines with their comments lined up in one column.

@@ -109,6 +109,10 @@
 .log-time { margin-left: auto; color: var(--text-subtle); font-size: var(--text-xs); white-space: nowrap; }
 .chart-box { position: relative; height: 320px; }
 .chart-box.tall { height: 440px; }
+.lineage { font: inherit; font-size: var(--text-xs); cursor: pointer; }
+button.lineage { border: 0; }
+button.lineage:disabled { cursor: default; opacity: 0.7; }
+.file-button { position: relative; align-self: flex-start; cursor: pointer; }
 .chart-note { color: var(--text-muted); font-size: var(--text-sm); }
 .detail-charts { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--border); }
 .term-groups { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }

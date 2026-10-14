@@ -4,7 +4,7 @@ import { cssVar, resolvedTheme } from '../lib/theme.js';
 import { logKind, parseTimestamp, stripLeadingEmoji } from '../lib/format.js';
 import { taskLabel } from '../store/session.js';
 import { confirmAction, navigate } from '../store/ui.js';
-import { startTraining, stopTraining, training } from '../store/training.js';
+import { retryTraining, stopTraining, training } from '../store/training.js';
 
 // Live accuracy/loss curves for image models. The chart is created from store data when the view
 // mounts and destroyed when it unmounts, so leaving and coming back never leaves a detached canvas.
@@ -97,11 +97,15 @@ export default {
       if (ok) stopTraining();
     }
 
-    return { training, lines, logBox, status, stop, startTraining, navigate, taskLabel };
+    const eyebrow = computed(() => (training.kind === 'retrain'
+      ? 'Retrain · from run #' + training.parentRunId
+      : 'Step 4 · ' + taskLabel(training.task)));
+
+    return { training, lines, logBox, status, stop, retryTraining, navigate, eyebrow };
   },
   template: /* html */ `
     <div class="page">
-      <PageHeader :eyebrow="'Step 4 · ' + taskLabel(training.task)" title="Training" />
+      <PageHeader :eyebrow="eyebrow" :title="training.kind === 'retrain' ? 'Retraining' : 'Training'" />
 
       <section class="card">
         <div class="card-body stack">
@@ -121,8 +125,9 @@ export default {
                 <button class="btn btn-primary" @click="navigate('results')">View results<Icon name="arrow_forward" /></button>
               </template>
               <template v-else-if="training.status === 'error' || training.status === 'cancelled'">
-                <button class="btn btn-secondary" @click="navigate('models')"><Icon name="arrow_back" />Back to models</button>
-                <button class="btn btn-primary" @click="startTraining"><Icon name="replay" />Try again</button>
+                <button v-if="training.kind === 'retrain'" class="btn btn-secondary" @click="navigate('history')"><Icon name="arrow_back" />Run history</button>
+                <button v-else class="btn btn-secondary" @click="navigate('models')"><Icon name="arrow_back" />Back to models</button>
+                <button class="btn btn-primary" @click="retryTraining"><Icon name="replay" />Try again</button>
               </template>
             </div>
           </div>

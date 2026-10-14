@@ -11,11 +11,14 @@ export default {
     const performance = computed(() => result.value.performance || {});
     const best = computed(() => rankPerformance(training.task, performance.value, modelLabel)[0]);
     const metric = computed(() => metricFor(training.task));
-    return { training, result, performance, best, metric, navigate, openInference, taskLabel };
+    const eyebrow = computed(() => (training.kind === 'retrain'
+      ? 'Retrained from run #' + training.parentRunId + ' · ' + taskLabel(training.task)
+      : 'Step 5 · ' + taskLabel(training.task)));
+    return { training, result, performance, best, metric, navigate, openInference, eyebrow };
   },
   template: /* html */ `
     <div class="page">
-      <PageHeader :eyebrow="'Step 5 · ' + taskLabel(training.task)" title="Results"
+      <PageHeader :eyebrow="eyebrow" title="Results"
                   :subtitle="best ? 'Best model: ' + best.label + '. Every model is saved in run #' + result.run_id + '.' : ''">
         <button class="btn btn-secondary" @click="navigate('home')"><Icon name="add" />New run</button>
         <button v-if="result.run_id > 0" class="btn btn-primary" @click="openInference(result.run_id)"><Icon name="bolt" />Make predictions</button>

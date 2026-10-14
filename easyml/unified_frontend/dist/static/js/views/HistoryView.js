@@ -2,6 +2,7 @@ import { computed, onMounted, ref } from '../lib/vue.js';
 import { absoluteTime, formatScore, relativeTime } from '../lib/format.js';
 import { closeRunDetail, deleteRun, loadRuns, openRunDetail, runs } from '../store/runs.js';
 import { openInference } from '../store/inference.js';
+import { openRetrain } from '../store/retrain.js';
 import { confirmAction, navigate } from '../store/ui.js';
 import { taskLabel } from '../store/session.js';
 
@@ -17,6 +18,7 @@ export default {
   setup() {
     const query = ref('');
     const filter = ref('all');
+    const importOpen = ref(false);
     onMounted(loadRuns);
 
     const filtered = computed(() => {
@@ -44,12 +46,13 @@ export default {
 
     return {
       FILTERS, query, filter, runs, filtered, remove, detail, detailTitle, openRunDetail, closeRunDetail,
-      openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel,
+      openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel, openRetrain, importOpen,
     };
   },
   template: /* html */ `
     <div class="page">
       <PageHeader title="Run history" subtitle="Every model you have trained is saved here. Open a run to compare its models or make predictions.">
+        <button class="btn btn-secondary" @click="importOpen = true"><Icon name="move_to_inbox" />Import run</button>
         <button class="btn btn-primary" @click="navigate('home')"><Icon name="add" />New run</button>
       </PageHeader>
 
@@ -93,7 +96,8 @@ export default {
               <td>
                 <div class="run-name">{{ run.run_name }}</div>
                 <div class="run-sub"><span>#{{ run.id }}</span><TaskBadge :task="run.task" />
-                  <span v-if="run.dataset_name" class="truncate dataset-name" :title="run.dataset_name"><Icon name="description" size="sm" />{{ run.dataset_name }}</span></div>
+                  <span v-if="run.dataset_name" class="truncate dataset-name" :title="run.dataset_name"><Icon name="description" size="sm" />{{ run.dataset_name }}</span>
+                  <LineageBadge :run="run" /></div>
               </td>
               <td class="hide-md"><ModelChips :models="run.models" :max="1" /></td>
               <td>
@@ -107,6 +111,9 @@ export default {
                 <div class="actions">
                   <button class="btn btn-secondary btn-sm" @click="openInference(run.id)" title="Make predictions with this run">
                     <Icon name="bolt" /><span class="btn-label">Predict</span>
+                  </button>
+                  <button class="btn btn-ghost btn-icon" @click="openRetrain(run.id)" aria-label="Retrain on new data" title="Retrain on new data">
+                    <Icon name="autorenew" />
                   </button>
                   <button class="btn btn-ghost btn-icon" @click="openRunDetail(run.id)" aria-label="Show details" title="Details">
                     <Icon name="insights" />
@@ -126,14 +133,22 @@ export default {
           <div v-if="detail && detail.task" class="run-sub">
             <span>#{{ detail.id }}</span><TaskBadge :task="detail.task" />
             <span>{{ detail.dataset_name }}</span><span>· {{ absoluteTime(detail.timestamp) }}</span>
+            <LineageBadge :run="detail" />
           </div>
         </template>
         <div v-if="runs.detailLoading" class="row muted"><Spinner /> Loading run…</div>
         <ResultsBoard v-else-if="detail && detail.metrics" :task="detail.task" :performance="detail.metrics" :run-id="detail.id">
           <template #actions>
-            <button class="btn btn-primary btn-sm" @click="openInference(detail.id); closeRunDetail()"><Icon name="bolt" />Predict</button>
+            <div class="row">
+              <a class="btn btn-ghost btn-sm" :href="'/runs/' + detail.id + '/export'" download title="Save this run as a .zip to use it on another computer">
+                <Icon name="download" /><span class="btn-label">Download run (.zip)</span></a>
+              <button class="btn btn-secondary btn-sm" @click="openRetrain(detail.id)"><Icon name="autorenew" />Retrain</button>
+              <button class="btn btn-primary btn-sm" @click="openInference(detail.id); closeRunDetail()"><Icon name="bolt" />Predict</button>
+            </div>
           </template>
         </ResultsBoard>
       </SideDrawer>
+      <RetrainDialog />
+      <ImportRunDialog :open="importOpen" @close="importOpen = false" />
     </div>`,
 };

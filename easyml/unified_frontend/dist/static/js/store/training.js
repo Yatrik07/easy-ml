@@ -16,6 +16,9 @@ export const training = reactive({
   result: null,
   task: '',
   stopping: false,
+  kind: 'wizard', // wizard | retrain
+  parentRunId: null, // the run being retrained
+  lastRequest: null, // { endpoint, payload, task, kind, parentRunId } for "Try again"
 });
 
 let socket = null;
@@ -29,11 +32,42 @@ export function isRunning() {
   return training.status === 'running';
 }
 
-export async function startTraining() {
+// The wizard's request for the current configuration.
+function wizardRequest() {
+  const config = wizard.config;
+  let endpoint = '/ml_predict';
+  const payload = { ...config, models: [...config.models] };
+  if (isText.value) {
+    endpoint = '/nlp/predict';
+  } else if (isImage.value) {
+    endpoint = '/cv/predict';
+    payload.image_size = imageSize();
+    if (config.models.includes('CustomCNN')) payload.custom_layers = wizard.layers;
+  } else {
+    payload.preprocessing = true;
+  }
+  return { endpoint, payload, task: config.task, kind: 'wizard', parentRunId: null };
+}
+
+export function startTraining() {
+  return runJob(wizardRequest());
+}
+
+// Train a saved run's recipe on new data (POST /runs/<id>/retrain).
+export function startRetrain(runId, body, task) {
+  return runJob({ endpoint: '/runs/' + runId + '/retrain', payload: body, task, kind: 'retrain', parentRunId: runId });
+}
+
+export function retryTraining() {
+  return training.lastRequest ? runJob(training.lastRequest) : startTraining();
+}
+
+// Start a background job and follow its progress until the final event.
+async function runJob(request) {
   closeSocket();
   Object.assign(training, {
     status: 'running', jobId: null, logs: [], progress: 0, epochs: [], result: null,
-    task: wizard.config.task, stopping: false,
+    task: request.task, stopping: false, kind: request.kind, parentRunId: request.parentRunId, lastRequest: request,
   });
   navigate('training');
 
@@ -80,26 +114,17 @@ export async function startTraining() {
   });
 
   try {
-    const config = wizard.config;
-    let endpoint = '/ml_predict';
-    const payload = { ...config, models: [...config.models] };
-    if (isText.value) {
-      endpoint = '/nlp/predict';
-    } else if (isImage.value) {
-      endpoint = '/cv/predict';
-      payload.image_size = imageSize();
-      if (config.models.includes('CustomCNN')) payload.custom_layers = wizard.layers;
-    } else {
-      payload.preprocessing = true;
-    }
-    const res = await fetch(endpoint, {
+    const res = await fetch(request.endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(request.payload),
     });
     if (!res.ok) throw new Error(await errorMessage(res, 'Failed to start training'));
-    jobId = (await res.json()).job_id;
+    const started = await res.json();
+    jobId = started.job_id;
     training.jobId = jobId;
+    if (started.task) training.task = started.task;
+    (started.warnings || []).forEach(message => training.logs.push({ message, kind: 'warning' }));
     // Joining replays everything the job emitted before this point.
     joinJob();
   } catch (e) {
@@ -145,5 +170,6 @@ export function resetTraining() {
   closeSocket();
   Object.assign(training, {
     status: 'idle', jobId: null, logs: [], progress: 0, epochs: [], result: null, task: '', stopping: false,
+    kind: 'wizard', parentRunId: null, lastRequest: null,
   });
 }
