@@ -21,9 +21,11 @@ from easyml.nlp.nlp_config import (
     DENSE_ONLY_MODELS,
 )
 from easyml.core.cancellable_search import CancellableGridSearchCV
+from easyml.core.evaluation_charts import build_model_charts, classification_parts, nlp_top_terms, write_evaluation
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
 from easyml.nlp.nlp_evaluator import get_nlp_train_test_metrics
 from easyml.utils.logger import write_log
+from easyml.utils.labels import labels_in_code_order
 from easyml.utils.utils import NumpyEncoder
 from easyml.utils.socket_emitter import emit_progress
 from easyml.utils.cancellation import is_cancelled
@@ -175,7 +177,16 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
                 "best_params": best_params,
             }
 
+            class_labels = labels_in_code_order(request_body.target_encodings)
+            parts = classification_parts(best_estimator, X_test, request_body.y_test, class_labels)
+            parts["top_terms"] = lambda: nlp_top_terms(best_estimator, request_body.vectorizer, class_labels)
+            request_body.charts[class_name] = build_model_charts(parts)
+
             emit_progress(f"✅ Finished NLP model: {class_name} (test_acc={accuracy_test})", pct=model_base_pct + int(50/max(1, total_models)))
+
+        labels = labels_in_code_order(request_body.target_encodings)
+        write_evaluation(request_body.path_to_save, request_body.task, request_body.charts,
+                         {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels or []]})
 
         # Save run config and column data
         config_path = os.path.join(request_body.path_to_save, "config_json.json")

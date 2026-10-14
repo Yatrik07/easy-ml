@@ -127,3 +127,18 @@ def import_run_archive():
         _remove_quietly(temp_path)
     return jsonify({"status": "imported", "run_id": run_id, "run_name": record.get("run_name"),
                     "task": record.get("task"), "warnings": notes}), 201
+
+
+@runs_bp.route("/runs/<int:run_id>/charts", methods=["GET"])
+def run_charts(run_id):
+    from easyml.core.evaluation_charts import read_evaluation
+
+    try:
+        record = get_record_by_id(run_id)
+        evaluation = read_evaluation(record["folder_path"])
+    except Exception as exc:
+        return error_response(exc)
+    if not evaluation:
+        return jsonify({"available": False, "run_id": run_id,
+                        "reason": "Charts are available for runs trained with Easy-ML 0.6.0 or later."})
+    return jsonify({"available": True, "run_id": run_id, **evaluation})

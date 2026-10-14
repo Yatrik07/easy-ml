@@ -244,6 +244,9 @@ class NLP_RequestBody(BaseModel):
     original_dataset_name: Optional[str] = None
     target_dtype: Optional[str] = None
     parent_run_id: Optional[int] = None
+    # Kept in memory for the result charts (evaluation.json); never serialized.
+    vectorizer: Optional[Any] = None
+    charts: dict = Field(default_factory=dict)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

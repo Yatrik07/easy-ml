@@ -89,8 +89,10 @@ def preprocessing_controller(request_body: ML_RequestBody):
 
         # Transform train and test data using the final pipeline
         write_log("transforming the data using the final pipeline", "info", os.path.basename(__file__))
+        request_body.X_test_raw = request_body.X_test.copy()  # for permutation importance
         request_body.X_train = final_pipeline.fit_transform(request_body.X_train)
         request_body.X_test = final_pipeline.transform(request_body.X_test)
+        request_body.pipeline = final_pipeline
         write_log("transformed the data using the final pipeline", "info", os.path.basename(__file__))
 
         joblib.dump(final_pipeline, os.path.join(request_body.path_to_save, "preprocessing_pipeline.pkl"), protocol=5)

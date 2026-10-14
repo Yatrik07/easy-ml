@@ -341,6 +341,10 @@ class ML_RequestBody(BaseModel):
     target_dtype: Optional[str] = None
     parent_run_id: Optional[int] = None
     requested_categorical_columns: Optional[List[str]] = Field(default_factory=list)
+    # Kept in memory for the result charts (evaluation.json); never serialized.
+    pipeline: Any = None
+    X_test_raw: Optional[pd.DataFrame] = None
+    charts: dict = Field(default_factory=dict)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

@@ -5,6 +5,7 @@ import tempfile
 import traceback
 
 import joblib
+import numpy as np
 
 from easyml.config.GLOBAL_VARS import (
     CATBOOST_MODEL_NAMES,
@@ -15,13 +16,33 @@ from easyml.config.GLOBAL_VARS import (
     get_model_mappings,
     get_param_grid,
 )
+from easyml.core.evaluation_charts import (
+    build_model_charts,
+    classification_parts,
+    regression_points,
+    tabular_importance,
+    write_evaluation,
+)
 from easyml.core.evaluator import get_train_test_metrics
 from easyml.core.cancellable_search import CancellableGridSearchCV
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
 from easyml.utils.cancellation import is_cancelled
 from easyml.utils.logger import write_log
 from easyml.utils.socket_emitter import emit_progress
+from easyml.utils.labels import labels_in_code_order
 from easyml.utils.utils import NumpyEncoder
+
+
+def _model_charts(model, request_body, task):
+    """ROC/PR (classification) or scatter/residuals (regression), plus feature importance."""
+    if task == "classification":
+        labels = labels_in_code_order(request_body.target_encodings)
+        parts = classification_parts(model, request_body.X_test, request_body.y_test, labels)
+    else:
+        parts = {"regression": lambda: regression_points(
+            request_body.y_test, np.asarray(model.predict(request_body.X_test)).reshape(-1))}
+    parts["importance"] = lambda: tabular_importance(model, request_body, task)
+    return build_model_charts(parts)
 
 def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
     """
@@ -147,7 +168,13 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 'train_metrics' : metrics['train_metrics'],
                 "test_metrics" : metrics['test_metrics'],
             }
+            emit_progress(f"📈 Preparing result charts for {model_name}...")
+            request_body.charts[model_name] = _model_charts(best_estimator, request_body, task)
             emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))
+
+        labels = labels_in_code_order(request_body.target_encodings) if task == "classification" else None
+        write_evaluation(request_body.path_to_save, request_body.task, request_body.charts,
+                         {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels] if labels else None})
 
         # Write column_data.json and config_json.json ONCE after all models are done
         column_data = {}

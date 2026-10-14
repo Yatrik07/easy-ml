@@ -20,6 +20,7 @@ class CVController:
     """
     def __init__(self, kwargs: dict):
         self.request_body = CV_RequestBody(**kwargs)
+        self._charts = {}
         # Only a folder created here is removed again when the run fails; a caller's path_to_save is left alone.
         self._created_folder = None
         
@@ -57,6 +58,10 @@ class CVController:
 
                 write_log(f"Model {model_name} trained and saved successfully", "info", os.path.basename(__file__))
 
+            from easyml.core.evaluation_charts import write_evaluation
+
+            write_evaluation(self.request_body.path_to_save, self.request_body.task, self._charts,
+                             {"n_test": len(loaders.test.dataset), "classes": list(loaders.class_names)})
             emit_progress("💾 Finalizing results in database...", pct=95)
             dataset_name = ", ".join(
                 os.path.basename(p.strip().rstrip("/\\")) for p in (self.request_body.dataset_path or "").split(",") if p.strip()
@@ -131,9 +136,32 @@ class CVController:
 
     def _evaluate(self, model, loaders, model_path, best_val_acc):
         """Train and held-out test metrics for one model, shaped like tabular/NLP ``metrics_json`` entries."""
+        import numpy as np
+
+        from easyml.core.evaluation_charts import build_model_charts, classification_curves
+
         class_names = loaders.class_names
         train_metrics = classification_metrics(*predict_loader(model, loaders.train_eval), class_names)
-        test_metrics = classification_metrics(*predict_loader(model, loaders.test), class_names)
+        y_true, y_pred, probabilities = predict_loader(model, loaders.test, with_proba=True)
+        test_metrics = classification_metrics(y_true, y_pred, class_names)
+
+        def curves():
+            if not probabilities:
+                return None, None, "The test set is empty."
+            return classification_curves(y_true, np.asarray(probabilities), list(class_names), "probability")
+
+        cache = {}
+
+        def cached():
+            if "value" not in cache:
+                cache["value"] = curves()
+            return cache["value"]
+
+        model_name = os.path.splitext(os.path.basename(model_path))[0]
+        self._charts[model_name] = build_model_charts({
+            "roc": lambda: (cached()[0], cached()[2]),
+            "pr": lambda: (cached()[1], cached()[2]),
+        })
 
         def rounded(metrics, key):
             value = metrics.get(key)

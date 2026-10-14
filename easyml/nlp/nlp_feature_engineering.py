@@ -94,6 +94,7 @@ def vectorizer_controller(request_body: NLP_RequestBody):
 
         request_body.X_train = vectorizer.fit_transform(text_train)
         request_body.X_test = vectorizer.transform(text_test)
+        request_body.vectorizer = vectorizer
 
         request_body.y_train = y_train.reset_index(drop=True)
         request_body.y_test = y_test.reset_index(drop=True)

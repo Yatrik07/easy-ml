@@ -208,17 +208,24 @@ def train_cv_model(request_body: CV_RequestBody, model_name: str, train_loader, 
         raise e
 
 
-def predict_loader(model: nn.Module, loader) -> tuple:
-    """Run ``model`` over a DataLoader and return (true class indices, predicted class indices)."""
+def predict_loader(model: nn.Module, loader, with_proba: bool = False) -> tuple:
+    """
+    Run ``model`` over a DataLoader and return (true class indices, predicted class indices),
+    plus the softmax probabilities as a third item when ``with_proba`` is set.
+    """
     device = next(model.parameters()).device
     model.eval()
-    y_true, y_pred = [], []
+    y_true, y_pred, probabilities = [], [], []
     with torch.no_grad():
         for inputs, labels in loader:
             check_cancelled()
             outputs = model(inputs.to(device))
             y_pred.extend(outputs.argmax(dim=1).cpu().tolist())
             y_true.extend(labels.tolist())
+            if with_proba:
+                probabilities.extend(torch.softmax(outputs, dim=1).cpu().tolist())
+    if with_proba:
+        return y_true, y_pred, probabilities
     return y_true, y_pred
 
 
