@@ -25,7 +25,7 @@ class _TabularController:
     def __init__(self, name, dataset_path, target_column, timestamp, preprocessing=True, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, categorical_columns=None, path_to_save=None,
                  reduce_features=False, ignore_columns=None, task=None, imbalance_handling="none",
-                 original_dataset_name=None, **kwargs):
+                 original_dataset_name=None, parent_run_id=None, **kwargs):
         """
         Args:
             name (str): Name of the run.
@@ -43,6 +43,7 @@ class _TabularController:
             ignore_columns (list): Columns to ignore during training.
             task (str): Task type (e.g., 'MLClassification').
             imbalance_handling (str): Resampling method for classification ("none", "smote", ...).
+            parent_run_id (int): The run this one retrains, if any.
         """
 
         self.request_body = ML_RequestBody(
@@ -54,6 +55,7 @@ class _TabularController:
             scaling=scaling,
             models=models or [],
             categorical_columns=categorical_columns or [],
+            requested_categorical_columns=list(categorical_columns or []),
             path_to_save=path_to_save,
             hyper_parameter_tuning=hyper_parameter_tuning,
             imputation=imputation,
@@ -63,6 +65,7 @@ class _TabularController:
             timestamp=timestamp,
             imbalance_handling=imbalance_handling if self.supports_imbalance_handling else "none",
             original_dataset_name=original_dataset_name,
+            parent_run_id=parent_run_id,
         )
 
     supports_imbalance_handling = False
@@ -92,6 +95,8 @@ class _TabularController:
                 task=self.request_body.task,
                 dataset_name=dataset_name,
                 metrics_json=json.dumps(self.request_body.performance, cls=NumpyEncoder),
+                parent_run_id=self.request_body.parent_run_id,
+                origin="retrain" if self.request_body.parent_run_id else None,
             )
             emit_progress("💾 Results saved to database", step=4, total_steps=5)
 
@@ -114,6 +119,7 @@ class _TabularController:
                 "task": self.request_body.task,
                 "models_trained": list(self.request_body.performance.keys()),
                 "hyper_parameter_tuning": bool(self.request_body.hyper_parameter_tuning),
+                "parent_run_id": self.request_body.parent_run_id,
             }
 
             response_payload = {

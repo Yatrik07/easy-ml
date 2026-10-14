@@ -75,6 +75,12 @@ def _as_float(value):
     return None if number != number else number  # NaN -> None
 
 
+def _as_int(value):
+    # pandas returns nullable integer columns as floats (7.0) or NaN
+    number = _as_float(value)
+    return None if number is None else int(number)
+
+
 def rank_models(task, metrics):
     """Models sorted best first by test score (ties broken by test F1); models without a score go last."""
     ranked = []
@@ -141,6 +147,8 @@ def summarize_run(row):
         "best_model_label": best["label"] if best else None,
         "best_score": best["test_score"] if best else None,
         "metric": primary_metric(task),
+        "parent_run_id": _as_int(row.get("parent_run_id")),
+        "origin": row.get("origin") or None,
     }
 
 
@@ -149,3 +157,92 @@ def run_detail(row):
     detail = summarize_run(row)
     detail["metrics"] = _strip_paths(parse_metrics(row.get("metrics_json")))
     return detail
+
+
+TUNING_LABELS = {0: "Off", 1: "Quick", 2: "Thorough"}
+IMBALANCE_LABELS = {"none": "None", "smote": "SMOTE oversampling", "tomek": "Tomek links",
+                    "smotetomek": "SMOTE + Tomek"}
+
+
+def _list(value):
+    return ", ".join(str(v) for v in value) if value else "None"
+
+
+def _yes_no(value):
+    return "Yes" if value else "No"
+
+
+# (key, label, group, formatter) per task; formatters turn saved config values into display text.
+_COMMON_SETTINGS = [
+    ("models", "Models", "Models", lambda v: _list([model_label(m) for m in (v or [])])),
+    ("hyper_parameter_tuning", "Hyperparameter tuning", "Models", lambda v: TUNING_LABELS.get(v, str(v))),
+    ("imbalance_handling", "Class imbalance", "Models", lambda v: IMBALANCE_LABELS.get(v or "none", v)),
+]
+_SETTINGS = {
+    "tabular": [
+        ("target_column", "Target column", "Data", str),
+        ("ignore_columns", "Ignored columns", "Data", _list),
+        ("categorical_columns", "Categorical columns", "Data", _list),
+        ("imputation", "Missing values", "Preprocessing", lambda v: "Impute" if v else "Drop rows"),
+        ("scaling", "Scale numeric features", "Preprocessing", _yes_no),
+        ("reduce_features", "Reduce features (PCA)", "Preprocessing", _yes_no),
+    ],
+    "text": [
+        ("target_column", "Target column", "Data", str),
+        ("text_column", "Text column", "Data", str),
+        ("lowercase", "Lowercase", "Text cleaning", _yes_no),
+        ("remove_stopwords", "Remove stopwords", "Text cleaning", _yes_no),
+        ("lemmatize", "Lemmatize", "Text cleaning", _yes_no),
+        ("regex_clean", "Strip punctuation", "Text cleaning", _yes_no),
+        ("feature_mode", "Features", "Features", lambda v: "Sentence embeddings" if v == "embedding" else "Word counts"),
+        ("vectorizer_type", "Vectorizer", "Features", lambda v: {"tfidf": "TF-IDF", "count": "Counts",
+                                                                 "hashing": "Hashing"}.get(v, v)),
+        ("max_features", "Max features", "Features", str),
+        ("ngram_range", "N-grams", "Features", lambda v: "-".join(str(x) for x in v) if v else "None"),
+        ("embedding_model", "Embedding model", "Features", str),
+    ],
+    "image": [
+        ("classes", "Classes", "Data", _list),
+        ("image_size", "Image size", "Data", lambda v: " x ".join(str(x) for x in v) if v else "None"),
+        ("augment", "Augmentation", "Data", _yes_no),
+        ("validation_split", "Validation split", "Data", lambda v: f"{round(v * 100)}%"),
+        ("test_split", "Test split", "Data", lambda v: f"{round(v * 100)}%"),
+        ("epochs", "Epochs", "Training", str),
+        ("batch_size", "Batch size", "Training", str),
+        ("learning_rate", "Learning rate", "Training", str),
+        ("early_stopping_patience", "Early stopping patience", "Training", str),
+    ],
+}
+
+
+def _settings_kind(task):
+    if task in ("MLClassification", "MLRegression"):
+        return "tabular"
+    if task == "NLPTextClassification":
+        return "text"
+    return "image"
+
+
+def settings_for_display(task, config):
+    """
+    A run's saved settings as ``[{key, label, group, value}]`` with readable values, for the run's
+    config page, the compare view and the CLI. Settings an older run did not save are left out.
+    """
+    config = config or {}
+    rows = []
+    specs = _SETTINGS[_settings_kind(task)] + _COMMON_SETTINGS
+    for key, label, group, fmt in specs:
+        if key not in config:
+            continue
+        if key == "imbalance_handling" and task in ("MLRegression", "ImageClassification"):
+            continue
+        if key == "embedding_model" and config.get("feature_mode") != "embedding":
+            continue
+        if key in ("vectorizer_type", "max_features", "ngram_range") and config.get("feature_mode") == "embedding":
+            continue
+        try:
+            value = fmt(config[key])
+        except (TypeError, ValueError):
+            value = str(config[key])
+        rows.append({"key": key, "label": label, "group": group, "value": value})
+    return rows

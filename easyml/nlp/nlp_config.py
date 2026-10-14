@@ -243,15 +243,23 @@ class NLP_RequestBody(BaseModel):
     run_id: Optional[int] = None
     original_dataset_name: Optional[str] = None
     target_dtype: Optional[str] = None
+    parent_run_id: Optional[int] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def jsonify(self):
         """Serialize key fields for config_json.json storage."""
+        from easyml import __version__
+        from easyml.config.GLOBAL_VARS import CONFIG_VERSION
         from easyml.utils.labels import labels_in_code_order
 
         return {
+            "config_version": CONFIG_VERSION,
+            "easyml_version": __version__,
             "task": self.task,
+            "original_dataset_name": self.original_dataset_name,
+            "parent_run_id": self.parent_run_id,
+            "imputation": self.imputation,
             "name": self.name,
             "text_column": self.text_column,
             "target_column": self.target_column,

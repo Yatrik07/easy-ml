@@ -282,8 +282,14 @@ db_runs_columns_config = [
     "timestamp TEXT",
     "task TEXT",
     "dataset_name TEXT",
-    "metrics_json TEXT"
+    "metrics_json TEXT",
+    # Added in 0.6.0; older databases get them through the migration in create_database_table.
+    "parent_run_id INTEGER",  # the run this one was retrained from
+    "origin TEXT",            # NULL (trained here), "retrain" or "import"
 ]
+
+# Bumped when config_json.json gains keys that later code relies on (retrain, export).
+CONFIG_VERSION = 2
 
 # ---------------------------------------- Request Body ----------------------------------------------
 
@@ -333,14 +339,23 @@ class ML_RequestBody(BaseModel):
     run_id: Optional[int] = None
     original_dataset_name: Optional[str] = None
     target_dtype: Optional[str] = None
+    parent_run_id: Optional[int] = None
+    requested_categorical_columns: Optional[List[str]] = Field(default_factory=list)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def jsonify(self):
+        from easyml import __version__
         from easyml.utils.labels import labels_in_code_order
 
         to_dump = dict()
+        to_dump["config_version"] = CONFIG_VERSION
+        to_dump["easyml_version"] = __version__
         to_dump['task'] = self.task
+        to_dump["name"] = self.name
+        to_dump["original_dataset_name"] = self.original_dataset_name
+        to_dump["parent_run_id"] = self.parent_run_id
+        to_dump["requested_categorical_columns"] = self.requested_categorical_columns
         to_dump['dataset_path'] = self.dataset_path
         to_dump['target_column'] = self.target_column
         to_dump["preprocessing"] = self.preprocessing

@@ -1,6 +1,5 @@
 import json
 import os
-import re
 import shutil
 import tempfile
 import uuid
@@ -15,6 +14,7 @@ from easyml.utils.cancellation import active_jobs, register_job, reset_current_j
 from easyml.utils.database_operations import RunNotFoundError, folder_has_run
 from easyml.utils.logger import write_log
 from easyml.utils.socket_emitter import emit_progress
+from easyml.utils.utils import clean_display_filename, sanitize_run_name  # noqa: F401 (re-exported)
 
 TEMP_UPLOADS_DIR = os.path.join(tempfile.gettempdir(), "easy-ml", "uploads")
 
@@ -64,12 +64,6 @@ def resolve_data_file(path):
     if not os.path.isfile(path):
         raise FileNotFoundError("The uploaded dataset no longer exists. Please upload it again.")
     return path
-
-
-def sanitize_run_name(name):
-    """Keep run names safe to use as a folder name on every OS."""
-    cleaned = re.sub(r"[^A-Za-z0-9 _.-]+", "_", str(name or "")).strip(" ._")
-    return cleaned[:80] or "run"
 
 
 def create_run_folder(name, timestamp_format="%Y-%m-%d %H-%M-%S"):
@@ -128,18 +122,6 @@ def save_dataframe_request(file_prefix="data"):
         return pd.read_csv(unique_save_path), unique_save_path
 
     raise ValueError("Invalid request: must include either a file upload or a JSON body with 'path'.")
-
-
-def clean_display_filename(name):
-    """
-    The user's own file name, safe to store and display: the last path component only
-    (Windows or POSIX separators), no control characters, at most 120 characters.
-    """
-    if not isinstance(name, str):
-        return None
-    base = re.split(r"[\\/]", name)[-1]
-    base = re.sub(r"[\x00-\x1f\x7f]", "", base).strip()
-    return base[:120] or None
 
 
 def uploaded_original_filename():

@@ -2,6 +2,7 @@ from flask.json.provider import DefaultJSONProvider
 import numpy as np
 import json
 import math
+import re
 
 
 def convert_numpy(obj):
@@ -59,3 +60,21 @@ class NumpyJSONProvider(DefaultJSONProvider):
             return _default(obj)
         except TypeError:
             return DefaultJSONProvider.default(obj)
+
+
+def sanitize_run_name(name):
+    """Keep run names safe to use as a folder name on every OS."""
+    cleaned = re.sub(r"[^A-Za-z0-9 _.-]+", "_", str(name or "")).strip(" ._")
+    return cleaned[:80] or "run"
+
+
+def clean_display_filename(name):
+    """
+    The user's own file name, safe to store and display: the last path component only
+    (Windows or POSIX separators), no control characters, at most 120 characters.
+    """
+    if not isinstance(name, str):
+        return None
+    base = re.split(r"[\\/]", name)[-1]
+    base = re.sub(r"[\x00-\x1f\x7f]", "", base).strip()
+    return base[:120] or None

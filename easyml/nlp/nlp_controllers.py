@@ -131,7 +131,7 @@ class NLPTextClassificationController:
                  embedding_model="all-MiniLM-L6-v2", embedding_batch_size=32,
                  embedding_max_length=256,
                  models=None, hyper_parameter_tuning=0, imputation=True,
-                 path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, **kwargs):
+                 path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, parent_run_id=None, **kwargs):
         """
         Initialize the NLP text classification controller.
 
@@ -193,6 +193,7 @@ class NLPTextClassificationController:
             imputation=imputation,
             path_to_save=path_to_save,
             original_dataset_name=original_dataset_name,
+            parent_run_id=parent_run_id,
         )
 
     @staticmethod
@@ -234,6 +235,8 @@ class NLPTextClassificationController:
                 task=self.request_body.task,
                 dataset_name=self.request_body.original_dataset_name or os.path.basename(self.request_body.dataset_path or ""),
                 metrics_json=json.dumps(self.request_body.performance, cls=NumpyEncoder),
+                parent_run_id=self.request_body.parent_run_id,
+                origin="retrain" if self.request_body.parent_run_id else None,
             )
             emit_progress("💾 Results saved to database", pct=95)
 

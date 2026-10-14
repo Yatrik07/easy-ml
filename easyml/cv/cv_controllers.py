@@ -69,6 +69,8 @@ class CVController:
                 task=self.request_body.task,
                 dataset_name=dataset_name,
                 metrics_json=json.dumps(performance_dict, cls=NumpyEncoder),
+                parent_run_id=self.request_body.parent_run_id,
+                origin="retrain" if self.request_body.parent_run_id else None,
             )
 
             pipeline_summary = {
@@ -151,22 +153,44 @@ class CVController:
 
     def _create_run_folder(self):
         import re
+        import uuid
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H-%M-%S")
         safe_name = re.sub(r"[^A-Za-z0-9 _.-]+", "_", self.request_body.name).strip(" ._") or "cv_run"
-        self.request_body.path_to_save = os.path.join(RUNS_DIR, f"{safe_name}_{timestamp}")
+        # The suffix keeps two runs started in the same second apart.
+        self.request_body.path_to_save = os.path.join(RUNS_DIR, f"{safe_name}_{timestamp}_{uuid.uuid4().hex[:4]}")
         os.makedirs(self.request_body.path_to_save, exist_ok=True)
         self._created_folder = self.request_body.path_to_save
         write_log(f"Created run folder: {self.request_body.path_to_save}", "info", os.path.basename(__file__))
         
     def _save_config(self):
-        config_path = os.path.join(self.request_body.path_to_save, "config_json.json")
+        from easyml import __version__
+        from easyml.config.GLOBAL_VARS import CONFIG_VERSION
+
+        body = self.request_body
+        config_path = os.path.join(body.path_to_save, "config_json.json")
         conf = {
-            "task": self.request_body.task,
-            "classes": self.request_body.classes,
-            "num_classes": self.request_body.num_classes,
-            "image_size": self.request_body.image_size,
-            "models": self.request_body.models,
-            "custom_layers": getattr(self.request_body, 'custom_layers', None)
+            "config_version": CONFIG_VERSION,
+            "easyml_version": __version__,
+            "task": body.task,
+            "name": body.name,
+            "dataset_path": body.dataset_path,
+            "classes": body.classes,
+            "num_classes": body.num_classes,
+            "image_size": list(body.image_size),
+            "models": body.models,
+            "custom_layers": getattr(body, 'custom_layers', None),
+            # Training settings, so the run can be retrained with the same recipe.
+            "batch_size": body.batch_size,
+            "validation_split": body.validation_split,
+            "test_split": body.test_split,
+            "augment": body.augment,
+            "epochs": body.epochs,
+            "learning_rate": body.learning_rate,
+            "early_stopping_patience": body.early_stopping_patience,
+            "reduce_lr_patience": body.reduce_lr_patience,
+            "reduce_lr_factor": body.reduce_lr_factor,
+            "use_gpu": body.use_gpu,
+            "parent_run_id": body.parent_run_id,
         }
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(conf, f, indent=4)

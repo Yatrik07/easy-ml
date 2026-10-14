@@ -39,9 +39,25 @@ def create_database_table(table_name):
     columns_definition = ', '.join(_TABLE_COLUMNS[table_name])
     with closing(_connect(table_name)) as conn:
         conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name}({columns_definition})")
+        _add_missing_columns(conn, table_name)
         conn.commit()
 
     write_log(f"Created / Connected {table_name} table successfully!", "info", os.path.basename(__file__))
+
+
+def _add_missing_columns(conn, table_name):
+    """Bring a database created by an older version up to the current column list."""
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")}
+    for definition in _TABLE_COLUMNS[table_name]:
+        name = definition.split()[0]
+        if name in existing:
+            continue
+        try:
+            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {definition}")
+            write_log(f"Added column {name} to {table_name}", "info", os.path.basename(__file__))
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():  # another process migrated first
+                raise
 
 
 def enter_record_to_table(table_name, **values):
