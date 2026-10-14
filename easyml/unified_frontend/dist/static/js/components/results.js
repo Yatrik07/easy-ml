@@ -71,7 +71,7 @@ export const ConfusionMatrix = {
       const base = isDiagonal ? 'var(--success)' : 'var(--danger)';
       return {
         background: value ? 'color-mix(in srgb, ' + base + ' ' + Math.max(pct, 8) + '%, transparent)' : 'var(--surface-2)',
-        color: pct > 55 ? '#ffffff' : 'var(--text)',
+        color: pct > 55 ? 'var(--on-color)' : 'var(--text)',
       };
     }
     return { matrix, labels, cellStyle };
@@ -92,7 +92,7 @@ export const ConfusionMatrix = {
 };
 
 export const ModelDetail = {
-  props: { entry: Object, task: String },
+  props: { entry: Object, task: String, runId: [Number, String], modelKey: String },
   setup(props) {
     const report = computed(() => {
       const r = (props.entry && props.entry.test_metrics && props.entry.test_metrics.classification_report) || {};
@@ -131,7 +131,8 @@ export const ModelDetail = {
           </table>
         </div>
       </div>
-    </div>`,
+    </div>
+    <ModelCharts v-if="runId && modelKey" :run-id="runId" :model-key="modelKey" class="detail-charts" />`,
 };
 
 export const ResultsBoard = {
@@ -139,6 +140,7 @@ export const ResultsBoard = {
     task: String,
     performance: { type: Object, default: () => ({}) },
     summary: Object,
+    runId: [Number, String],
   },
   emits: ['predict'],
   setup(props) {
@@ -194,7 +196,7 @@ export const ResultsBoard = {
                 </tr>
                 <tr v-if="expanded === row.key" class="detail-row">
                   <td :colspan="5 + (showF1 ? 1 : 0) + (isRegression ? 2 : 0)">
-                    <ModelDetail :entry="row.entry" :task="task" />
+                    <ModelDetail :entry="row.entry" :task="task" :run-id="runId" :model-key="row.key" />
                   </td>
                 </tr>
               </template>

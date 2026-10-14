@@ -9,6 +9,7 @@ import { CodeBlock, CodeTabs, CopyField } from './components/code.js';
 import { ClassDistribution, ConfusionMatrix, ModelDetail, PipelineSummary, ResultsBoard } from './components/results.js';
 import { AppSidebar, ThemeToggle, TopBar } from './components/shell.js';
 import { CnnBuilder, FolderPicker } from './components/images.js';
+import { ImportanceChart, ModelCharts, PrChart, ResidualChart, RocChart, ScatterChart, TopTerms } from './components/charts.js';
 
 const app = createApp(App);
 
@@ -19,6 +20,7 @@ const components = {
   PipelineSummary, ConfusionMatrix, ModelDetail, ResultsBoard, ClassDistribution,
   AppSidebar, TopBar, ThemeToggle,
   FolderPicker, CnnBuilder,
+  ModelCharts, RocChart, PrChart, ScatterChart, ResidualChart, ImportanceChart, TopTerms,
 };
 for (const [name, component] of Object.entries(components)) app.component(name, component);
 

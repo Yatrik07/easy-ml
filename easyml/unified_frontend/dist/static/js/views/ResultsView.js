@@ -24,6 +24,6 @@ export default {
       <div v-if="!Object.keys(performance).length" class="card">
         <EmptyState icon="insights" title="No results yet" text="Train a model to see its results here." />
       </div>
-      <ResultsBoard v-else :task="training.task" :performance="performance" :summary="result.pipeline_summary" />
+      <ResultsBoard v-else :task="training.task" :performance="performance" :summary="result.pipeline_summary" :run-id="result.run_id" />
     </div>`,
 };

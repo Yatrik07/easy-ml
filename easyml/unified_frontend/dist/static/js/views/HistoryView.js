@@ -129,7 +129,7 @@ export default {
           </div>
         </template>
         <div v-if="runs.detailLoading" class="row muted"><Spinner /> Loading run…</div>
-        <ResultsBoard v-else-if="detail && detail.metrics" :task="detail.task" :performance="detail.metrics">
+        <ResultsBoard v-else-if="detail && detail.metrics" :task="detail.task" :performance="detail.metrics" :run-id="detail.id">
           <template #actions>
             <button class="btn btn-primary btn-sm" @click="openInference(detail.id); closeRunDetail()"><Icon name="bolt" />Predict</button>
           </template>
