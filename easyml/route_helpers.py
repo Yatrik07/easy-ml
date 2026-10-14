@@ -130,6 +130,27 @@ def save_dataframe_request(file_prefix="data"):
     raise ValueError("Invalid request: must include either a file upload or a JSON body with 'path'.")
 
 
+def clean_display_filename(name):
+    """
+    The user's own file name, safe to store and display: the last path component only
+    (Windows or POSIX separators), no control characters, at most 120 characters.
+    """
+    if not isinstance(name, str):
+        return None
+    base = re.split(r"[\\/]", name)[-1]
+    base = re.sub(r"[\x00-\x1f\x7f]", "", base).strip()
+    return base[:120] or None
+
+
+def uploaded_original_filename():
+    """Original file name of the dataset in the current /load_data request."""
+    if "file" in request.files:
+        return clean_display_filename(request.files["file"].filename)
+    if request.is_json and isinstance(request.json, dict):
+        return clean_display_filename(request.json.get("path"))
+    return None
+
+
 def load_class_distribution(dataset_path, target_column):
     df = pd.read_csv(resolve_data_file(dataset_path))
     if target_column not in df.columns:

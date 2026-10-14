@@ -31,6 +31,7 @@ def get_capabilities():
         ui2back_mappings_regression_models,
     )
     from easyml.nlp.nlp_config import AVAILABLE_NLP_MODELS
+    from easyml.utils.run_summary import MODEL_LABELS, TASK_LABELS
 
     cv_available = has_module("torch") and has_module("torchvision") and has_module("PIL")
     spacy_available = has_module("spacy")
@@ -56,6 +57,7 @@ def get_capabilities():
             "NLPTextClassification": list(AVAILABLE_NLP_MODELS.keys()),
             "ImageClassification": cv_models,
         },
+        "labels": {"tasks": dict(TASK_LABELS), "models": dict(MODEL_LABELS)},
         "install_hints": {
             "cv": INSTALL_HINTS["cv"],
             "embeddings": INSTALL_HINTS["nlp"],

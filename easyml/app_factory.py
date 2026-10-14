@@ -16,6 +16,10 @@ from easyml.utils.utils import NumpyJSONProvider
 
 FRONTEND_DIR = os.path.join(PACKAGE_ROOT, "unified_frontend", "dist")
 mimetypes.add_type("font/woff2", ".woff2")
+# Windows can map .js to text/plain in the registry; browsers refuse to run ES modules served that way.
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 

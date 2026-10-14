@@ -6,6 +6,7 @@ from easyml.capabilities import get_capabilities
 from easyml.nlp.nlp_config import AVAILABLE_NLP_MODELS
 from easyml.nlp.nlp_inference import NLPInferenceController
 from easyml.route_helpers import (
+    clean_display_filename,
     create_run_folder,
     error_response,
     optional_import_error_response,
@@ -13,6 +14,7 @@ from easyml.route_helpers import (
     resolve_data_file,
     save_dataframe_request,
     start_training_job,
+    uploaded_original_filename,
 )
 from easyml.trainer import MLTrainer
 from easyml.utils.data_loader import get_data_info
@@ -27,6 +29,7 @@ def nlp_load_data():
         data, saved_path = save_dataframe_request("data_nlp")
         data_info = get_data_info(data, dataset_path=saved_path)
         data_info["saved_path"] = saved_path
+        data_info["original_filename"] = uploaded_original_filename()
         return jsonify(data_info)
     except Exception as exc:
         write_log(f"Failed to load NLP dataset: {exc}", "error", os.path.basename(__file__))
@@ -98,6 +101,7 @@ def nlp_predict():
             path_to_save=path_to_save,
             timestamp=timestamp,
             imbalance_handling=data.get("imbalance_handling", "none"),
+            original_dataset_name=clean_display_filename(data.get("original_filename")),
         )
     except Exception as exc:
         remove_orphan_run_folder(path_to_save)

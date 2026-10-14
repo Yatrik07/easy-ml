@@ -4,7 +4,7 @@ import threading
 
 from flask import Blueprint, jsonify
 
-from easyml import __version__
+from easyml import __version__, project_info
 from easyml.capabilities import get_capabilities
 from easyml.config.paths import DATA_DIR, DB_DIR, EDA_DIR, LOGS_DIR, RUNS_DIR, UPLOADS_DIR
 from easyml.utils.database_operations import create_database_table
@@ -82,6 +82,8 @@ def settings_device():
             "cuda_device_name": cuda_name,
             "torch_version": torch_version,
             "device": "cuda" if cuda_available else "cpu",
+            "cuda_install_hint": project_info.CUDA_INSTALL_HINT,
+            "help_url": project_info.CUDA_HELP_URL,
         }
     )
 
@@ -90,15 +92,15 @@ def settings_device():
 def settings_credits():
     return jsonify(
         {
-            "project": "Easy-ML Studio",
+            "project": project_info.PROJECT_NAME,
             "version": __version__,
-            "contact_email": "contact.easyml@gmail.com",
-            "developers": [
-                {"name": "Yatrikkumar Shah", "email": "yatriksshah@gmail.com", "linkedin": "https://www.linkedin.com/in/yatrikkumar-shah/"},
-                {"name": "Pawan Kumar J", "email": "pawanjain72002@gmail.com", "linkedin": "https://www.linkedin.com/in/pawankumarj15/"},
-                {"name": "Dhruv Jain", "email": "djamitjn@gmail.com", "linkedin": "https://www.linkedin.com/in/dhruv-jain-3b1539212/"},
-                {"name": "Esha Mishra", "email": "emish8cool@gmail.com", "linkedin": "https://www.linkedin.com/in/eshamishra28/"},
-            ],
+            "summary": project_info.SUMMARY,
+            "license": project_info.LICENSE,
+            "contact_email": project_info.CONTACT_EMAIL,
+            "links": project_info.visible_links(),
+            "show_repo_links": project_info.REPO_PUBLIC,
+            "developers": project_info.DEVELOPERS,
+            "third_party": project_info.THIRD_PARTY,
         }
     )
 

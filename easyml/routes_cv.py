@@ -24,6 +24,14 @@ def _cv_unavailable():
     return optional_import_error_response("Computer Vision", CV_INSTALL_HINT)
 
 
+def _count_subfolders(path):
+    """Number of class folders in an ImageFolder-style dataset."""
+    try:
+        return sum(1 for entry in os.scandir(path) if entry.is_dir())
+    except OSError:
+        return 0
+
+
 @cv_bp.route("/cv/list_datasets", methods=["GET"])
 def cv_list_datasets():
     try:
@@ -35,14 +43,15 @@ def cv_list_datasets():
             for directory in sorted(os.listdir(data_dir)):
                 full_path = os.path.join(data_dir, directory)
                 if os.path.isdir(full_path) and directory not in exempt:
-                    folders.append({"name": directory, "path": full_path})
+                    folders.append({"name": directory, "path": full_path, "num_classes": _count_subfolders(full_path)})
 
         uploads_dir = os.path.join(data_dir, "uploads")
         if os.path.exists(uploads_dir):
             for directory in sorted(os.listdir(uploads_dir)):
                 full_path = os.path.join(uploads_dir, directory)
                 if os.path.isdir(full_path):
-                    folders.append({"name": f"uploads/{directory}", "path": full_path})
+                    folders.append({"name": f"uploads/{directory}", "path": full_path,
+                                    "num_classes": _count_subfolders(full_path)})
 
         return jsonify({"folders": folders})
     except Exception as exc:

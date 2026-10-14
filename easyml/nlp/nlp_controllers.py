@@ -53,7 +53,8 @@ def nlp_data_loader(request_body: NLP_RequestBody):
             raise FileNotFoundError(f"Dataset '{original_path}' was not found. Please upload it again.")
         shutil.copyfile(original_path, run_data_path)
 
-        request_body.original_dataset_name = os.path.basename(original_path)
+        # Keep the user's own file name when the caller provided it (uploads are stored under internal names).
+        request_body.original_dataset_name = request_body.original_dataset_name or os.path.basename(original_path)
         request_body.dataset_path = run_data_path
 
         # Load data
@@ -129,7 +130,7 @@ class NLPTextClassificationController:
                  embedding_model="all-MiniLM-L6-v2", embedding_batch_size=32,
                  embedding_max_length=256,
                  models=None, hyper_parameter_tuning=0, imputation=True,
-                 path_to_save=None, task=None, imbalance_handling="none", **kwargs):
+                 path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, **kwargs):
         """
         Initialize the NLP text classification controller.
 
@@ -190,6 +191,7 @@ class NLPTextClassificationController:
             imbalance_handling=imbalance_handling,
             imputation=imputation,
             path_to_save=path_to_save,
+            original_dataset_name=original_dataset_name,
         )
 
     @staticmethod
@@ -236,7 +238,7 @@ class NLPTextClassificationController:
 
             pipeline_summary = {
                 "dataset": {
-                    "name": getattr(self.request_body, 'original_dataset_name', os.path.basename(self.request_body.dataset_path or '')),
+                    "name": self.request_body.original_dataset_name or os.path.basename(self.request_body.dataset_path or ''),
                     "rows": len(self.request_body.df) if self.request_body.df is not None else 0,
                     "cols": len(self.request_body.df.columns) if self.request_body.df is not None else 0,
                 },

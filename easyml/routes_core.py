@@ -13,6 +13,7 @@ from easyml.capabilities import get_capabilities
 from easyml.core.artifacts import validate_model_name
 from easyml.core.inference import MLInferenceController
 from easyml.route_helpers import (
+    clean_display_filename,
     create_run_folder,
     error_response,
     load_class_distribution,
@@ -22,6 +23,7 @@ from easyml.route_helpers import (
     resolve_data_file,
     save_dataframe_request,
     start_training_job,
+    uploaded_original_filename,
 )
 from easyml.trainer import MLTrainer
 from easyml.utils.cancellation import get_job
@@ -32,6 +34,7 @@ from easyml.utils.database_operations import (
     get_record_by_id,
 )
 from easyml.utils.logger import write_log
+from easyml.utils.run_summary import parse_metrics, primary_metric, rank_models, run_detail, summarize_run
 
 core_bp = Blueprint("easyml_core", __name__)
 
@@ -42,6 +45,7 @@ def load_data():
         data, saved_path = save_dataframe_request("data")
         data_info = get_data_info(data, dataset_path=saved_path)
         data_info["saved_path"] = saved_path
+        data_info["original_filename"] = uploaded_original_filename()
         return jsonify(data_info)
     except Exception as exc:
         write_log(f"Failed to load dataset: {exc}", "error", os.path.basename(__file__))
@@ -151,6 +155,7 @@ def ml_predict():
             ignore_columns=data.get("ignore_columns", []),
             timestamp=timestamp,
             imbalance_handling=data.get("imbalance_handling", "none"),
+            original_dataset_name=clean_display_filename(data.get("original_filename")),
         )
     except Exception as exc:
         remove_orphan_run_folder(path_to_save)
@@ -164,7 +169,10 @@ def ml_predict():
 def manage_runs():
     if request.method == "GET":
         result = get_data_from_database()
-        return jsonify(result), result.get("status_code", 200)
+        if result.get("status_code", 200) != 200:
+            return jsonify(result), result["status_code"]
+        rows = sorted(result.get("data", []), key=lambda r: r.get("id") or 0, reverse=True)
+        return jsonify({"status_code": 200, "data": [summarize_run(row) for row in rows]}), 200
 
     data = request.get_json(silent=True) or {}
     run_id = data.get("run_id")
@@ -175,6 +183,14 @@ def manage_runs():
     if result.get("status_code") == 200:
         return jsonify({"message": f"Run with ID {run_id} deleted successfully."}), 200
     return jsonify({"error": f"Run with ID {run_id} not found or could not be deleted."}), result.get("status_code", 500)
+
+
+@core_bp.route("/runs/<int:run_id>", methods=["GET"])
+def run_details(run_id):
+    try:
+        return jsonify(run_detail(get_record_by_id(record_id=run_id))), 200
+    except Exception as exc:
+        return error_response(exc)
 
 
 def _list_run_models(result, data_path):
@@ -226,12 +242,23 @@ def get_run_data():
     except Exception as exc:
         write_log(f"Error reading config files for run {run_id}: {str(exc)}", "error", os.path.basename(__file__))
 
+    ranked = rank_models(result.get("task"), parse_metrics(result.get("metrics_json")))
+    model_names = _list_run_models(result, data_path)
+    order = {m["key"]: i for i, m in enumerate(ranked)}
+    model_names.sort(key=lambda name: order.get(name, len(order)))
+    summary = summarize_run(result)
+
     return jsonify({
         "columns": column_data,
         "column_details": column_details,
         "target_column": target,
         "task": result.get("task"),
-        "models": _list_run_models(result, data_path),
+        "run_name": result.get("run_name"),
+        "dataset_name": summary["dataset_name"],
+        "models": model_names,
+        "best_model": summary["best_model"],
+        "metric": primary_metric(result.get("task")),
+        "model_scores": {m["key"]: m["test_score"] for m in ranked},
     }), 200
 
 

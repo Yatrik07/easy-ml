@@ -1,7 +1,6 @@
 """End-to-end flows: train through MLTrainer, then use the HTTP API for inference, explain and export."""
 
 import io
-import json
 import os
 import zipfile
 
@@ -153,8 +152,7 @@ def test_cv_flow(client, data_dir):
     assert sum(sizes) == 12 and all(sizes)
     assert sum(map(sum, test_metrics["confusion_matrix"])) == sizes[2]
     assert sum(map(sum, perf["train_metrics"]["confusion_matrix"])) == sizes[0]
-    stored = client.get("/runs").get_json()["data"]
-    stored_metrics = json.loads(next(r for r in stored if r["id"] == result["run_id"])["metrics_json"])
+    stored_metrics = client.get(f"/runs/{result['run_id']}").get_json()["metrics"]
     assert stored_metrics["SimpleCNN"]["test_metrics"]["classification_report"]["red"]["support"] >= 1
 
     import base64

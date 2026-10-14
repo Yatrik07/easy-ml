@@ -101,7 +101,8 @@ def move_to_runs(request_body):
         shutil.copyfile(original_path, run_specific_path)
         write_log(f"successfully copied dataset to {run_specific_path}", "info", os.path.basename(__file__))
 
-        request_body.original_dataset_name = os.path.basename(original_path)
+        # Keep the user's own file name when the caller provided it (uploads are stored under internal names).
+        request_body.original_dataset_name = request_body.original_dataset_name or os.path.basename(original_path)
         request_body.dataset_path = run_specific_path
     except Exception as e:
         write_log(f"error copying dataset: {str(e)}", "error", os.path.basename(__file__))
