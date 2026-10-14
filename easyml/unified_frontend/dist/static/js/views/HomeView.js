@@ -1,4 +1,5 @@
-import { computed, onMounted } from '../lib/vue.js';
+import { computed, onMounted, ref } from '../lib/vue.js';
+import { getJSON } from '../lib/api.js';
 import { formatScore, relativeTime } from '../lib/format.js';
 import { featureAvailable, installHint, session } from '../store/session.js';
 import { navigate, toastError, confirmAction } from '../store/ui.js';
@@ -21,10 +22,56 @@ const UPCOMING = [
   { icon: 'psychology', title: 'LLM fine-tuning', text: 'Fine-tune small language models on your own text.', badge: 'Exploring' },
 ];
 
+const SDK_POINTS = [
+  'Load any run and predict on a dict, a DataFrame, a CSV or a folder of images',
+  'Train tabular and text models from a script',
+  'Batch predictions from the terminal, no code needed',
+];
+
+// Code lines with their comments lined up in one column.
+function commented(lines) {
+  const width = Math.max(...lines.filter(([, note]) => note).map(([code]) => code.length)) + 2;
+  return lines.map(([code, note]) => (note ? code.padEnd(width) + '# ' + note : code)).join('\n');
+}
+
+function sdkTabs(runId) {
+  const id = runId || 1;
+  return [
+    { id: 'predict', label: 'Predict', code: commented([
+      ['import easyml'],
+      [''],
+      ['model = easyml.load_model(' + id + ')', 'run #' + id + ', its best model'],
+      ['model.predict("new_data.csv")', 'one prediction per row'],
+      ['model.predict({"age": 45, "city": "NY"})', 'or a single row'],
+    ]) },
+    { id: 'train', label: 'Train', code: commented([
+      ['from easyml import MLTrainer'],
+      [''],
+      ['run = MLTrainer('],
+      ['    task="MLClassification",', 'or "MLRegression", "NLPTextClassification"'],
+      ['    name="churn",'],
+      ['    dataset_path="churn.csv",'],
+      ['    target_column="churned",'],
+      ['    models=["logistic_regression", "random_forest"],'],
+      [').run()'],
+      ['print(run.run_id, run.performance)'],
+    ]) },
+    { id: 'cli', label: 'Command line', code: commented([
+      ['easy-ml runs', 'list runs and their best model'],
+      ['easy-ml predict ' + id + ' new_data.csv -o out.csv', 'adds a Prediction column'],
+    ]) },
+  ];
+}
+
 export default {
   setup() {
-    onMounted(() => { if (!runs.loaded) loadRuns(); });
+    const guide = ref(null);
+    onMounted(async () => {
+      if (!runs.loaded) loadRuns();
+      try { guide.value = (await getJSON('/settings/credits')).python_guide; } catch (e) { /* the link is optional */ }
+    });
     const recent = computed(() => runs.list.slice(0, 4));
+    const sdk = computed(() => sdkTabs(runs.list.length ? runs.list[0].id : null));
 
     async function start(task) {
       if (task.feature && !featureAvailable(task.feature)) {
@@ -55,7 +102,7 @@ export default {
     }
 
     return {
-      TASKS, UPCOMING, session, recent, runs, wizard, start, openRun, scrollToTasks, featureAvailable, installHint,
+      TASKS, UPCOMING, SDK_POINTS, sdk, guide, session, recent, runs, wizard, start, openRun, scrollToTasks, featureAvailable, installHint,
       navigate, formatScore, relativeTime, openInference,
     };
   },
@@ -103,6 +150,25 @@ export default {
               <span v-else v-for="tag in task.tags" :key="tag" class="badge">{{ tag }}</span>
             </div>
           </button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h3>Use it from Python</h3>
+            <div class="card-hint">Easy-ML Studio is also a Python library. Every run you train here can be used in your own code.</div>
+          </div>
+          <a v-if="guide" class="btn btn-secondary btn-sm" :href="guide.url" target="_blank" rel="noopener noreferrer">
+            <Icon name="menu_book" /><span class="btn-label">{{ guide.label }}</span><Icon name="open_in_new" />
+          </a>
+        </div>
+        <div class="card-body sdk-glimpse">
+          <div class="hero-points">
+            <div v-for="point in SDK_POINTS" :key="point"><Icon name="check_circle" />{{ point }}</div>
+            <p class="subtle text-xs">{{ runs.list.length ? 'The snippets use your latest run, #' + runs.list[0].id + '.' : 'Train a run first, then use its number here.' }} A run's prediction page shows them pre-filled with its real column names.</p>
+          </div>
+          <CodeTabs :tabs="sdk" />
         </div>
       </section>
 

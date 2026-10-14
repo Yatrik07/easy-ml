@@ -5,6 +5,8 @@ These checks catch that (and accidental CDN links) without a browser.
 
 import os
 import re
+import shutil
+import subprocess
 
 import pytest
 
@@ -29,6 +31,15 @@ def _own_files(root, ext):
         for name in files:
             if name.endswith(ext):
                 yield os.path.join(folder, name)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs Node.js for the syntax check")
+def test_modules_have_valid_syntax():
+    # A syntax error in any module stops the whole app from mounting.
+    for path in _own_files(JS_ROOT, ".js"):
+        result = subprocess.run(["node", "--input-type=module", "--check"], input=_read(path),
+                                capture_output=True, text=True, encoding="utf-8")
+        assert result.returncode == 0, f"{os.path.relpath(path, JS_ROOT)}: {result.stderr.strip()[:500]}"
 
 
 def test_index_references_existing_static_files():

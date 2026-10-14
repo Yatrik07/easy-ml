@@ -46,6 +46,9 @@ export default {
           <a v-for="link in credits.links" :key="link.id" class="btn btn-secondary" :href="link.url" target="_blank" rel="noopener noreferrer">
             <Icon :name="LINK_ICONS[link.id] || 'open_in_new'" />{{ link.label }}
           </a>
+          <a v-if="credits.python_guide" class="btn btn-secondary" :href="credits.python_guide.url" target="_blank" rel="noopener noreferrer">
+            <Icon name="terminal" />{{ credits.python_guide.label }}
+          </a>
           <a class="btn btn-ghost" :href="'mailto:' + credits.contact_email"><Icon name="mail_outline" />Contact the team</a>
         </div>
       </section>

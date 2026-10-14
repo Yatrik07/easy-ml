@@ -16,6 +16,8 @@
 .hero-points div { display: flex; gap: var(--space-2); align-items: center; }
 .hero-points .icon { color: var(--success); font-size: 18px; }
 
+.sdk-glimpse { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-5); align-items: start; }
+
 .section-title { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .section-title h2 { font-size: var(--text-md); }
 .section-title p { color: var(--text-muted); font-size: var(--text-sm); }
@@ -139,5 +141,5 @@
 .preview-table td { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 960px) {
-  .hero { grid-template-columns: minmax(0, 1fr); }
+  .hero, .sdk-glimpse { grid-template-columns: minmax(0, 1fr); }
 }

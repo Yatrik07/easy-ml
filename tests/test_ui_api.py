@@ -118,11 +118,13 @@ def test_credits_hide_repo_links_and_personal_emails(client, monkeypatch):
     assert body["license"] == "Apache-2.0"
     assert [link["id"] for link in body["links"]] == ["pypi"]
     assert all("email" not in dev for dev in body["developers"])
+    assert body["python_guide"]["url"].startswith("https://pypi.org/")
 
     from easyml import project_info
     monkeypatch.setattr(project_info, "REPO_PUBLIC", True)
-    links = [link["id"] for link in client.get("/settings/credits").get_json()["links"]]
-    assert {"pypi", "github", "issues"} <= set(links)
+    body = client.get("/settings/credits").get_json()
+    assert {"pypi", "github", "issues"} <= {link["id"] for link in body["links"]}
+    assert body["python_guide"]["url"].endswith("/docs/PYTHON_API.md")
 
 
 def test_device_endpoint_has_current_cuda_hint(client):

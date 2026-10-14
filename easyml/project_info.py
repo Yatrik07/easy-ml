@@ -47,6 +47,13 @@ CUDA_INSTALL_HINT = (
 )
 
 
+def python_guide():
+    """Where the "Use it from Python" links point: the full guide once the repo is public, else the PyPI page."""
+    if REPO_PUBLIC:
+        return {"label": "Python guide", "url": f"{REPO_URL}/blob/main/docs/PYTHON_API.md"}
+    return {"label": "Python guide on PyPI", "url": PYPI_URL}
+
+
 def visible_links():
     return [
         {"id": link["id"], "label": link["label"], "url": link["url"]}
