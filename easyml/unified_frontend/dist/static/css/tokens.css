@@ -1,0 +1,117 @@
+/* Design tokens. Light is the default; dark applies when <html data-theme="dark">. */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #ececee;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --overlay: rgba(9, 9, 11, 0.45);
+
+  /* Text */
+  --text: #18181b;
+  --text-muted: #52525b;
+  --text-subtle: #71717a;
+
+  /* Accent */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-fg: #ffffff;
+  --accent-soft: #eff4ff;
+  --accent-soft-strong: #dbe6ff;
+
+  /* Status */
+  --success: #15803d;
+  --success-soft: #ecfdf3;
+  --warning: #b45309;
+  --warning-soft: #fffaeb;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --info: #0369a1;
+  --info-soft: #f0f9ff;
+
+  /* Charts */
+  --chart-1: #2563eb;
+  --chart-2: #16a34a;
+  --chart-3: #dc2626;
+  --chart-4: #d97706;
+  --chart-grid: rgba(24, 24, 27, 0.08);
+
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 8px 24px rgba(16, 24, 40, 0.10);
+
+  /* Type */
+  --font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Space Grotesk", var(--font-sans);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 30px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  --sidebar-width: 240px;
+  --content-width: 1120px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0a0a0b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --surface-3: #232327;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-subtle: #71717a;
+
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent-soft-strong: rgba(59, 130, 246, 0.24);
+
+  --success: #4ade80;
+  --success-soft: rgba(74, 222, 128, 0.10);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.10);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.10);
+  --info: #38bdf8;
+  --info-soft: rgba(56, 189, 248, 0.10);
+
+  --chart-1: #60a5fa;
+  --chart-2: #4ade80;
+  --chart-3: #f87171;
+  --chart-4: #fbbf24;
+  --chart-grid: rgba(244, 244, 245, 0.08);
+
+  --focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+}

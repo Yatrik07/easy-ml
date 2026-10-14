@@ -77,6 +77,7 @@ class CVController:
                     "path": self.request_body.dataset_path,
                     "classes": self.request_body.classes,
                     "num_classes": self.request_body.num_classes,
+                    "num_images": sum(len(loader.dataset) for loader in (loaders.train, loaders.val, loaders.test)),
                 },
                 "preprocessing": {
                     "image_size": list(self.request_body.image_size),
