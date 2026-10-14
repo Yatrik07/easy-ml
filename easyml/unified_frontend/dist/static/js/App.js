@@ -10,6 +10,7 @@ import InferenceView from './views/InferenceView.js';
 import HistoryView from './views/HistoryView.js';
 import SettingsView from './views/SettingsView.js';
 import AboutView from './views/AboutView.js';
+import CompareView from './views/CompareView.js';
 
 const VIEWS = {
   home: HomeView,
@@ -22,6 +23,7 @@ const VIEWS = {
   history: HistoryView,
   settings: SettingsView,
   about: AboutView,
+  compare: CompareView,
 };
 
 export default {

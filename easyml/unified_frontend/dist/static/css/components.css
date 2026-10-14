@@ -205,11 +205,11 @@ button.chip:hover { border-color: var(--border-strong); color: var(--text); }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(8px); }
 
 /* ---------- Modal & drawer ---------- */
-.backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: 80; display: grid; place-items: center; padding: var(--space-4); }
-.modal { width: min(520px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
+.backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: 80; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }
+.modal { width: min(520px, 100%); min-width: 0; max-height: calc(100vh - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border); }
 .modal-body { padding: var(--space-5); overflow-y: auto; }
-.modal-footer { padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: var(--space-2); }
+.modal-footer { padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
 .drawer-backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: 80; }
 .drawer {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 81;

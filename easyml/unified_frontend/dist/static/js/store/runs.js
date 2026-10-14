@@ -9,7 +9,25 @@ export const runs = reactive({
   loading: false,
   detail: null, // full detail of the run open in the drawer
   detailLoading: false,
+  selected: [], // up to two run ids picked for comparison
 });
+
+// Two runs of the same task can be compared.
+export function canSelect(run) {
+  if (runs.selected.includes(run.id)) return true;
+  if (runs.selected.length >= 2) return false;
+  const first = runs.list.find(r => r.id === runs.selected[0]);
+  return !first || first.task === run.task;
+}
+
+export function toggleSelected(run) {
+  if (runs.selected.includes(run.id)) runs.selected = runs.selected.filter(id => id !== run.id);
+  else if (canSelect(run)) runs.selected = runs.selected.concat([run.id]);
+}
+
+export function clearSelected() {
+  runs.selected = [];
+}
 
 export async function loadRuns() {
   runs.loading = true;
@@ -44,6 +62,7 @@ export async function deleteRun(id) {
   try {
     await deleteJSON('/runs', { run_id: id }, 'Could not delete run #' + id);
     runs.list = runs.list.filter(r => r.id !== id);
+    runs.selected = runs.selected.filter(r => r !== id);
     if (runs.detail && runs.detail.id === id) runs.detail = null;
     toastSuccess('Run #' + id + ' deleted.');
   } catch (e) {

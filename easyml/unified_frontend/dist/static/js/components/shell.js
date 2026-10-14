@@ -39,7 +39,9 @@ export const AppSidebar = {
       { view: 'about', label: 'About', icon: 'info' },
     ];
     const stepIndex = computed(() => steps.value.findIndex(s => s.view === ui.view));
-    return { ui, session, wizard, steps, main, footer, navigate, taskLabel, stepIndex, training };
+    // Comparing runs is part of Run history.
+    const isActive = view => ui.view === view || (view === 'history' && ui.view === 'compare');
+    return { ui, session, wizard, steps, main, footer, navigate, taskLabel, stepIndex, training, isActive };
   },
   template: /* html */ `
     <div>
@@ -52,8 +54,8 @@ export const AppSidebar = {
         </div>
 
         <div class="nav-section">
-          <button v-for="item in main" :key="item.view" class="nav-item" :class="{ active: ui.view === item.view }"
-                  @click="navigate(item.view)" :aria-current="ui.view === item.view ? 'page' : null">
+          <button v-for="item in main" :key="item.view" class="nav-item" :class="{ active: isActive(item.view) }"
+                  @click="navigate(item.view)" :aria-current="isActive(item.view) ? 'page' : null">
             <Icon :name="item.icon" /><span>{{ item.label }}</span>
           </button>
           <button class="nav-item" @click="navigate('home')" v-if="!wizard.config.task">

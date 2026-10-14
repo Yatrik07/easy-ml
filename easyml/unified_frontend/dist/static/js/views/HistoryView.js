@@ -1,6 +1,9 @@
 import { computed, onMounted, ref } from '../lib/vue.js';
 import { absoluteTime, formatScore, relativeTime } from '../lib/format.js';
-import { closeRunDetail, deleteRun, loadRuns, openRunDetail, runs } from '../store/runs.js';
+import {
+  canSelect, clearSelected, closeRunDetail, deleteRun, loadRuns, openRunDetail, runs, toggleSelected,
+} from '../store/runs.js';
+import { openCompare } from '../store/compare.js';
 import { openInference } from '../store/inference.js';
 import { openRetrain } from '../store/retrain.js';
 import { confirmAction, navigate } from '../store/ui.js';
@@ -41,12 +44,30 @@ export default {
       if (ok) deleteRun(run.id);
     }
 
+    function compareSelected() {
+      const [first, second] = runs.selected;
+      clearSelected();
+      openCompare(first, second);
+    }
+    function selectTitle(run) {
+      if (canSelect(run)) return 'Select to compare';
+      return runs.selected.length >= 2 ? 'Two runs are already selected' : 'Only runs of the same task can be compared';
+    }
+    const parentInList = computed(() => !!(runs.detail && runs.detail.parent_run_id
+      && runs.list.some(r => r.id === runs.detail.parent_run_id)));
+    function compareWithParent() {
+      const child = runs.detail;
+      closeRunDetail();
+      openCompare(child.parent_run_id, child.id);
+    }
+
     const detail = computed(() => runs.detail);
     const detailTitle = computed(() => (detail.value && detail.value.run_name) || (detail.value ? 'Run #' + detail.value.id : ''));
 
     return {
       FILTERS, query, filter, runs, filtered, remove, detail, detailTitle, openRunDetail, closeRunDetail,
       openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel, openRetrain, importOpen,
+      canSelect, toggleSelected, clearSelected, compareSelected, selectTitle, parentInList, compareWithParent,
     };
   },
   template: /* html */ `
@@ -65,7 +86,12 @@ export default {
           <button v-for="f in FILTERS" :key="f.id" :class="{ active: filter === f.id }" @click="filter = f.id">{{ f.label }}</button>
         </div>
         <span class="spacer"></span>
-        <span class="subtle text-sm">{{ filtered.length }} of {{ runs.list.length }} runs</span>
+        <template v-if="runs.selected.length">
+          <button class="btn btn-ghost btn-sm" @click="clearSelected">Clear</button>
+          <button class="btn btn-primary btn-sm" :disabled="runs.selected.length !== 2" @click="compareSelected">
+            <Icon name="compare_arrows" />Compare ({{ runs.selected.length }}/2)</button>
+        </template>
+        <span v-else class="subtle text-sm">{{ filtered.length }} of {{ runs.list.length }} runs · tick two to compare</span>
       </div>
 
       <div v-if="runs.loading && !runs.loaded" class="card card-body row muted"><Spinner /> Loading runs…</div>
@@ -84,6 +110,7 @@ export default {
         <table class="table">
           <thead>
             <tr>
+              <th class="check-cell"><span class="sr-only">Compare</span></th>
               <th>Run</th>
               <th class="hide-md">Models</th>
               <th>Best score</th>
@@ -92,7 +119,11 @@ export default {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="run in filtered" :key="run.id">
+            <tr v-for="run in filtered" :key="run.id" :class="{ selected: runs.selected.includes(run.id) }">
+              <td class="check-cell">
+                <input type="checkbox" :checked="runs.selected.includes(run.id)" :disabled="!canSelect(run)"
+                       @change="toggleSelected(run)" :aria-label="'Select run #' + run.id + ' to compare'" :title="selectTitle(run)" />
+              </td>
               <td>
                 <div class="run-name">{{ run.run_name }}</div>
                 <div class="run-sub"><span>#{{ run.id }}</span><TaskBadge :task="run.task" />
@@ -142,6 +173,7 @@ export default {
             <div class="row">
               <a class="btn btn-ghost btn-sm" :href="'/runs/' + detail.id + '/export'" download title="Save this run as a .zip to use it on another computer">
                 <Icon name="download" /><span class="btn-label">Download run (.zip)</span></a>
+              <button v-if="parentInList" class="btn btn-ghost btn-sm" @click="compareWithParent"><Icon name="compare_arrows" /><span class="btn-label">Compare with parent</span></button>
               <button class="btn btn-secondary btn-sm" @click="openRetrain(detail.id)"><Icon name="autorenew" />Retrain</button>
               <button class="btn btn-primary btn-sm" @click="openInference(detail.id); closeRunDetail()"><Icon name="bolt" />Predict</button>
             </div>
