@@ -6,6 +6,8 @@
     easy-ml predict 5 "great phone, fast delivery"  # text: prints the label
     easy-ml predict 7 photos/                       # images: one row per image
     easy-ml retrain 5 october.csv --name churn-oct  # same settings as run #5, new data
+    easy-ml export 5 -o churn.zip                   # move a run to another computer...
+    easy-ml import churn.zip                        # ...and load it there
 """
 
 import csv
@@ -182,4 +184,46 @@ def retrain(run_id, data, name=None, models=None, as_json=False, out=None):
         print(f"Note: {warning}", file=sys.stderr)
     print(f"New run #{result.run_id} ({result.run_name}), retrained from run #{result.parent_run_id}:", file=out)
     _print_leaderboard(result.task, result.performance, out)
+    return 0
+
+
+def export_run(run_id, output=None, include_data=True, out=None):
+    _quiet_logs()
+    from easyml.run_archive import export_run as export_archive
+    from easyml.utils.database_operations import RunNotFoundError
+
+    out = out or sys.stdout
+    try:
+        path = export_archive(run_id, output_path=output, include_data=include_data)
+    except RunNotFoundError:
+        print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except (OSError, ValueError) as exc:
+        print(f"Export failed: {exc}", file=sys.stderr)
+        return 1
+    print(path, file=out)
+    return 0
+
+
+def import_run(path, name=None, assume_yes=False, out=None):
+    _quiet_logs()
+    from easyml.run_archive import TRUST_WARNING, import_archive
+
+    out = out or sys.stdout
+    if not assume_yes:
+        print(TRUST_WARNING, file=sys.stderr)
+        if not sys.stdin or not sys.stdin.isatty():
+            print("Add --yes to import without this question.", file=sys.stderr)
+            return 1
+        if input("Import this run? [y/N] ").strip().lower() not in ("y", "yes"):
+            print("Not imported.", file=sys.stderr)
+            return 1
+    try:
+        run_id, notes = import_archive(path, name=name)
+    except (OSError, ValueError) as exc:
+        print(f"Import failed: {exc}", file=sys.stderr)
+        return 1
+    for note in notes:
+        print(f"Note: {note}", file=sys.stderr)
+    print(f"Imported as run #{run_id}. Try: easy-ml predict {run_id} <file>", file=out)
     return 0

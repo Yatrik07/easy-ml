@@ -33,4 +33,18 @@ def retrain(run_id, dataset_path, name=None, models=None):
     return _retrain(run_id, dataset_path, name=name, models=models)
 
 
-__all__ = ["MLTrainer", "load_model", "retrain", "__version__"]
+def export_run(run_id, output_path=None, include_data=True):
+    """Save a run as a .zip archive that :func:`import_run` can load on another computer."""
+    from easyml.run_archive import export_run as _export_run
+
+    return _export_run(run_id, output_path=output_path, include_data=include_data)
+
+
+def import_run(path, name=None, trusted=False):
+    """Import a run archive and return its new run id. Only import archives from people you trust."""
+    from easyml.run_archive import import_run as _import_run
+
+    return _import_run(path, name=name, trusted=trusted)
+
+
+__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "__version__"]

@@ -7,6 +7,7 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml runs                 list trained runs
     easy-ml predict 5 data.csv   predict with run #5 (see `easy-ml predict --help`)
     easy-ml retrain 5 new.csv    train run #5's recipe on new data
+    easy-ml export 5             save run #5 as a .zip; `easy-ml import file.zip` loads it elsewhere
 """
 
 import argparse
@@ -57,6 +58,16 @@ def _build_parser():
     retrain.add_argument("--name", help="Name of the new run (default: '<run name>-retrain').")
     retrain.add_argument("--models", help="Comma-separated model keys to train instead of the run's models.")
     retrain.add_argument("--json", action="store_true", help="Print the result as JSON.")
+
+    export = subcommands.add_parser("export", help="Save a run as a .zip to move it to another computer.")
+    export.add_argument("run_id", type=int, help="Run to export (see `easy-ml runs`).")
+    export.add_argument("-o", "--output", help="Archive path (default: easyml-run-<id>-<name>.zip here).")
+    export.add_argument("--no-data", action="store_true", help="Leave out the training data (data.csv).")
+
+    import_ = subcommands.add_parser("import", help="Load a run archive made by `easy-ml export`.")
+    import_.add_argument("file", help="The .zip archive.")
+    import_.add_argument("--name", help="Name for the imported run (default: its original name).")
+    import_.add_argument("--yes", action="store_true", help="Do not ask for confirmation (only for trusted files).")
     return parser
 
 
@@ -124,6 +135,12 @@ def main(argv=None):
         from easyml.cli import retrain
         models = [m.strip() for m in args.models.split(",") if m.strip()] if args.models else None
         return retrain(args.run_id, args.input, name=args.name, models=models, as_json=args.json)
+    if args.command == "export":
+        from easyml.cli import export_run
+        return export_run(args.run_id, output=args.output, include_data=not args.no_data)
+    if args.command == "import":
+        from easyml.cli import import_run
+        return import_run(args.file, name=args.name, assume_yes=args.yes)
     return run_server(
         host=args.host,
         port=args.port,

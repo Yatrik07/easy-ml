@@ -4,10 +4,12 @@ module) exporting/importing it and its result charts.
 """
 
 import os
+import tempfile
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 from easyml.retraining import IMAGE_TASK, DatasetMismatchError, plan_retrain, run_spec
+from easyml.run_archive import TRUST_WARNING, export_run, import_archive, max_import_bytes
 from easyml.route_helpers import (
     clean_display_filename,
     create_run_folder,
@@ -18,6 +20,7 @@ from easyml.route_helpers import (
 )
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.logger import write_log
+from easyml.utils.utils import sanitize_run_name
 
 runs_bp = Blueprint("easyml_runs", __name__)
 
@@ -75,3 +78,52 @@ def retrain_run(run_id):
         "warnings": plan.warnings,
         "message": "Retraining started",
     }), 202
+
+
+def _remove_quietly(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+@runs_bp.route("/runs/<int:run_id>/export", methods=["GET"])
+def export_run_archive(run_id):
+    include_data = request.args.get("include_data", "1") not in ("0", "false", "no")
+    try:
+        record = get_record_by_id(run_id)
+        handle, temp_path = tempfile.mkstemp(prefix="easyml_run_", suffix=".zip")
+        os.close(handle)
+        export_run(run_id, output_path=temp_path, include_data=include_data)
+    except Exception as exc:
+        return error_response(exc)
+    download_name = f"easyml-run-{run_id}-{sanitize_run_name(record.get('run_name'))}.zip"
+    response = send_file(temp_path, mimetype="application/zip", as_attachment=True, download_name=download_name)
+    response.call_on_close(lambda: _remove_quietly(temp_path))
+    return response
+
+
+@runs_bp.route("/runs/import", methods=["POST"])
+def import_run_archive():
+    if request.content_length and request.content_length > max_import_bytes():
+        return jsonify({"status": "error", "status_code": 413,
+                        "error_message": "The archive is larger than the import limit."}), 413
+    if str(request.form.get("trusted", "")).lower() != "true":
+        return jsonify({"status": "error", "status_code": 400,
+                        "error_message": TRUST_WARNING + " Confirm that you trust this file to import it."}), 400
+    upload = request.files.get("file")
+    if upload is None:
+        return jsonify({"status": "error", "status_code": 400, "error_message": "Choose a run archive (.zip)."}), 400
+
+    handle, temp_path = tempfile.mkstemp(prefix="easyml_import_", suffix=".zip")
+    os.close(handle)
+    try:
+        upload.save(temp_path)
+        run_id, notes = import_archive(temp_path, name=request.form.get("name") or None)
+        record = get_record_by_id(run_id)
+    except Exception as exc:
+        return error_response(exc)
+    finally:
+        _remove_quietly(temp_path)
+    return jsonify({"status": "imported", "run_id": run_id, "run_name": record.get("run_name"),
+                    "task": record.get("task"), "warnings": notes}), 201

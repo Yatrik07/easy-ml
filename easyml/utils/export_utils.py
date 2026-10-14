@@ -165,11 +165,17 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str) -> str
     return "\n".join(lines)
 
 
-def _pinned(dist):
+def installed_version(dist):
+    """Installed version of a distribution, or None."""
     try:
-        return f"{dist}=={metadata.version(dist)}"
+        return metadata.version(dist)
     except metadata.PackageNotFoundError:
-        return dist
+        return None
+
+
+def _pinned(dist):
+    version = installed_version(dist)
+    return f"{dist}=={version}" if version else dist
 
 
 def generate_requirements(model_name: str) -> str:
