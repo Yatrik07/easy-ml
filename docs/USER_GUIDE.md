@@ -337,10 +337,30 @@ Each training run is saved in the SQLite runs database and in a run folder under
 
 Run history helps you:
 
-- compare runs
-- inspect metrics
-- reuse older models
+- inspect metrics and result charts (open a run's details, then select a model)
+- reuse older models for predictions
+- **retrain** a run on new data: the retrain button (or **Retrain** in the details) asks for a new file
+  with the same columns and trains a new run with exactly the same settings. Columns the original run did
+  not use are ignored; missing columns are listed before anything starts. The new run shows
+  "Retrained from #N".
+- **compare** two runs of the same task: tick both and choose **Compare**, or use **Compare with parent**
+  on a retrained run. You see both runs' scores per model and their settings with the differences highlighted.
+- **download** a run as a .zip (**Download run (.zip)** in the details) and **import** it on another
+  computer with **Import run**. Only import files from people you trust.
 - delete runs you no longer need
+
+## Result Charts
+
+Runs trained with Easy-ML 0.6.0 or later save charts for every model. Expand a model in the
+leaderboard (Results page or run details) to see them:
+
+- **ROC curve** and **precision-recall** (classification): how well the model separates each class,
+  with the area under the curve (AUC) and average precision. 0.5 AUC is a coin toss; 1.0 is perfect.
+- **Predicted vs actual** and **errors** (regression): points close to the diagonal are good predictions;
+  the error histogram should be centred on zero.
+- **Feature importance**: which columns the model relies on most. For PCA runs and models such as
+  K-Nearest Neighbors it shows how much the score drops when a column is shuffled.
+- **Top words** (text runs): the words that push a text towards each class.
 
 ## Inference
 
@@ -407,6 +427,12 @@ Yes. Runs are stored in the external data directory unless you manually delete t
 ### Can I move my storage somewhere else?
 
 Yes. Set the `EASYML_DATA_DIR` environment variable before starting the app.
+
+### Can I use a trained model on another computer?
+
+Yes. Download the run as a .zip from its details in Run history (or `easy-ml export <run id>`), then
+use **Import run** in Run history (or `easy-ml import file.zip`) on the other computer. Installing the
+same versions of the libraries avoids differences; the import warns when they differ.
 
 ### Does Easy-ML support GPUs?
 

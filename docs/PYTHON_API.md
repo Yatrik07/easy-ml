@@ -10,6 +10,8 @@ pip install "easy-ml-studio[all]"     # + XGBoost/LightGBM/CatBoost, embeddings,
 
 - [Train a model](#train-a-model)
 - [Use a trained model](#use-a-trained-model)
+- [Retrain on new data](#retrain-on-new-data)
+- [Move runs between computers](#move-runs-between-computers)
 - [Command line](#command-line)
 - [Where runs are stored](#where-runs-are-stored)
 
@@ -115,6 +117,10 @@ predictions, confidences = model.predict_with_confidence("new_customers.csv")
 `confidences` holds the probability of each predicted class, or `None` for regression and for models
 that do not report probabilities (such as `LinearSVC`).
 
+Predicted classes keep the type of the training labels: a target of `0`/`1` predicts the integers `0`
+and `1`, a target of `"yes"`/`"no"` predicts strings. (Before 0.6.0, numeric labels came back as
+strings such as `"1"`; runs trained with older versions now return numbers too.)
+
 Tabular inputs can be strings or numbers, the same as the studio's form: values are converted to the
 types seen during training. Missing columns are treated as missing values.
 
@@ -123,6 +129,52 @@ Errors:
 - `easyml.utils.database_operations.RunNotFoundError` when the run does not exist.
 - `ValueError` when the model is not part of the run.
 - `TypeError` when the input type does not fit the run.
+
+## Retrain on new data
+
+Train a run's recipe again on newer data. The new run uses exactly the same settings as the original
+(models, preprocessing, which columns are categorical, tuning level, text settings, image settings),
+records which run it came from, and leaves the original untouched.
+
+```python
+import easyml
+
+result = easyml.retrain(5, "customers_october.csv")              # same settings as run #5
+result = easyml.retrain(5, "customers_october.csv", name="churn-oct", models=["random_forest"])
+
+print(result)                  # RunResult(run_id=12, parent_run_id=5, task='Tabular Classification', ...)
+print(result.best_model, result.performance)
+for note in result.warnings:   # e.g. "Ignoring 1 column(s) the original run did not use: notes."
+    print(note)
+result.load_model().predict("new_customers.csv")
+```
+
+- The new data must contain every column the run was trained on (and the target). Otherwise
+  `easyml.retraining.DatasetMismatchError` (a `ValueError`) lists the missing columns in `.missing_columns`.
+- Columns the original run did not use are ignored, so the retrained model accepts the same input.
+- Models that are not installed on this computer are skipped with a warning.
+- Image runs take a folder with one sub-folder per class. Image runs trained before 0.6.0 did not save
+  their training settings, so defaults are used for those (listed in `result.warnings`).
+
+## Move runs between computers
+
+Save a run as a single `.zip` file and load it somewhere else:
+
+```python
+path = easyml.export_run(5)                                   # easyml-run-5-churn.zip in the current folder
+path = easyml.export_run(5, "churn.zip", include_data=False)  # without the training data
+
+new_id = easyml.import_run("churn.zip", trusted=True)         # on the other computer
+easyml.load_model(new_id).predict("new_customers.csv")
+```
+
+The archive holds the models, the preprocessing, the run's settings and scores, its result charts and
+(unless `include_data=False`) the training data, which explanations and retraining use. It records the
+library versions that trained the run; importing warns when this computer has different versions,
+because saved models may then behave differently or fail to load.
+
+Model files can run code when they are loaded, so only import archives from people you trust.
+`import_run` refuses to import unless you pass `trusted=True`.
 
 ## Command line
 
@@ -136,10 +188,18 @@ easy-ml predict 5 new_customers.csv --model RandomForestClassifier
 easy-ml predict 3 "my laptop got a software update" # text runs print the label
 easy-ml predict 3 reviews.csv --text-column review  # text CSV with another column name
 easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per image
+
+easy-ml retrain 5 customers_october.csv             # same settings as run #5, new data
+easy-ml retrain 5 october.csv --name churn-oct --models random_forest,light_gbm
+easy-ml retrain 7 new_photos/                       # image runs: a folder of class folders
+
+easy-ml export 5 -o churn.zip                       # save run #5 as a .zip (add --no-data to leave out data.csv)
+easy-ml import churn.zip                            # asks for confirmation; --yes skips the question
 ```
 
 Without `-o`, the predictions are written to the terminal as CSV, so you can pipe them to another command.
-`easy-ml predict` exits with code 1 when the run, the model or the input file is not found.
+`easy-ml predict`, `retrain`, `export` and `import` exit with code 1 when something is wrong
+(unknown run, missing columns, damaged archive, ...) and print the reason.
 
 ## Where runs are stored
 
@@ -151,6 +211,6 @@ Runs, models and the run database live in the Easy-ML data folder, which `load_m
 | macOS | `~/Library/Application Support/easy-ml` |
 | Linux | `~/.local/share/easy-ml` |
 
-Set `EASYML_DATA_DIR` to use another folder. To use your models on another machine, install
-`easy-ml-studio` there and copy the whole data folder (or point `EASYML_DATA_DIR` at a copy).
+Set `EASYML_DATA_DIR` to use another folder. To use a model on another machine, export the run
+(above), or copy the whole data folder and point `EASYML_DATA_DIR` at it.
 The studio's **Make predictions** page also shows these snippets pre-filled for each run.

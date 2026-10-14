@@ -38,11 +38,15 @@ flowchart LR
 
 ## What the Package Exposes Publicly
 
-The top-level package intentionally exports a small API:
+The top-level package intentionally exports a small API (documented for users in `docs/PYTHON_API.md`):
 
-- `easyml.MLTrainer`
+- `easyml.MLTrainer`: train tabular and text runs from Python
+- `easyml.load_model(run_id, model_name=None)`: a `Predictor` for any saved run (`easyml/predictor.py`)
+- `easyml.retrain(run_id, dataset_path, name=None, models=None)`: a run's recipe on new data (`easyml/retraining.py`)
+- `easyml.export_run(...)` / `easyml.import_run(..., trusted=True)`: run archives (`easyml/run_archive.py`)
 
-Other modules are importable, but they behave more like internal implementation modules than a stable public SDK.
+Everything except `MLTrainer` is a lazy wrapper, so `import easyml` never loads torch, spaCy or SHAP
+(`tests/test_predictor.py` checks this). Other modules are internal.
 
 ## Repository Structure
 
@@ -178,7 +182,23 @@ Task-specific artifacts:
 - tabular: `preprocessing_pipeline.pkl`
 - NLP vectorizer mode: `vectorizer.pkl` or `vectorizer_config.json`
 - NLP all modes: `fe_config.json`
-- CV: `.pth` model weights
+- CV: `.pth` model weights (and `config_json.json` only; images are not copied)
+- runs from 0.6.0 on: `evaluation.json` (result chart data, see below)
+
+`config_json.json` (since 0.6.0, `config_version: 2`) records everything a retrain needs: the run name,
+original dataset name, `parent_run_id`, `easyml_version`, the resolved preprocessing choices, and for
+classification `target_labels` (labels in code order, with their JSON type) plus `target_dtype`.
+Decode predicted class codes only through `utils/labels.decoder_from_config`; it falls back to the
+string keys of `target_encodings` for older runs, converting them to numbers only when that is exact.
+Image runs save every training setting (epochs, batch size, splits, learning rate, ...).
+
+`evaluation.json` is written by `core/evaluation_charts.py` while the fitted models and the test set
+are in memory: per model, ROC and precision-recall curves (probabilities, else decision scores;
+one-vs-rest for up to 10 classes plus a micro average), predicted-vs-actual and residual histograms
+for regression, feature importance summed back to the original columns (model weights, or a bounded
+permutation importance for PCA runs and models without weights), and top terms for text models.
+Curves are thinned to 200 points and scatter plots to 500. A chart that fails is recorded under
+`skipped`; it never fails the run (only cancellation propagates).
 
 ## Route Layer
 
@@ -226,6 +246,24 @@ Endpoints:
 - `POST /cv/predict` (returns `202` with the run's `job_id`)
 - `POST /cv/inference`
 - `POST /cv/validate_model`
+
+### `easyml/routes_runs.py`
+
+Endpoints that act on one saved run (logic lives in `retraining.py`, `run_archive.py` and
+`core/evaluation_charts.py`):
+
+- `GET /runs/<id>/config`: the run's readable settings (`run_summary.settings_for_display`) and what a
+  retrain needs (required columns, upload endpoint, models available here); no file paths
+- `POST /runs/<id>/retrain` with `{dataset_path, original_filename?, name?, models?}`: `202` with
+  `job_id` and `warnings`; `400` with `missing_columns` when the data lacks columns the run used
+- `GET /runs/<id>/charts`: `evaluation.json`, or `{available: false, reason}` for older runs
+- `GET /runs/<id>/export?include_data=1`: the run archive (.zip)
+- `POST /runs/import` (multipart `file`, `trusted=true`, optional `name`): `201` with the new run id
+
+Run archives contain `manifest.json` (format version, Easy-ML and library versions, run info, metrics,
+files with sha256) and `run/<file>`. Import never unpickles anything, streams entries instead of
+`extractall`, and rejects links, path traversal, nested or unexpected files, duplicates, encrypted
+entries, checksum mismatches, missing model files and archives over `EASYML_MAX_IMPORT_MB` (2048).
 
 ### `easyml/routes_settings.py`
 
@@ -799,6 +837,12 @@ Current schema:
 - `task`
 - `dataset_name`
 - `metrics_json`
+- `parent_run_id` (0.6.0): the run this one was retrained from
+- `origin` (0.6.0): `NULL` (trained here), `retrain` or `import`
+
+To add a column, append it to `db_runs_columns_config`: `create_database_table()` adds missing columns
+to databases created by older versions (`ALTER TABLE ... ADD COLUMN`). `get_data_from_database()`
+goes through pandas, so nullable integer columns come back as floats; `run_summary` converts them.
 
 ### Logging
 
@@ -856,10 +900,12 @@ static/css/                tokens.css (light/dark design tokens), base.css (shel
                            components.css (buttons, cards, forms, tables, dialogs…), views.css (page layouts)
 static/js/main.js          registers the shared components and mounts App.js
 static/js/lib/             vue.js (re-exports window.Vue/Chart/io), api.js (fetch helpers), format.js,
-                           theme.js, clipboard.js
+                           theme.js, clipboard.js, charts.js (useChart + theme colours for Chart.js)
 static/js/store/           ui, session (capabilities, labels), wizard (new-run state), training
-                           (job + Socket.IO), inference, runs
-static/js/components/      small shared components (ui.js, overlays.js, code.js, results.js, shell.js, images.js)
+                           (job + Socket.IO, used by both the wizard and retrains), inference, runs
+                           (list, details, compare selection), retrain, charts, compare
+static/js/components/      small shared components (ui.js, overlays.js, code.js, results.js, shell.js, images.js,
+                           charts.js for the result charts, runs.js for the retrain/import dialogs and lineage badge)
 static/js/views/           one module per page (HomeView.js, HistoryView.js, …)
 ```
 
@@ -869,6 +915,9 @@ Rules that keep it working:
   put logic in `setup()` and expose the result. `tests/test_frontend_assets.py` enforces this.
 - **Stores are plain reactive objects.** Import the object and read its fields; never destructure them.
   Long-lived things (the training socket) live in stores, never in a view, so they survive navigation.
+- **Charts** go through `useChart(canvasRef, buildConfig, source)` from `lib/charts.js`: it builds after mount,
+  rebuilds when `source()` or the theme changes and destroys the chart on unmount (no detached canvases).
+  Colours come from the `--chart-1`…`--chart-8`, `--chart-grid` and `--chart-ref` tokens.
 - **Styling** uses the CSS tokens in `tokens.css` (they switch with `<html data-theme>`); avoid inline styles
   and hard-coded colors.
 - **Adding a page:** create `static/js/views/MyView.js`, add it to the `VIEWS` map in `App.js`, and link it

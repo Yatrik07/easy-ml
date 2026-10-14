@@ -142,7 +142,8 @@ def test_image_prediction(tmp_path):
 
 
 def test_import_easyml_does_not_load_heavy_libraries():
-    code = ("import sys, easyml; easyml.load_model; "
+    code = ("import sys, easyml, easyml.retraining, easyml.run_archive, easyml.core.evaluation_charts; "
+            "easyml.load_model, easyml.retrain, easyml.export_run, easyml.import_run; "
             "print(','.join(m for m in ('torch', 'shap', 'spacy', 'sentence_transformers') if m in sys.modules))")
     result = subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True, text=True,
                             env={**os.environ, "EASYML_NO_CONSOLE_LOGS": "1"})

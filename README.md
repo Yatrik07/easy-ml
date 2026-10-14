@@ -51,10 +51,13 @@ python -m easyml             # same as easy-ml
 ## Features
 
 - Train several models in one run and compare accuracy, confusion matrices and classification reports
+- Result charts for every model: ROC and precision-recall curves, predicted vs actual, errors, feature importance and top words
 - Light or thorough hyperparameter search (GridSearchCV)
 - Missing-value imputation, scaling, PCA, one-hot encoding, and SMOTE / Tomek Links for imbalanced classes
 - Live progress and training curves while models train; stop a run at any time
 - Run history stored in SQLite, so every model can be reused later
+- Retrain any run on new data with the same settings, and compare two runs side by side
+- Move a run to another computer as a single .zip (download and import)
 - Single-record and batch (CSV) predictions
 - SHAP waterfall explanations for tabular predictions
 - One-click export of a tabular model as a FastAPI app with Dockerfile
@@ -83,6 +86,9 @@ easy-ml runs                                        # list runs with their best 
 easy-ml predict 5 new_customers.csv -o out.csv      # adds Prediction (and Confidence) columns
 easy-ml predict 3 "my laptop got a software update" # text runs print the label
 easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per image
+easy-ml retrain 5 october.csv                       # run #5's recipe on new data
+easy-ml export 5 -o churn.zip                       # move run #5 to another computer...
+easy-ml import churn.zip                            # ...and load it there
 ```
 
 Pick a specific model with `model_name=` / `--model` (for example `RandomForestClassifier`). The studio's prediction page shows these snippets pre-filled for each run.
