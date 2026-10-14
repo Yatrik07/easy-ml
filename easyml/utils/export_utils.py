@@ -1,10 +1,11 @@
+import json
 import os
 import shutil
 import tempfile
 import zipfile
 from importlib import metadata
 
-from easyml.core.artifacts import model_file_path, validate_model_name
+from easyml.core.artifacts import load_target_decoder, model_file_path, validate_model_name
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.logger import write_log
 
@@ -44,6 +45,10 @@ def create_deployment_package(run_id: int, model_name: str) -> str:
             source = os.path.join(folder_path, name)
             if os.path.exists(source):
                 shutil.copy(source, os.path.join(temp_dir, "config.json" if name == "config_json.json" else name))
+        if task == "MLClassification":
+            decoder = load_target_decoder(folder_path)
+            with open(os.path.join(temp_dir, "labels.json"), "w", encoding="utf-8") as handle:
+                json.dump([decoder[i] for i in sorted(decoder)], handle)
 
         files = {
             "main.py": generate_fastapi_app(task, model_name, model_filename),
@@ -110,7 +115,8 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str) -> str
         lines.append(f"model = joblib.load('{model_filename}')")
     lines += [
         "column_dtypes = _read_json('column_data.json').get('column_dtypes', {})",
-        "target_decoder = {int(v): k for k, v in (_read_json('config.json').get('target_encodings') or {}).items()}",
+        "labels = _read_json('labels.json')",
+        "target_labels = labels if isinstance(labels, list) else []",
         "",
         "",
         "def _prepare(features):",
@@ -137,7 +143,9 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str) -> str
             "        confidence = None",
             "        if hasattr(model, 'predict_proba'):",
             "            confidence = float(np.max(model.predict_proba(transformed)[0]))",
-            "        label = target_decoder.get(int(prediction), prediction.item() if hasattr(prediction, 'item') else prediction)",
+            "        raw = prediction.item() if hasattr(prediction, 'item') else prediction",
+            "        index = int(raw)",
+            "        label = target_labels[index] if 0 <= index < len(target_labels) else raw",
             "        return {'prediction': label, 'confidence': confidence}",
         ]
     else:

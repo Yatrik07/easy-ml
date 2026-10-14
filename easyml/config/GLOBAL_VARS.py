@@ -332,10 +332,13 @@ class ML_RequestBody(BaseModel):
     timestamp: str = ""
     run_id: Optional[int] = None
     original_dataset_name: Optional[str] = None
+    target_dtype: Optional[str] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def jsonify(self):
+        from easyml.utils.labels import labels_in_code_order
+
         to_dump = dict()
         to_dump['task'] = self.task
         to_dump['dataset_path'] = self.dataset_path
@@ -355,6 +358,8 @@ class ML_RequestBody(BaseModel):
         to_dump["performance"] = self.performance
         to_dump["status_code"] = self.status_code
         to_dump["target_encodings"] = self.target_encodings
+        to_dump["target_labels"] = labels_in_code_order(self.target_encodings)
+        to_dump["target_dtype"] = self.target_dtype
         to_dump["run_id"] = getattr(self, "run_id", None)
         return to_dump
 

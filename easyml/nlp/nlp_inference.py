@@ -22,6 +22,7 @@ from easyml.nlp.nlp_feature_engineering import (
 )
 from easyml.core.artifacts import validate_model_name
 from easyml.utils.database_operations import get_record_by_id
+from easyml.utils.labels import decoder_from_config
 from easyml.utils.logger import write_log
 from easyml.utils.utils import convert_numpy
 
@@ -136,8 +137,9 @@ class NLPInferenceController:
         self.inference_body.preprocessing_config = config
 
         # Load target encodings (reverse: encoded_value -> label)
-        if config.get("target_encodings"):
-            self.inference_body.target_encodings = {int(v): k for k, v in config["target_encodings"].items()}
+        decoder = decoder_from_config(config)
+        if decoder:
+            self.inference_body.target_encodings = decoder
         write_log("loaded preprocessing config and target encodings", "info", os.path.basename(__file__))
 
         # Load feature engineering config

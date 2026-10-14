@@ -86,6 +86,7 @@ def nlp_data_loader(request_body: NLP_RequestBody):
         request_body.y = request_body.df[request_body.target_column]
 
         # Encode target labels
+        request_body.target_dtype = str(request_body.y.dtype)
         request_body.target_encodings, encoded_y = encode_categorical_list(request_body.y.tolist())
         request_body.y = pd.Series(encoded_y)
 

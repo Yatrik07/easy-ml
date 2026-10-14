@@ -72,8 +72,9 @@ def read_json(folder_path, filename):
 
 def load_target_decoder(folder_path):
     """Map encoded class index -> original label."""
-    encodings = read_json(folder_path, "config_json.json").get("target_encodings") or {}
-    return {int(v): k for k, v in encodings.items()}
+    from easyml.utils.labels import decoder_from_config
+
+    return decoder_from_config(read_json(folder_path, "config_json.json"))
 
 
 def coerce_feature_frame(df, column_data):

@@ -242,17 +242,22 @@ class NLP_RequestBody(BaseModel):
     error_traceback: Optional[str] = None
     run_id: Optional[int] = None
     original_dataset_name: Optional[str] = None
+    target_dtype: Optional[str] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def jsonify(self):
         """Serialize key fields for config_json.json storage."""
+        from easyml.utils.labels import labels_in_code_order
+
         return {
             "task": self.task,
             "name": self.name,
             "text_column": self.text_column,
             "target_column": self.target_column,
             "target_encodings": self.target_encodings,
+            "target_labels": labels_in_code_order(self.target_encodings),
+            "target_dtype": self.target_dtype,
             "lowercase": self.lowercase,
             "remove_stopwords": self.remove_stopwords,
             "stopwords_source": self.stopwords_source,

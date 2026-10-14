@@ -159,6 +159,7 @@ def data_loader(request_body):
 
         # Encode target if it's a classification task
         if "classification" in request_body.task.lower():
+            request_body.target_dtype = str(request_body.y.dtype)
             request_body.target_encodings, request_body.y = encode_categorical_list(request_body.y.tolist())
             write_log(f"classification task - encoded target variable : {json.dumps(request_body.target_encodings, cls=NumpyEncoder)}", "info",
                       os.path.basename(__file__))
