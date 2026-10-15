@@ -33,6 +33,20 @@ def run_config(run_id):
         return error_response(exc)
 
 
+@runs_bp.route("/runs/<int:run_id>/sample", methods=["GET"])
+def run_sample(run_id):
+    """A random real row of the run's data (preferably its test set) to try the model with."""
+    from easyml.core.artifacts import sample_row
+
+    try:
+        record = get_record_by_id(run_id)
+        if record["task"] == IMAGE_TASK:
+            raise ValueError("Image runs do not keep a copy of their images; choose an image to try.")
+        return jsonify(sample_row(record["folder_path"], record["task"]))
+    except Exception as exc:
+        return error_response(exc)
+
+
 @runs_bp.route("/runs/<int:run_id>/retrain", methods=["POST"])
 def retrain_run(run_id):
     write_log(f"new incoming request to retrain run {run_id}", "info", os.path.basename(__file__))

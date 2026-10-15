@@ -162,3 +162,48 @@ def coerce_feature_frame(df, column_data):
 def flatten_predictions(predictions):
     """CatBoost returns (n, 1) arrays for multiclass; normalise every model to a flat 1-D array."""
     return np.asarray(predictions).reshape(-1)
+
+
+def _python_value(value):
+    """A plain JSON-friendly value (numpy scalars unwrapped, missing values as None)."""
+    if hasattr(value, "item"):
+        value = value.item()
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return None
+    return value
+
+
+def sample_row(folder_path, task, rng=None):
+    """
+    A random real row of a run's data, to try the model with: a row of its test set when the run saved
+    one (``holdout.json``: the model never trained on it), otherwise any row of its training data.
+
+    Returns ``{"values" | "text", "actual", "row", "source": "test" | "training"}``.
+    """
+    import random
+
+    from easyml.core.model_cache import cached_load
+    from easyml.utils.holdout import read_holdout
+
+    rng = rng or random.Random()
+    data_path = os.path.join(folder_path, "data.csv")
+    if not os.path.exists(data_path):
+        raise FileNotFoundError("This run has no saved copy of its data to take a row from.")
+    # Shared and cached like a model: read rows only, never modify the frame.
+    frame = cached_load("sample_frame", data_path, lambda: pd.read_csv(data_path),
+                        size=os.path.getsize(data_path) * 3)
+    if not len(frame):
+        raise ValueError("The run's data has no rows.")
+    holdout = [r for r in (read_holdout(folder_path) or []) if 0 <= r < len(frame)]
+    row = rng.choice(holdout) if holdout else rng.randrange(len(frame))
+    config = read_json(folder_path, "config_json.json")
+    target = config.get("target_column")
+    result = {"row": int(row), "source": "test" if holdout else "training",
+              "actual": _python_value(frame[target].iloc[row]) if target in frame.columns else None}
+    if task == "NLPTextClassification":
+        text = _python_value(frame[config["text_column"]].iloc[row])
+        result["text"] = "" if text is None else str(text)
+        return result
+    columns = list((read_json(folder_path, "column_data.json").get("column_dtypes") or {}).keys())
+    result["values"] = {c: _python_value(frame[c].iloc[row]) if c in frame.columns else None for c in columns}
+    return result

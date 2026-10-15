@@ -1,9 +1,9 @@
-import { computed, ref } from '../lib/vue.js';
-import { formatPercent, formatPrediction, formatScore } from '../lib/format.js';
+import { computed, nextTick, ref } from '../lib/vue.js';
+import { formatNumber, formatPercent, formatPrediction, formatScore } from '../lib/format.js';
 import { featureAvailable, modelLabel, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
 import {
-  columnChoices, explain, exportModel, inference, predict, predictBatch, setImage,
+  allInputsEmpty, columnChoices, explain, exportModel, inference, predict, predictBatch, sampleInForm, setImage, tryRealRow,
 } from '../store/inference.js';
 
 // A value for the API example: what the user typed, else a real value from the training data.
@@ -121,9 +121,65 @@ export default {
     function onBatch(event) { inference.batchFile = event.target.files[0] || null; }
     function onImage(event) { setImage(event.target.files[0]); }
 
+    // Predicting a form with no values only shows what the model does with missing data.
+    const allEmpty = computed(() => isTabular.value && inference.mode === 'manual' && allInputsEmpty());
+    const canSample = computed(() => isText.value || (isTabular.value && inference.mode === 'manual'));
+
+    // The real answer of a row taken from the data, while the form still holds that row.
+    const sample = computed(() => (inference.result ? sampleInForm() : null));
+    const verdict = computed(() => {
+      const s = sample.value;
+      if (!s) return null;
+      const predicted = inference.result.prediction;
+      if (inference.task === 'MLRegression') {
+        const error = Number(predicted) - Number(s.actual);
+        return { regression: true, text: 'Off by ' + formatNumber(Math.abs(error), 4) };
+      }
+      const same = String(predicted) === String(s.actual)
+        || (!Number.isNaN(Number(predicted)) && !Number.isNaN(Number(s.actual)) && Number(predicted) === Number(s.actual));
+      return { correct: same, text: same ? 'Correct' : 'Wrong' };
+    });
+
+    const explainCard = ref(null);
+    const plotOpen = ref(false);
+    async function explainAndShow() {
+      await explain();
+      await nextTick();
+      if (inference.explanation && explainCard.value) explainCard.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    const predictedLabel = computed(() => (inference.result ? formatPrediction(inference.result.prediction) : ''));
+    const explanationSummary = computed(() => {
+      const e = inference.explanation;
+      if (!e) return '';
+      const label = '“' + predictedLabel.value + '”';
+      if (e.scale === 'probability') {
+        return 'On average the model gives ' + label + ' ' + formatPercent(e.base_value) + '. With these inputs it gives '
+          + formatPercent(e.output_value) + '.';
+      }
+      if (e.scale === 'log-odds') {
+        return 'The model scores ' + label + ' in log-odds (higher means more likely): ' + formatNumber(e.base_value, 3)
+          + ' on average, ' + formatNumber(e.output_value, 3) + ' with these inputs.';
+      }
+      return 'The average prediction is ' + formatNumber(e.base_value, 4) + '. These inputs move it to '
+        + formatNumber(e.output_value, 4) + '.';
+    });
+    const axisTitle = computed(() => {
+      const e = inference.explanation;
+      if (!e) return '';
+      const label = '“' + predictedLabel.value + '”';
+      if (e.scale === 'probability') return 'Change in the probability of ' + label + ' (percentage points)';
+      if (e.scale === 'log-odds') return 'Change in the score for ' + label + ' (log-odds)';
+      return 'Change in the predicted value';
+    });
+    const explainHint = computed(() => (inference.task === 'MLRegression'
+      ? 'Red bars raise the prediction, blue bars lower it. Strongest effects first.'
+      : 'Red bars push towards “' + predictedLabel.value + '”, blue bars push away from it. Strongest effects first.'));
+    const hasMissing = computed(() => !!inference.explanation && inference.explanation.features.some(f => f.missing));
+
     return {
       inference, isTabular, isText, isImage, codeTabs, columnChoices, predict, predictBatch, explain, exportModel,
-      exportOpen, apiTabs, downloadExport,
+      exportOpen, apiTabs, downloadExport, allEmpty, canSample, tryRealRow, sample, verdict,
+      explainCard, plotOpen, explainAndShow, predictedLabel, explanationSummary, axisTitle, explainHint, hasMissing,
       onBatch, onImage, featureAvailable, modelLabel, taskLabel, navigate, formatPrediction, formatPercent, formatScore,
     };
   },
@@ -167,7 +223,9 @@ export default {
                   <input id="batch-file" class="input" type="file" accept=".csv" @change="onBatch" />
                   <span class="field-hint">You get the file back with a Prediction column added.</span>
                 </div>
-                <p class="field-hint" v-if="inference.mode === 'manual'">Leave a field empty and it is filled in the same way missing values were during training.</p>
+                <p class="field-hint" v-if="allEmpty">Fill in at least one value, or press <strong>Try a real row</strong>
+                  to fill the form with a row from this run's data.</p>
+                <p class="field-hint" v-else-if="inference.mode === 'manual'">Leave a field empty and it is filled in the same way missing values were during training.</p>
               </template>
 
               <div v-if="isText" class="field">
@@ -182,11 +240,16 @@ export default {
               </div>
 
               <div class="row">
-                <button v-if="!isTabular || inference.mode === 'manual'" class="btn btn-primary" @click="predict" :disabled="inference.predicting">
+                <button v-if="!isTabular || inference.mode === 'manual'" class="btn btn-primary" @click="predict"
+                        :disabled="inference.predicting || allEmpty" :title="allEmpty ? 'Fill in at least one value first' : ''">
                   <Spinner v-if="inference.predicting" /><Icon v-else name="bolt" />Predict
                 </button>
                 <button v-else class="btn btn-primary" @click="predictBatch" :disabled="inference.predicting || !inference.batchFile">
                   <Spinner v-if="inference.predicting" /><Icon v-else name="download" />Predict and download
+                </button>
+                <button v-if="canSample" class="btn btn-secondary" @click="tryRealRow" :disabled="inference.sampling || inference.predicting"
+                        title="Fill the form with a random row of this run's data (from its test set when available) and predict it">
+                  <Spinner v-if="inference.sampling" /><Icon v-else name="shuffle" />Try a real row
                 </button>
                 <button v-if="isTabular" class="btn btn-secondary" @click="exportOpen = true"
                         title="Turn this model into a web service that other programs can call">
@@ -194,12 +257,6 @@ export default {
                 </button>
               </div>
             </div>
-          </section>
-
-          <section class="card">
-            <div class="card-header"><div><h3>Use this model in code</h3>
-              <div class="card-hint">Run on this computer, with the same Easy-ML data directory (set EASYML_DATA_DIR if you changed it).</div></div></div>
-            <div class="card-body"><CodeTabs :key="inference.runId + inference.modelName" :tabs="codeTabs" /></div>
           </section>
         </div>
 
@@ -212,19 +269,53 @@ export default {
                 <div class="row-between text-sm"><span class="muted">Confidence</span><span class="strong num">{{ formatPercent(inference.result.probability) }}</span></div>
                 <div class="progress"><div class="progress-bar" :style="{ width: (inference.result.probability * 100) + '%' }"></div></div>
               </div>
-              <button v-if="isTabular && featureAvailable('explain')" class="btn btn-secondary" @click="explain" :disabled="inference.explaining">
+              <div v-if="sample" class="sample-check stack-xs">
+                <div class="row-between text-sm"><span class="muted">In the data</span>
+                  <span class="row-nowrap"><span class="strong">{{ formatPrediction(sample.actual) }}</span>
+                    <span class="badge" :class="verdict.regression ? '' : (verdict.correct ? 'badge-success' : 'badge-danger')">
+                      <Icon :name="verdict.regression ? 'straighten' : (verdict.correct ? 'check_circle' : 'cancel')" />{{ verdict.text }}</span></span></div>
+                <p class="subtle text-xs">Row {{ (sample.row + 1).toLocaleString() }} of the run's data,
+                  {{ sample.source === 'test' ? 'from its test set: the model never trained on it.' : 'used for training.' }}</p>
+              </div>
+              <button v-if="isTabular && featureAvailable('explain')" class="btn btn-secondary" @click="explainAndShow" :disabled="inference.explaining">
                 <Spinner v-if="inference.explaining" /><Icon v-else name="insights" />Explain this prediction
               </button>
             </template>
-            <p v-else class="muted text-sm">Fill in the inputs and press Predict.</p>
-            <div v-if="inference.shapPlot" class="stack-sm">
-              <div class="field-label">Why this prediction (SHAP)</div>
-              <div class="figure"><img :src="'data:image/png;base64,' + inference.shapPlot" alt="SHAP waterfall plot" /></div>
-              <p class="field-hint">Red bars push the prediction up, blue bars push it down.</p>
-            </div>
+            <p v-else class="muted text-sm">{{ isImage ? 'Choose an image and press Predict.' : 'Fill in the inputs and press Predict, or try a real row from the data.' }}</p>
           </div>
         </aside>
       </div>
+
+      <section v-if="inference.explanation && inference.result" ref="explainCard" class="card explain-card">
+        <div class="card-header">
+          <div><h3>Why the model predicted {{ predictedLabel }}</h3>
+            <div class="card-hint">{{ explanationSummary }}</div></div>
+          <button v-if="inference.shapPlot" class="btn btn-ghost btn-sm" @click="plotOpen = true"><Icon name="zoom_in" />Detailed SHAP plot</button>
+        </div>
+        <div class="card-body stack-sm">
+          <ContributionChart :data="inference.explanation" :axis-title="axisTitle" />
+          <p class="field-hint">{{ explainHint }}<span v-if="hasMissing"> Columns shown as missing were filled in the same way as during training.</span></p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header"><div><h3>Use this model in code</h3>
+          <div class="card-hint">Run on this computer, with the same Easy-ML data directory (set EASYML_DATA_DIR if you changed it).</div></div></div>
+        <div class="card-body"><CodeTabs :key="inference.runId + inference.modelName" :tabs="codeTabs" /></div>
+      </section>
+
+      <ModalDialog :open="plotOpen" xl title="SHAP waterfall plot" @close="plotOpen = false">
+        <div class="stack-sm">
+          <p class="muted text-sm">SHAP's own view of the same prediction, by the columns the model sees after preprocessing
+            (scaled numbers, and one column per category).</p>
+          <div class="figure figure-full"><img :src="'data:image/png;base64,' + inference.shapPlot" alt="SHAP waterfall plot" /></div>
+        </div>
+        <template #footer>
+          <a class="btn btn-secondary" :href="'data:image/png;base64,' + inference.shapPlot" :download="'shap_run_' + inference.runId + '.png'">
+            <Icon name="download" />Download PNG</a>
+          <button class="btn btn-primary" @click="plotOpen = false">Close</button>
+        </template>
+      </ModalDialog>
 
       <ModalDialog :open="exportOpen" title="Export as API" @close="exportOpen = false">
         <div class="stack">

@@ -295,6 +295,9 @@ Endpoints that act on one saved run (logic lives in `retraining.py`, `run_archiv
   that has a `recipe` in its config re-applies it, falling back to the file as it is when the steps do
   not fit (an already-cleaned file). The config route's `retrain.recipe` tells the UI about that recipe.
 - `GET /runs/<id>/charts`: `evaluation.json`, or `{available: false, reason}` for older runs
+- `GET /runs/<id>/sample`: a random real row to try the model with (`core/artifacts.sample_row`):
+  `{values | text, actual, row, source}`, from the `holdout.json` test rows when present (`source: "test"`),
+  else any row (`"training"`); `400` for image runs, which keep no copy of their images
 - `GET /runs/<id>/export?include_data=1`: the run archive (.zip)
 - `POST /runs/import` (multipart `file`, `trusted=true`, optional `name`): `201` with the new run id
 
@@ -653,14 +656,21 @@ Supported inference modes:
 
 ### `easyml/core/xai_explainer.py`
 
-`XAIExplainer` generates SHAP waterfall plots for a single prediction.
+`XAIExplainer` explains a single prediction with SHAP.
 
 Behavior:
 
 - loads the saved model and preprocessing pipeline
 - derives feature names from the `ColumnTransformer` when possible
-- chooses a SHAP explainer strategy
-- returns a base64-encoded PNG
+- chooses a SHAP explainer strategy (tree, linear, or kernel with a cached 50-row background sample)
+- always explains the predicted class: multi-output models use its column, and a binary model's single
+  class-1 score is negated when class 0 is predicted
+- returns `explanation`: `scale` (`probability` for random forests and kernel explainers on
+  `predict_proba`, `log-odds` for boosters and logistic regression, `value` for regression),
+  `base_value`, `output_value`, and `features` = per original input column (one-hot parts summed back via
+  `evaluation_charts._output_columns`) `{name, value entered, missing, contribution}`, strongest 12 first,
+  with the rest summed in `other`; contributions add up to `output_value - base_value`
+- also returns SHAP's waterfall plot as a base64 PNG (`plot_b64`)
 
 This feature depends on the `[eda]` extra because it uses `shap`.
 

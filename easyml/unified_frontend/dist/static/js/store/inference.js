@@ -26,8 +26,11 @@ export const inference = reactive({
   result: null,
   predicting: false,
   shapPlot: null,
+  explanation: null, // {scale, base_value, output_value, features, other, grouped}
   explaining: false,
   exporting: false,
+  sample: null, // a real row put in the form: {actual, row, source, form}
+  sampling: false,
 });
 
 export function columnChoices(column) {
@@ -59,6 +62,8 @@ export async function openInference(runId) {
       imagePreview: '',
       result: null,
       shapPlot: null,
+      explanation: null,
+      sample: null,
     });
     for (const col of inference.columns) inference.values[col] = '';
     navigate('inference');
@@ -72,6 +77,7 @@ export async function predict() {
   inference.predicting = true;
   inference.result = null;
   inference.shapPlot = null;
+  inference.explanation = null;
   try {
     const payload = { run_id: inference.runId, model_name: inference.modelName };
     let endpoint = '/inference';
@@ -120,11 +126,62 @@ export async function explain() {
       run_id: inference.runId, model_name: inference.modelName, data: { ...inference.values },
     }, 'Could not explain this prediction');
     inference.shapPlot = result.plot_b64;
+    inference.explanation = result.explanation || null;
   } catch (e) {
     toastError(e.message);
   } finally {
     inference.explaining = false;
   }
+}
+
+// True while no input field has a value: predicting then only shows what the model does with missing values.
+export function allInputsEmpty() {
+  return inference.columns.every(col => {
+    const value = inference.values[col];
+    return value === '' || value === null || value === undefined;
+  });
+}
+
+// What is in the form now, to tell whether a sampled row was edited afterwards.
+function formState() {
+  return inference.task === 'NLPTextClassification' ? inference.text : JSON.stringify(inference.columns.map(c => String(inference.values[c])));
+}
+
+// The form value for a value from the data: the matching dropdown option for categories, '' for missing.
+function formValue(column, value) {
+  if (value === null || value === undefined) return '';
+  const choices = columnChoices(column);
+  if (!choices.length) return value;
+  const match = choices.find(c => String(c) === String(value)
+    || (c !== '' && !Number.isNaN(Number(c)) && Number(c) === Number(value)));
+  return match === undefined ? '' : match;
+}
+
+// Fill the form with a random real row of the run's data (its test set when available) and predict it.
+export async function tryRealRow() {
+  inference.sampling = true;
+  try {
+    const sample = await getJSON('/runs/' + inference.runId + '/sample', 'Could not take a row from the data');
+    if (inference.task === 'NLPTextClassification') {
+      inference.text = sample.text || '';
+    } else {
+      inference.mode = 'manual';
+      for (const col of inference.columns) inference.values[col] = formValue(col, (sample.values || {})[col]);
+    }
+    inference.sample = { actual: sample.actual, row: sample.row, source: sample.source, form: formState() };
+    await predict();
+  } catch (e) {
+    toastError(e.message);
+  } finally {
+    inference.sampling = false;
+  }
+}
+
+// The sampled row's real answer, while the form still holds that row (null otherwise).
+export function sampleInForm() {
+  const sample = inference.sample;
+  if (!sample || sample.actual === null || sample.actual === undefined) return null;
+  return sample.form === formState() ? sample : null;
 }
 
 export async function exportModel() {

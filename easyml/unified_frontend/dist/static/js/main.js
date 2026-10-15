@@ -15,7 +15,9 @@ import {
 } from './components/prep.js';
 import { ScheduleBadges, ScheduleDialog, ScheduleEventsDialog } from './components/schedules.js';
 import { listenForScheduleEvents } from './store/schedules.js';
-import { ImportanceChart, ModelCharts, PrChart, ResidualChart, RocChart, ScatterChart, TopTerms } from './components/charts.js';
+import {
+  ContributionChart, ImportanceChart, ModelCharts, PrChart, ResidualChart, RocChart, ScatterChart, TopTerms,
+} from './components/charts.js';
 
 const app = createApp(App);
 
@@ -29,7 +31,7 @@ const components = {
   RetrainDialog, ImportRunDialog, LineageBadge,
   AddStepDialog, MappingField, PreviewTable, ProfileTable, RecipesDialog, SaveRecipeDialog, StepForm, StepList, TrainDialog,
   ScheduleDialog, ScheduleEventsDialog, ScheduleBadges,
-  ModelCharts, RocChart, PrChart, ScatterChart, ResidualChart, ImportanceChart, TopTerms,
+  ModelCharts, RocChart, PrChart, ScatterChart, ResidualChart, ImportanceChart, TopTerms, ContributionChart,
 };
 for (const [name, component] of Object.entries(components)) app.component(name, component);
 

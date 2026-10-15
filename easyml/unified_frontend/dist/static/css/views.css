@@ -217,3 +217,8 @@ button.lineage:disabled { cursor: default; opacity: 0.7; }
 .input-number { width: 110px; }
 .event-file { display: inline-block; max-width: 220px; vertical-align: bottom; }
 .event-message td { padding-top: 0; border-top: 0; }
+
+/* ---------- Prediction: real rows and explanations ---------- */
+.sample-check { border-top: 1px solid var(--border); padding-top: var(--space-3); }
+.explain-card { scroll-margin-top: var(--space-5); }
+.figure-full img { width: 100%; height: auto; }

@@ -147,6 +147,67 @@ export const ImportanceChart = {
   template: /* html */ `<div :class="height"><canvas ref="canvas" role="img" aria-label="Feature importance"></canvas></div>`,
 };
 
+// One prediction's SHAP breakdown: how much each input column moved the model's output, strongest first.
+// Red (up) pushes towards the predicted class / a higher value, blue (down) away from it.
+export function contributionText(value, scale) {
+  const sign = value > 0 ? '+' : (value < 0 ? '−' : '');
+  const size = Math.abs(Number(value) || 0);
+  return scale === 'probability' ? sign + formatNumber(size * 100, 1) + ' pts' : sign + formatNumber(size, 3);
+}
+
+export const ContributionChart = {
+  props: { data: Object, axisTitle: String },
+  setup(props) {
+    const canvas = ref(null);
+    const items = computed(() => {
+      const data = props.data;
+      if (!data || !data.features) return [];
+      const rows = data.features.map(f => ({
+        label: data.grouped ? f.name + ' = ' + (f.missing ? 'missing' : String(f.value)) : f.name,
+        value: f.contribution,
+      }));
+      if (data.other) {
+        rows.push({ label: data.other.count + ' other column' + (data.other.count === 1 ? '' : 's'), value: data.other.contribution });
+      }
+      return rows;
+    });
+    useChart(canvas, colors => {
+      if (!items.value.length) return null;
+      const scale = props.data.scale;
+      const up = seriesColor(colors, 2);
+      const down = seriesColor(colors, 0);
+      return {
+        type: 'bar',
+        data: {
+          labels: items.value.map(i => i.label),
+          datasets: [{
+            data: items.value.map(i => i.value),
+            backgroundColor: items.value.map(i => (i.value >= 0 ? up : down)),
+            borderRadius: 3, maxBarThickness: 26,
+          }],
+        },
+        options: Object.assign({}, BASE, {
+          indexAxis: 'y',
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => contributionText(ctx.parsed.x, scale) } },
+          },
+          scales: {
+            x: axis(colors, props.axisTitle, {
+              ticks: { color: colors.text, callback: v => contributionText(v, scale) },
+              grid: { color: ctx => (ctx.tick && ctx.tick.value === 0 ? colors.ref : colors.grid) },
+            }),
+            y: axis(colors, '', { grid: { display: false }, ticks: { color: colors.text, font: { size: 13 } } }),
+          },
+        }),
+      };
+    }, () => props.data);
+    const boxClass = computed(() => (items.value.length > 8 ? 'chart-box tall' : 'chart-box'));
+    return { canvas, boxClass };
+  },
+  template: /* html */ `<div :class="boxClass"><canvas ref="canvas" role="img" aria-label="How each input changed the prediction"></canvas></div>`,
+};
+
 export const TopTerms = {
   props: { data: Object },
   template: /* html */ `

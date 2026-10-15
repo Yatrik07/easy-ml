@@ -83,7 +83,22 @@ def test_explain_returns_plot(client, classification_run, model_name):
         "data": {"age": "45", "income": "75000", "city": "NY", "owns_car": "yes", "rooms": "3"},
     })
     assert response.status_code == 200, response.get_json()
-    assert response.get_json()["plot_b64"]
+    body = response.get_json()
+    assert body["plot_b64"]
+    # The readable breakdown: per original column, with the value that was entered, adding up exactly.
+    explanation = body["explanation"]
+    assert explanation["grouped"] and explanation["scale"] == ("probability" if model_name == "RandomForestClassifier" else "log-odds")
+    names = [f["name"] for f in explanation["features"]]
+    assert set(names) <= {"age", "income", "city", "owns_car", "rooms"} and len(names) == len(set(names))
+    assert {f["name"]: f["value"] for f in explanation["features"]}["city"] == "NY"
+    total = explanation["base_value"] + sum(f["contribution"] for f in explanation["features"])
+    total += (explanation["other"] or {}).get("contribution") or 0
+    assert abs(total - explanation["output_value"]) < 1e-4
+    if model_name == "RandomForestClassifier":  # explains the predicted class's probability
+        predicted = client.post("/inference", json={
+            "run_id": classification_run.run_id, "model_name": model_name,
+            "data": {"age": "45", "income": "75000", "city": "NY", "owns_car": "yes", "rooms": "3"}}).get_json()
+        assert abs(explanation["output_value"] - predicted["probability"]) < 1e-4
 
 
 @pytest.mark.parametrize("model_name", ["RandomForestClassifier", "CatBoostClassifier", "LGBMClassifier"])

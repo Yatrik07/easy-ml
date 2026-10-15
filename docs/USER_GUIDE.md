@@ -435,7 +435,19 @@ Easy-ML supports inference after training.
 
 ### Tabular inference
 
-Provide a single record using the fields expected by the saved preprocessing pipeline.
+Provide a single record using the fields expected by the saved preprocessing pipeline. Fields left empty
+are filled in the same way missing values were during training; at least one field must have a value.
+
+**Try a real row** fills the form with a random row of the run's own data and predicts it. For runs
+trained with Easy-ML 0.9.0 or later the row comes from the test set, so the model never trained on it,
+and the result shows the real answer next to the prediction ("Correct" / "Wrong", or how far off a
+regression is). Text runs have the same button.
+
+**Explain this prediction** (needs the `[eda]` extra) shows which inputs moved the prediction and by how
+much, one bar per input column with the value used, strongest first: red bars push towards the
+predicted class (or raise a number), blue bars push away from it. A sentence above the chart gives the
+model's average output and its output for this row. **Detailed SHAP plot** opens SHAP's own waterfall
+plot, by the columns the model sees after preprocessing, in a large window you can download.
 
 ### Batch tabular inference
 
