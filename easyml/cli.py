@@ -89,7 +89,7 @@ def predict(run_id, source, model=None, output=None, text_column=None, out=None)
                 return 1
             frame = load_data_from_path(source)
             if predictor.task == TEXT_TASK:
-                predictions, confidences = predictor._predict_text(source, text_column=text_column)
+                predictions, confidences = predictor._predict_text(source, text_column=text_column, frame=frame)
             else:
                 predictions, confidences = predictor.predict_with_confidence(frame)
             frame = frame.copy()

@@ -134,11 +134,11 @@ def uploaded_original_filename():
 
 
 def load_class_distribution(dataset_path, target_column):
-    df = pd.read_csv(resolve_data_file(dataset_path))
-    if target_column not in df.columns:
+    path = resolve_data_file(dataset_path)
+    if target_column not in pd.read_csv(path, nrows=0).columns:
         raise ValueError(f"Column '{target_column}' not found in dataset")
 
-    target = df[target_column].dropna()
+    target = pd.read_csv(path, usecols=[target_column])[target_column].dropna()
     counts = target.value_counts()
     total = len(target)
     distribution = [

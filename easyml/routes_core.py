@@ -325,6 +325,13 @@ def explain():
         return error_response(exc)
 
 
+def _remove_quietly(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
 @core_bp.route("/export", methods=["POST"])
 def export_model():
     from easyml.utils.export_utils import create_deployment_package
@@ -334,7 +341,9 @@ def export_model():
         run_id = int(json_data["run_id"])
         model_name = validate_model_name(json_data["model_name"])
         zip_path = create_deployment_package(run_id, model_name)
-        return send_file(zip_path, as_attachment=True, download_name=f"deploy_{model_name}_{run_id}.zip")
+        response = send_file(zip_path, as_attachment=True, download_name=f"deploy_{model_name}_{run_id}.zip")
+        response.call_on_close(lambda: _remove_quietly(zip_path))
+        return response
     except Exception as exc:
         write_log(f"Error in /export: {str(exc)}", "error", os.path.basename(__file__))
         return error_response(exc)

@@ -1,6 +1,5 @@
 import json
 import os
-import shutil
 import tempfile
 import zipfile
 from importlib import metadata
@@ -37,37 +36,29 @@ def create_deployment_package(run_id: int, model_name: str) -> str:
         raise FileNotFoundError("The preprocessing pipeline for this run is missing.")
 
     model_filename = "model" + os.path.splitext(model_source)[1]
-    temp_dir = tempfile.mkdtemp(prefix="easyml_export_")
-    try:
-        shutil.copy(model_source, os.path.join(temp_dir, model_filename))
-        shutil.copy(pipeline_source, os.path.join(temp_dir, "pipeline.pkl"))
-        for name in ("config_json.json", "column_data.json"):
-            source = os.path.join(folder_path, name)
-            if os.path.exists(source):
-                shutil.copy(source, os.path.join(temp_dir, "config.json" if name == "config_json.json" else name))
-        if task == "MLClassification":
-            decoder = load_target_decoder(folder_path)
-            with open(os.path.join(temp_dir, "labels.json"), "w", encoding="utf-8") as handle:
-                json.dump([decoder[i] for i in sorted(decoder)], handle)
+    copies = {model_filename: model_source, "pipeline.pkl": pipeline_source}
+    for name in ("config_json.json", "column_data.json"):
+        source = os.path.join(folder_path, name)
+        if os.path.exists(source):
+            copies["config.json" if name == "config_json.json" else name] = source
 
-        files = {
-            "main.py": generate_fastapi_app(task, model_name, model_filename),
-            "requirements.txt": generate_requirements(model_name),
-            "Dockerfile": generate_dockerfile(model_name),
-            "README.md": generate_readme(task, model_name),
-        }
-        for filename, content in files.items():
-            with open(os.path.join(temp_dir, filename), "w", encoding="utf-8") as handle:
-                handle.write(content)
+    generated = {
+        "main.py": generate_fastapi_app(task, model_name, model_filename),
+        "requirements.txt": generate_requirements(model_name),
+        "Dockerfile": generate_dockerfile(model_name),
+        "README.md": generate_readme(task, model_name),
+    }
+    if task == "MLClassification":
+        decoder = load_target_decoder(folder_path)
+        generated["labels.json"] = json.dumps([decoder[i] for i in sorted(decoder)])
 
-        zip_path = os.path.join(tempfile.gettempdir(), f"easyml_deploy_{model_name}_{run_id}.zip")
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for root, _, filenames in os.walk(temp_dir):
-                for filename in filenames:
-                    file_path = os.path.join(root, filename)
-                    zipf.write(file_path, os.path.relpath(file_path, temp_dir))
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
+    zip_path = os.path.join(tempfile.gettempdir(), f"easyml_deploy_{model_name}_{run_id}.zip")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for arcname, source in copies.items():
+            zipf.write(source, arcname)
+        for arcname, content in generated.items():
+            # Same bytes as the text-mode files written before (platform line endings).
+            zipf.writestr(arcname, content.replace("\n", os.linesep).encode("utf-8"))
 
     write_log(f"Deployment package created at {zip_path}", "info", "export_utils.py")
     return zip_path

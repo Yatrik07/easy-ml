@@ -90,6 +90,14 @@ def load_target_decoder(folder_path):
     return decoder_from_config(read_json(folder_path, "config_json.json"))
 
 
+def _blank_strings(series):
+    """True where a value is a string made only of whitespace (non-strings are never blank)."""
+    try:
+        return series.str.strip().eq("").fillna(False).astype(bool)
+    except AttributeError:  # no strings at all in the column
+        return series.map(lambda v: isinstance(v, str) and not v.strip()).astype(bool)
+
+
 def coerce_feature_frame(df, column_data):
     """
     Cast raw inference input (often strings from an HTML form) to the dtypes seen at training time.
@@ -100,8 +108,7 @@ def coerce_feature_frame(df, column_data):
     df = df.copy()
     for col in df.columns:
         if df[col].dtype == object:
-            blank = df[col].map(lambda v: isinstance(v, str) and not v.strip())
-            df[col] = df[col].where(~blank, np.nan)
+            df[col] = df[col].where(~_blank_strings(df[col]), np.nan)
 
     dtypes = column_data.get("column_dtypes") or {}
     if not dtypes:

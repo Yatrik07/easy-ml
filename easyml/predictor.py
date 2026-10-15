@@ -106,14 +106,15 @@ class Predictor:
         except OSError:
             return None
 
-    def _predict_text(self, data, text_column=None):
+    def _predict_text(self, data, text_column=None, frame=None):
         from easyml.nlp.nlp_inference import NLPInferenceController
 
         if isinstance(data, (str, os.PathLike)) and str(data).lower().endswith((".csv", ".xlsx", ".xls")) \
                 and os.path.isfile(str(data)):
-            from easyml.utils.data_loader import load_data_from_path
+            if frame is None:  # the CLI passes the frame it already loaded
+                from easyml.utils.data_loader import load_data_from_path
 
-            frame = load_data_from_path(str(data))
+                frame = load_data_from_path(str(data))
             column = text_column or self.text_column()
             if column not in frame.columns:
                 raise ValueError(f"Column {column!r} not found in {data}. Pass text_column=... to choose one.")

@@ -26,17 +26,16 @@ def get_data_info(data, dataset_path=None):
     try:
         rows, cols = data.shape
 
-        # Ensure NaN values are replaced with None to produce strict valid JSON (null)
-        safe_data = data.replace({np.nan: None})
+        # NaN becomes None for strict JSON (null). Only the rows shown are converted, not the whole dataset.
+        def records(frame):
+            return frame.replace({np.nan: None}).to_dict(orient="records")
 
         if rows < 5:
-            data_sample = safe_data.to_dict(orient="records")   # Convert DataFrame to a dictionary
-            data_head = safe_data.to_dict(orient="records")
-            data_tail = safe_data.to_dict(orient="records") 
+            data_sample = data_head = data_tail = records(data)
         else:
-            data_sample = safe_data.sample(5).to_dict(orient="records") 
-            data_head = safe_data.head(5).to_dict(orient="records") 
-            data_tail = safe_data.tail(5).to_dict(orient="records")
+            data_sample = records(data.sample(5))
+            data_head = records(data.head(5))
+            data_tail = records(data.tail(5))
         
         columns = data.columns.tolist()
 

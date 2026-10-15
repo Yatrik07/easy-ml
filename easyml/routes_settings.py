@@ -14,14 +14,32 @@ from easyml.utils.logger import close_all_file_handlers, reinit_file_handlers, w
 settings_bp = Blueprint("easyml_settings", __name__)
 
 
+def _directory_size(root):
+    """
+    Total size of the files under ``root``, counted like ``os.walk``: links to files count their
+    target, broken links and unreadable entries are skipped, linked folders are not entered.
+    """
+    total, pending = 0, [root]
+    while pending:
+        try:
+            entries = list(os.scandir(pending.pop()))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                if entry.is_dir():
+                    if not entry.is_symlink():
+                        pending.append(entry.path)
+                    continue
+                total += entry.stat().st_size
+            except OSError:
+                continue
+    return total
+
+
 @settings_bp.route("/settings/info", methods=["GET"])
 def settings_info():
-    total_size = 0
-    for dirpath, _, filenames in os.walk(DATA_DIR):
-        for filename in filenames:
-            file_path = os.path.join(dirpath, filename)
-            if os.path.exists(file_path):
-                total_size += os.path.getsize(file_path)
+    total_size = _directory_size(DATA_DIR)
 
     disk = shutil.disk_usage(DATA_DIR)
     return jsonify(
