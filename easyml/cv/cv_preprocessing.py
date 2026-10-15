@@ -182,7 +182,7 @@ def cv_preprocessing_controller(request_body: CV_RequestBody) -> "CVDataLoaders"
     Sets up PyTorch datasets and DataLoaders for Image Classification: training, validation
     (early stopping / best epoch) and a held-out test split for the reported metrics.
     """
-    write_log("entered cv_preprocessing_controller", "info", os.path.basename(__file__))
+    write_log("entered cv_preprocessing_controller", "debug", os.path.basename(__file__))
 
     try:
         samples, class_names, skipped = collect_image_samples(request_body.dataset_path)

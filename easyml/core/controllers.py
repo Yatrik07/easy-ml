@@ -73,7 +73,7 @@ class _TabularController:
 
     def run(self):
         try:
-            write_log(f"entered {self.__class__.__name__} -  run()", "info", os.path.basename(__file__))
+            write_log(f"entered {self.__class__.__name__} -  run()", "debug", os.path.basename(__file__))
 
             create_database_table("runs")
             emit_progress("⚙️ Initializing pipeline and loading data...", pct=5)

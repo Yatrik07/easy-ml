@@ -132,6 +132,16 @@ Inside that folder, Easy-ML creates:
 
 To choose a custom location, set `EASYML_DATA_DIR` before starting the app.
 
+Housekeeping happens on its own:
+
+- **Uploads**: every run keeps its own copy of its data, so uploaded files are only needed while you
+  explore, clean or train on them. Settings shows how much space they use and has **Delete old
+  uploads** (older than a day); uploads older than 30 days are removed when the studio starts. Only
+  files Easy-ML created are ever deleted.
+- **Logs**: each log file is rotated at 5 MB and 3 old copies are kept (change with
+  `EASYML_LOG_MAX_MB` and `EASYML_LOG_BACKUPS`). `easy-ml serve` writes `serve_logs.log`, and
+  `easy-ml schedule` writes `scheduler_logs.log`.
+
 ## Main Workflow
 
 The normal workflow looks like this:

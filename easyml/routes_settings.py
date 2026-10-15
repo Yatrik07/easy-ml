@@ -2,7 +2,7 @@ import os
 import shutil
 import threading
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from easyml import __version__, project_info
 from easyml.capabilities import get_capabilities
@@ -42,14 +42,35 @@ def settings_info():
     total_size = _directory_size(DATA_DIR)
 
     disk = shutil.disk_usage(DATA_DIR)
+    from easyml.utils.storage import uploads_usage
+
     return jsonify(
         {
             "data_dir": DATA_DIR,
             "storage_used_mb": round(total_size / (1024 * 1024), 2),
             "disk_free_mb": round(disk.free / (1024 * 1024), 2),
             "version": __version__,
+            "uploads": uploads_usage(folder=UPLOADS_DIR),
         }
     )
+
+
+@settings_bp.route("/settings/clean-uploads", methods=["POST"])
+def settings_clean_uploads():
+    """Delete uploads older than ``older_than_hours`` (default 24); every run keeps its own copy of its data."""
+    from easyml.utils.storage import clean_uploads
+
+    body = request.get_json(silent=True) or {}
+    try:
+        hours = float(body.get("older_than_hours", 24))
+    except (TypeError, ValueError):
+        hours = -1
+    if hours < 1:
+        return jsonify({"status": "error", "status_code": 400,
+                        "error_message": "older_than_hours must be a number of at least 1."}), 400
+    result = clean_uploads(older_than_hours=hours, folder=UPLOADS_DIR)
+    write_log(f"Deleted {result['deleted']} old upload(s), {result['freed_bytes']} bytes", "info", os.path.basename(__file__))
+    return jsonify(result)
 
 
 @settings_bp.route("/settings/clear-data", methods=["DELETE"])

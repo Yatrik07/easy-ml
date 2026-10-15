@@ -23,7 +23,7 @@ def get_data_info(data, dataset_path=None):
         dict: Contains sample data, shape, column names, and file size (in KB).
     """
 
-    write_log("entered get_data_info", "info", os.path.basename(__file__))
+    write_log("entered get_data_info", "debug", os.path.basename(__file__))
     try:
         rows, cols = data.shape
 
@@ -71,7 +71,7 @@ def load_data_from_path(path):
         ValueError: If file extension is not supported.
     """
 
-    write_log("entered to load_data_from_path", "info", os.path.basename(__file__))
+    write_log("entered to load_data_from_path", "debug", os.path.basename(__file__))
 
     lowered = path.lower()
     if lowered.endswith(".csv"):
@@ -91,7 +91,7 @@ def move_to_runs(request_body):
 
     # Copy the dataset into artifacts/runs/ instead of moving it
     # This ensures concurrent training tasks can use the same base uploaded data
-    write_log("entered move_to_runs", "info", os.path.basename(__file__))
+    write_log("entered move_to_runs", "debug", os.path.basename(__file__))
     try:
         original_path = request_body.dataset_path
         if not original_path or not os.path.exists(original_path):
@@ -126,7 +126,7 @@ def data_loader(request_body):
         Exception: Logs and re-raises errors during data ingestion or preprocessing.
     """
 
-    write_log("entered data_loader()", "info", os.path.basename(__file__))
+    write_log("entered data_loader()", "debug", os.path.basename(__file__))
 
     move_to_runs(request_body)
 

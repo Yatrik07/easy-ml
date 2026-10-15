@@ -222,3 +222,7 @@ button.lineage:disabled { cursor: default; opacity: 0.7; }
 .sample-check { border-top: 1px solid var(--border); padding-top: var(--space-3); }
 .explain-card { scroll-margin-top: var(--space-5); }
 .figure-full img { width: 100%; height: auto; }
+
+/* ---------- Settings ---------- */
+.uploads-row { flex-wrap: wrap; gap: var(--space-3); }
+.uploads-row > .stack-xs { flex: 1 1 280px; min-width: 0; }

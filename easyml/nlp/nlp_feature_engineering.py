@@ -75,7 +75,7 @@ def vectorizer_controller(request_body: NLP_RequestBody):
         Exception: Re-raises with NLPFeatureEngineeringError code.
     """
     try:
-        write_log("entered vectorizer_controller", "info", os.path.basename(__file__))
+        write_log("entered vectorizer_controller", "debug", os.path.basename(__file__))
 
         # Split text before vectorizing to prevent data leakage
         text_train, text_test, y_train, y_test = train_test_split(
@@ -159,15 +159,11 @@ def embedding_controller(request_body: NLP_RequestBody):
         Exception: Re-raises with NLPFeatureEngineeringError code.
     """
     try:
-        write_log("entered embedding_controller", "info", os.path.basename(__file__))
+        write_log("entered embedding_controller", "debug", os.path.basename(__file__))
 
-        try:
-            from sentence_transformers import SentenceTransformer
-        except ImportError:
-            raise ImportError(
-                "Embedding mode needs sentence-transformers. "
-                'Install it with: pip install "easy-ml-studio[nlp]"'
-            )
+        from easyml.capabilities import optional_import
+
+        SentenceTransformer = optional_import("sentence_transformers", "Embedding mode", "nlp").SentenceTransformer
 
 
         # Split text before embedding

@@ -16,6 +16,17 @@ services:
       - EASYML_DATA_DIR=/data/easy-ml
     restart: unless-stopped
 
+  # Runs retraining schedules while the studio container is stopped or busy (optional; uncomment to use).
+  # It shares the data volume, so it sees the same runs and schedules.
+  # easy-ml-worker:
+  #   image: easyml-full
+  #   command: ["easy-ml", "schedule", "worker"]
+  #   volumes:
+  #     - easyml-data:/data/easy-ml
+  #   environment:
+  #     - EASYML_DATA_DIR=/data/easy-ml
+  #   restart: unless-stopped
+
 volumes:
   easyml-data:
     driver: local

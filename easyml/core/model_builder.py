@@ -91,7 +91,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
 
     try:
 
-        write_log(f"entered ml_model_builder_trainer_controller()", "info", os.path.basename(__file__))
+        write_log(f"entered ml_model_builder_trainer_controller()", "debug", os.path.basename(__file__))
 
         task = "classification" if "classification" in request_body.task.lower() else "regression" if "regression" in request_body.task.lower() else None
 

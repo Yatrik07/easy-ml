@@ -54,7 +54,7 @@ def preprocessing_controller(request_body: ML_RequestBody):
 
     from easyml.utils.socket_emitter import emit_progress
     try:
-        write_log("entered preprocessing controller", "info", os.path.basename(__file__))
+        write_log("entered preprocessing controller", "debug", os.path.basename(__file__))
         
         emit_progress("🔍 Determining feature types...", pct=18)
         determine_column_types(request_body)
@@ -127,7 +127,7 @@ def determine_column_types(request_body: ML_RequestBody):
     """
 
     try:
-        write_log("entered - determine_column_types", "info", os.path.basename(__file__))
+        write_log("entered - determine_column_types", "debug", os.path.basename(__file__))
 
         if request_body.X is None:
             raise ValueError("X is None — Make sure dataset is loaded before determining column types.")
@@ -243,7 +243,7 @@ def process_numerical(request_body : ML_RequestBody):
     """
 
     try:
-        write_log("entered process_numerical()", "info", os.path.basename(__file__))
+        write_log("entered process_numerical()", "debug", os.path.basename(__file__))
 
         if request_body.numeric_columns:
             numerical_pipeline = Pipeline([

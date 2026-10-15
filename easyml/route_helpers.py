@@ -236,6 +236,8 @@ def error_response(exc, default_status=500):
         status = 404
     elif isinstance(exc, (ValueError, KeyError, TypeError)):
         status = 400
+    elif isinstance(exc, ImportError):  # an optional feature is not installed, or broken
+        status = 503
     else:
         status = default_status
     message = str(exc)

@@ -150,6 +150,7 @@ The image targets `base`, `ml`, `nlp`, `cv` and `full` (default) select which ex
 - [User guide](https://github.com/Yatrik07/easy-ml/blob/main/docs/USER_GUIDE.md)
 - [Python guide](https://github.com/Yatrik07/easy-ml/blob/main/docs/PYTHON_API.md): train and use models from code and the command line
 - [Developer guide](https://github.com/Yatrik07/easy-ml/blob/main/docs/DEVELOPER_GUIDE.md)
+- [Changelog](https://github.com/Yatrik07/easy-ml/blob/main/CHANGELOG.md): what changed in each version
 
 ## Development
 

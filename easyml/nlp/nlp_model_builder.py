@@ -53,7 +53,7 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
         Exception: Re-raises with NLPModelTrainingError code.
     """
     try:
-        write_log("entered nlp_model_builder_controller", "info", os.path.basename(__file__))
+        write_log("entered nlp_model_builder_controller", "debug", os.path.basename(__file__))
 
         # Determine which models to train
         model_names = request_body.models if request_body.models else DEFAULT_NLP_MODELS

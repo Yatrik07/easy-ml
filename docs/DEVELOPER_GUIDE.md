@@ -403,8 +403,11 @@ Operational and storage endpoints.
 
 Endpoints:
 
-- `GET /settings/info`
+- `GET /settings/info` (incl. `uploads`: count and size of Easy-ML's upload files, and those older than a day)
 - `GET /settings/capabilities` (which optional features and models this install supports)
+- `POST /settings/clean-uploads` with `{older_than_hours: 24}`: deletes old upload files (`utils/storage.py`
+  only matches internal names like `data_<hex>.csv`, never folders or user files); `run_server` also
+  removes uploads older than 30 days at start-up
 - `DELETE /settings/clear-data`
 - `GET /settings/device`
 - `GET /settings/credits`
@@ -996,6 +999,20 @@ Behavior:
 - falls back to a temp directory if necessary
 - can suppress console logs with `EASYML_NO_CONSOLE_LOGS=1`
 - includes helpers to close and rebuild file handlers during "clear data" operations on Windows
+- rotates files with `SafeRotatingFileHandler` (`EASYML_LOG_MAX_MB`, default 5; `EASYML_LOG_BACKUPS`,
+  default 3). When Windows refuses the rename (another process has the file open) it keeps writing and
+  retries a minute later instead of failing the log call
+- `EASYML_LOG_NAME` prefixes the file names; `easy-ml serve` and `easy-ml schedule` set it (`serve_`,
+  `scheduler_`) so long-running processes never rotate the studio's files
+- `write_log(..., "debug")` is dropped by default: use it for routine per-call messages ("entered …",
+  "fetched …") so the logs only hold what helps when something goes wrong
+
+### Optional libraries
+
+Import an optional library for a feature through `capabilities.optional_import(module, feature, extra)`
+(or format a caught error with `describe_import_failure`). It raises `OptionalFeatureError` (an
+`ImportError`, mapped to `503` by `error_response`) whose message says "install it" when the package is
+missing, but shows the real error and suggests reinstalling when it is installed and broken.
 
 ### JSON serialization
 

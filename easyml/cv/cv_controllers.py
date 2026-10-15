@@ -25,7 +25,7 @@ class CVController:
         self._created_folder = None
         
     def execute_pipeline(self) -> dict:
-        write_log("entered cv execute_pipeline", "info", os.path.basename(__file__))
+        write_log("entered cv execute_pipeline", "debug", os.path.basename(__file__))
         
         try:
             emit_progress("⚙️ Initializing CV Pipeline...", pct=5)

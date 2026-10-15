@@ -133,8 +133,10 @@ class XAIExplainer:
         SHAP explanation of one prediction: a readable breakdown by input column (``explanation``) and
         SHAP's own waterfall plot as a base64 PNG (``plot_b64``).
         """
-        import shap
-        import matplotlib
+        from easyml.capabilities import optional_import
+
+        shap = optional_import("shap", "Explanations", "eda")
+        matplotlib = optional_import("matplotlib", "Explanations", "eda")
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 

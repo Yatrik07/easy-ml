@@ -45,7 +45,7 @@ def nlp_data_loader(request_body: NLP_RequestBody):
         Exception: Re-raises with NLPDataIngestionError code.
     """
     try:
-        write_log("entered nlp_data_loader", "info", os.path.basename(__file__))
+        write_log("entered nlp_data_loader", "debug", os.path.basename(__file__))
 
         # Move data to run folder
         run_data_path = os.path.join(request_body.path_to_save, "data.csv")
@@ -202,7 +202,7 @@ class NLPTextClassificationController:
 
     def run(self):
         try:
-            write_log(f"entered {self.__class__.__name__} - run()", "info", os.path.basename(__file__))
+            write_log(f"entered {self.__class__.__name__} - run()", "debug", os.path.basename(__file__))
 
             create_database_table("runs")
             emit_progress("⚙️ Initializing NLP pipeline...", pct=5)

@@ -81,7 +81,7 @@ def create_database_table(table_name):
         table_name (str): Name of the table to create.
     """
 
-    write_log("Entered function create_Database_Table.", "info", os.path.basename(__file__))
+    write_log("Entered function create_Database_Table.", "debug", os.path.basename(__file__))
 
     columns_definition = ', '.join(_TABLE_COLUMNS[table_name])
     with closing(_connect(table_name)) as conn:
@@ -89,7 +89,7 @@ def create_database_table(table_name):
         _add_missing_columns(conn, table_name)
         conn.commit()
 
-    write_log(f"Created / Connected {table_name} table successfully!", "info", os.path.basename(__file__))
+    write_log(f"Created / Connected {table_name} table successfully!", "debug", os.path.basename(__file__))
 
 
 _ENSURED = set()
@@ -145,7 +145,7 @@ def enter_record_to_table(table_name, **values):
         int: The id of the inserted row.
     """
 
-    write_log("Entered function enter_record_to_table.", "info", os.path.basename(__file__))
+    write_log("Entered function enter_record_to_table.", "debug", os.path.basename(__file__))
 
     columns = ', '.join(values.keys())
     placeholders = ', '.join(['?'] * len(values))
@@ -171,14 +171,14 @@ def get_data_from_database(table_name="runs"):
         dict: Contains status code and data or error message.
     """
 
-    write_log("Entered function get_data_from_database.", "info", os.path.basename(__file__))
+    write_log("Entered function get_data_from_database.", "debug", os.path.basename(__file__))
 
     try:
         with closing(_connect(table_name)) as conn:
             cursor = conn.execute(f"SELECT * FROM {table_name} ORDER BY id")
             columns = [desc[0] for desc in cursor.description]
             data = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        write_log(f"Data fetched successfully from table '{table_name}'.", "info", os.path.basename(__file__))
+        write_log(f"Data fetched successfully from table '{table_name}'.", "debug", os.path.basename(__file__))
         return {
             "status_code": 200,
             "data": data,
@@ -214,7 +214,7 @@ def get_record_by_id(record_id: int, table_name: str = "runs"):
         RunNotFoundError: If no row has this id.
     """
 
-    write_log("Entered function get_record_by_id.", "info", os.path.basename(__file__))
+    write_log("Entered function get_record_by_id.", "debug", os.path.basename(__file__))
 
     with closing(_connect(table_name)) as conn:
         cursor_obj = conn.execute(f"SELECT * FROM {table_name} WHERE id = ?", (record_id,))
@@ -225,7 +225,7 @@ def get_record_by_id(record_id: int, table_name: str = "runs"):
         write_log(f"No record found with ID {record_id} in '{table_name}'.", "warning", os.path.basename(__file__))
         raise RunNotFoundError(f"Run with ID {record_id} was not found.")
 
-    write_log(f"Record with ID {record_id} fetched successfully from '{table_name}'.", "info", os.path.basename(__file__))
+    write_log(f"Record with ID {record_id} fetched successfully from '{table_name}'.", "debug", os.path.basename(__file__))
     return dict(zip(column_names, row))
 
 
@@ -241,7 +241,7 @@ def delete_run_by_id(run_id: int, table_name: str = "runs"):
         dict: Result with status code and message.
     """
 
-    write_log("Entered function delete_run_by_id.", "info", os.path.basename(__file__))
+    write_log("Entered function delete_run_by_id.", "debug", os.path.basename(__file__))
 
     try:
         with closing(_connect(table_name)) as conn:

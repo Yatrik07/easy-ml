@@ -1,6 +1,8 @@
 import os
 import logging
 import tempfile
+import time
+from logging.handlers import RotatingFileHandler
 from threading import Lock
 
 from easyml.config.paths import LOGS_DIR
@@ -8,6 +10,52 @@ from easyml.config.paths import LOGS_DIR
 
 _LOGGER_LOCK = Lock()
 _ACTIVE_LOG_DIR = None
+RETRY_ROLLOVER_SECONDS = 60
+
+
+def _env_number(name, default):
+    try:
+        return max(0.0, float(os.environ.get(name, default)))
+    except ValueError:
+        return float(default)
+
+
+def max_log_bytes():
+    """Size at which a log file is rotated (``EASYML_LOG_MAX_MB``, default 5 MB; 0 = never)."""
+    return int(_env_number("EASYML_LOG_MAX_MB", 5) * 1024 * 1024)
+
+
+def log_backups():
+    """How many rotated files are kept next to each log (``EASYML_LOG_BACKUPS``, default 3)."""
+    return int(_env_number("EASYML_LOG_BACKUPS", 3))
+
+
+def log_file_name(base):
+    """``logs.log`` for the studio; long-running commands set ``EASYML_LOG_NAME`` (``serve_logs.log``, ...)."""
+    prefix = "".join(c for c in os.environ.get("EASYML_LOG_NAME", "") if c.isalnum() or c in "-_")
+    return f"{prefix}_{base}" if prefix else base
+
+
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """
+    Rotates like RotatingFileHandler, but never fails a log call when the rename is refused (on Windows
+    another process may have the file open): it keeps writing to the current file and tries again later.
+    """
+
+    _retry_at = 0.0
+
+    def shouldRollover(self, record):
+        if time.monotonic() < self._retry_at:
+            return False
+        return super().shouldRollover(record)
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except OSError:
+            self._retry_at = time.monotonic() + RETRY_ROLLOVER_SECONDS
+            if self.stream is None:
+                self.stream = self._open()
 
 class InfoLevelFilter(logging.Filter):
     """
@@ -50,6 +98,10 @@ def _build_formatter():
     )
 
 
+def _rotating_handler(path):
+    return SafeRotatingFileHandler(path, maxBytes=max_log_bytes(), backupCount=log_backups(), encoding='utf-8')
+
+
 def _build_file_handler(filename, level, add_info_filter=False):
     global _ACTIVE_LOG_DIR
 
@@ -59,14 +111,15 @@ def _build_file_handler(filename, level, add_info_filter=False):
     if _ACTIVE_LOG_DIR is None:
         return None
 
+    filename = log_file_name(filename)
     try:
-        handler = logging.FileHandler(os.path.join(_ACTIVE_LOG_DIR, filename), encoding='utf-8')
+        handler = _rotating_handler(os.path.join(_ACTIVE_LOG_DIR, filename))
     except OSError:
         fallback_dir = _resolve_log_dir(os.path.join(tempfile.gettempdir(), "easy-ml", "logs"))
         if fallback_dir is None:
             return None
         _ACTIVE_LOG_DIR = fallback_dir
-        handler = logging.FileHandler(os.path.join(_ACTIVE_LOG_DIR, filename), encoding='utf-8')
+        handler = _rotating_handler(os.path.join(_ACTIVE_LOG_DIR, filename))
 
     handler.setFormatter(_build_formatter())
     handler.setLevel(level)
@@ -132,13 +185,16 @@ def write_log(message: str, level: str, module_name: str):
         module_name (str): The name of the module or file where the log originated (often os.path.basename(__file__)).
     """
     level_map = {
+        'debug': logging.DEBUG,  # dropped unless the logger level is lowered: routine per-call messages
         'info': logging.INFO,
         'error': logging.ERROR,
         'warning': logging.WARNING
     }
-    formatted_message = f"{module_name} - {message}"
+    level_no = level_map.get(level, logging.INFO)
+    if not logger.isEnabledFor(level_no):
+        return
     configure_logger()
-    logger.log(level_map.get(level, logging.INFO), formatted_message)
+    logger.log(level_no, f"{module_name} - {message}")
 
 
 def close_all_file_handlers():

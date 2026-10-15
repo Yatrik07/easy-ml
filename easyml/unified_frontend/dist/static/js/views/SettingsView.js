@@ -1,5 +1,5 @@
 import { onMounted, ref } from '../lib/vue.js';
-import { deleteJSON, getJSON } from '../lib/api.js';
+import { deleteJSON, getJSON, postJSON } from '../lib/api.js';
 import { formatNumber } from '../lib/format.js';
 import { setThemePreference, themePreference } from '../lib/theme.js';
 import { session } from '../store/session.js';
@@ -21,6 +21,25 @@ export default {
     const device = ref(null);
     const loading = ref(false);
     const clearing = ref(false);
+    const cleaning = ref(false);
+
+    function megabytes(bytes) {
+      return formatNumber((bytes || 0) / (1024 * 1024), 1) + ' MB';
+    }
+
+    // Uploads are only needed while you explore, clean or train on them: every run keeps its own copy.
+    async function cleanUploads() {
+      cleaning.value = true;
+      try {
+        const res = await postJSON('/settings/clean-uploads', { older_than_hours: 24 }, 'Could not delete old uploads');
+        toastSuccess('Deleted ' + res.deleted + ' old upload' + (res.deleted === 1 ? '' : 's') + ' (' + megabytes(res.freed_bytes) + ').');
+        await refresh();
+      } catch (e) {
+        toastError(e.message);
+      } finally {
+        cleaning.value = false;
+      }
+    }
 
     async function refresh() {
       loading.value = true;
@@ -75,7 +94,7 @@ export default {
     ];
 
     return {
-      info, device, loading, clearing, refresh, clearData, FEATURES, available, hint,
+      info, device, loading, clearing, cleaning, cleanUploads, megabytes, refresh, clearData, FEATURES, available, hint,
       themes, themePreference, setThemePreference, formatNumber,
     };
   },
@@ -108,7 +127,18 @@ export default {
             <StatTile label="Free disk space" :value="formatNumber(info.disk_free_mb / 1024, 1) + ' GB'" />
             <StatTile label="Version" :value="info.version" />
           </div>
-          <div v-else class="row muted"><Spinner /> Loading…</div>
+          <div v-if="info && info.uploads" class="row-between uploads-row">
+            <div class="stack-xs">
+              <div class="field-label">Uploads</div>
+              <div class="muted text-sm">{{ info.uploads.files }} file{{ info.uploads.files === 1 ? '' : 's' }} ({{ megabytes(info.uploads.bytes) }}),
+                {{ info.uploads.old_files }} older than a day ({{ megabytes(info.uploads.old_bytes) }}).
+                Every run keeps its own copy of its data, so old uploads are safe to delete. Uploads older than 30 days
+                are removed when the studio starts.</div>
+            </div>
+            <button class="btn btn-secondary" @click="cleanUploads" :disabled="cleaning || !info.uploads.old_files">
+              <Spinner v-if="cleaning" /><Icon v-else name="cleaning_services" />Delete old uploads</button>
+          </div>
+          <div v-if="!info" class="row muted"><Spinner /> Loading…</div>
         </div>
       </section>
 

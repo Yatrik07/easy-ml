@@ -60,7 +60,7 @@ class MLInferenceController:
             dict: Contains the predicted value and associated probability (if available).
         """
 
-        write_log("entered get_inference", "info", os.path.basename(__file__))
+        write_log("entered get_inference", "debug", os.path.basename(__file__))
 
         try:
             self.load_objects()
@@ -87,7 +87,7 @@ class MLInferenceController:
             dict: Dictionary containing prediction and probability (if available).
         """
 
-        write_log("entered predict_single_point", "info", os.path.basename(__file__))
+        write_log("entered predict_single_point", "debug", os.path.basename(__file__))
 
         transformed_input = self._transform(pd.DataFrame([self.inference_body.data]))
         model = self.inference_body.model
@@ -129,7 +129,7 @@ class MLInferenceController:
         Applies the pipeline and model to predict multiple records from a DataFrame.
         Returns the original DataFrame with an appended 'Prediction' column.
         """
-        write_log("entered predict_batch", "info", os.path.basename(__file__))
+        write_log("entered predict_batch", "debug", os.path.basename(__file__))
         try:
             predictions, _ = self.predict_frame(df)
             output_df = df.copy()
@@ -146,7 +146,7 @@ class MLInferenceController:
 
         if self.inference_body.model is not None:
             return  # already loaded (e.g. a Predictor reused for several calls)
-        write_log("entered load_objects", "info", os.path.basename(__file__))
+        write_log("entered load_objects", "debug", os.path.basename(__file__))
 
         record = get_record_by_id(self.inference_body.run_id)
         folder_path = record["folder_path"]

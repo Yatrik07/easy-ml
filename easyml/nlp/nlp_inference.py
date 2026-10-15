@@ -62,7 +62,7 @@ class NLPInferenceController:
             Exception: Logs and re-raises with NLPInferenceError code.
         """
         try:
-            write_log("entered NLPInferenceController.get_inference", "info", os.path.basename(__file__))
+            write_log("entered NLPInferenceController.get_inference", "debug", os.path.basename(__file__))
 
             # Load all artifacts
             self._load_artifacts()

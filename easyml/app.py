@@ -152,6 +152,16 @@ def _port_in_use(host, port):
         return sock.connect_ex(("127.0.0.1" if host in ("0.0.0.0", "") else host, port)) == 0
 
 
+def _clean_old_uploads(days=30):
+    """Uploads are only needed while they are explored or trained on (runs keep a copy): drop month-old ones."""
+    from easyml.utils.storage import clean_uploads
+
+    try:
+        clean_uploads(older_than_hours=days * 24)
+    except Exception:  # housekeeping must never stop the studio from starting
+        pass
+
+
 def run_server(host=DEFAULT_HOST, port=DEFAULT_PORT, open_browser=True, console_logs=True, debug=False, scheduler=True):
     # Must be decided before the logger creates its handlers.
     if console_logs:
@@ -181,6 +191,7 @@ def run_server(host=DEFAULT_HOST, port=DEFAULT_PORT, open_browser=True, console_
 
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    _clean_old_uploads()
     if scheduler:  # scheduled retraining runs while the studio is open (not in tests or create_app users)
         from easyml.scheduling.host import start_studio_scheduler
 
@@ -214,6 +225,9 @@ def main(argv=None):
         from easyml.cli import prep
         return prep(args.prep_command, recipe=getattr(args, "recipe", None), source=getattr(args, "input", None),
                     output=getattr(args, "output", None))
+    if args.command in ("serve", "schedule"):
+        # Long-running commands write their own log files, so they never rotate the studio's files.
+        os.environ.setdefault("EASYML_LOG_NAME", "serve" if args.command == "serve" else "scheduler")
     if args.command == "serve":
         from easyml.cli import serve
         return serve(args.run_id, model=args.model, host=args.serve_host, port=args.serve_port, threads=args.threads,

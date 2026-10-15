@@ -17,6 +17,36 @@ INSTALL_HINTS = {
 }
 
 
+class OptionalFeatureError(ImportError):
+    """An optional library is missing, or installed but failing to load; the message says how to fix it."""
+
+
+def describe_import_failure(module, feature, extra, exc):
+    """
+    An honest message for a failed optional import: "install it" when the package is missing, but the real
+    error and "reinstall it" when it is installed and broken (a missing install hint would mislead).
+    """
+    top = module.split(".")[0]
+    package = top.replace("_", "-")
+    if not has_module(top):
+        return f"{feature} needs {package}. Install it with: {INSTALL_HINTS[extra]}"
+    reason = f"{type(exc).__name__}: {exc}"
+    if len(reason) > 300:
+        reason = reason[:297] + "..."
+    return (f"{feature} needs {package}, which is installed but failed to load ({reason}). "
+            f"Reinstalling it usually fixes this: pip install --force-reinstall {package}")
+
+
+def optional_import(module, feature, extra):
+    """Import an optional ``module`` for ``feature``; raises OptionalFeatureError with an actionable message."""
+    import importlib
+
+    try:
+        return importlib.import_module(module)
+    except Exception as exc:  # ImportError, or a broken install raising anything while importing
+        raise OptionalFeatureError(describe_import_failure(module, feature, extra, exc)) from exc
+
+
 def has_module(name):
     try:
         return importlib.util.find_spec(name) is not None

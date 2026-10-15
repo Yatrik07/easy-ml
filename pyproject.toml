@@ -89,6 +89,7 @@ Homepage = "https://github.com/Yatrik07/easy-ml"
 Repository = "https://github.com/Yatrik07/easy-ml"
 Documentation = "https://github.com/Yatrik07/easy-ml/tree/main/docs"
 "Bug Tracker" = "https://github.com/Yatrik07/easy-ml/issues"
+Changelog = "https://github.com/Yatrik07/easy-ml/blob/main/CHANGELOG.md"
 
 [project.scripts]
 easy-ml = "easyml.app:main"

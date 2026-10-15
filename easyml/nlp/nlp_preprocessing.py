@@ -53,9 +53,9 @@ def _get_spacy_nlp():
         try:
             import spacy
         except Exception as exc:  # ImportError, or a broken install (e.g. incompatible typer/click)
-            raise LemmatizerUnavailableError(
-                'Lemmatization needs a working spaCy install: pip install "easy-ml-studio[nlp]"'
-            ) from exc
+            from easyml.capabilities import describe_import_failure
+
+            raise LemmatizerUnavailableError(describe_import_failure("spacy", "Lemmatization", "nlp", exc)) from exc
         try:
             _NLP_SPACY = spacy.load("en_core_web_sm", disable=["parser", "ner"])
         except OSError as exc:
@@ -121,7 +121,7 @@ def nlp_preprocessing_controller(request_body: NLP_RequestBody):
         Exception: Logs error and re-raises with NLPPreProcessingError code.
     """
     try:
-        write_log("entered nlp_preprocessing_controller", "info", os.path.basename(__file__))
+        write_log("entered nlp_preprocessing_controller", "debug", os.path.basename(__file__))
 
         if request_body.X is None:
             raise ValueError("request_body.X is None — text data must be loaded before preprocessing.")

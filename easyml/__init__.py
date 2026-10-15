@@ -1,6 +1,6 @@
 """Easy-ML Studio: a no-code machine learning studio with a browser UI."""
 
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 from easyml.trainer import MLTrainer  # noqa: E402
 

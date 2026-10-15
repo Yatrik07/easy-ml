@@ -25,7 +25,7 @@ class CVInferenceController:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
     def get_inference(self):
-        write_log("entered cv get_inference", "info", os.path.basename(__file__))
+        write_log("entered cv get_inference", "debug", os.path.basename(__file__))
         try:
             model, class_names, img_size = self.load_objects()
             model = model.to(self.device)

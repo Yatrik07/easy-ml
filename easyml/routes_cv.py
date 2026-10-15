@@ -58,14 +58,25 @@ def cv_list_datasets():
         return jsonify({"error": str(exc)}), 500
 
 
+def _cv_broken(exc):
+    from easyml.capabilities import describe_import_failure
+
+    message = describe_import_failure("torch", "Image models", "cv", exc)
+    write_log(message, "error", os.path.basename(__file__))
+    return jsonify({"status": "error", "status_code": 503, "error_message": message, "message": message}), 503
+
+
 @cv_bp.route("/cv/predict", methods=["POST"])
 def cv_predict():
     unavailable = _cv_unavailable()
     if unavailable:
         return unavailable
 
-    from easyml.cv.cv_config import AVAILABLE_CV_MODELS
-    from easyml.cv.cv_controllers import CVController
+    try:
+        from easyml.cv.cv_config import AVAILABLE_CV_MODELS
+        from easyml.cv.cv_controllers import CVController
+    except Exception as exc:  # torch installed but failing to load
+        return _cv_broken(exc)
 
     try:
         payload = request.get_json(force=True) or {}
@@ -99,7 +110,10 @@ def cv_inference():
     if unavailable:
         return unavailable
 
-    from easyml.cv.cv_inference import CVInferenceController
+    try:
+        from easyml.cv.cv_inference import CVInferenceController
+    except Exception as exc:
+        return _cv_broken(exc)
 
     try:
         json_data = request.get_json(force=True)
