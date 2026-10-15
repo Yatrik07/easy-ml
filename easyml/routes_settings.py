@@ -38,6 +38,9 @@ def settings_info():
 def settings_clear_data():
     try:
         close_all_file_handlers()
+        from easyml.core.model_cache import clear as clear_model_cache
+
+        clear_model_cache()
 
         for directory in [DB_DIR, RUNS_DIR, UPLOADS_DIR, LOGS_DIR, EDA_DIR]:
             if os.path.exists(directory):

@@ -67,6 +67,15 @@ class XAIExplainer:
 
     def _background(self):
         """A small sample of the training data, transformed, as the SHAP reference distribution."""
+        from easyml.core.model_cache import cached_load
+
+        data_path = os.path.join(self.folder_path, "data.csv")
+        pipeline_stat = os.stat(os.path.join(self.folder_path, "preprocessing_pipeline.pkl"))
+        # The sample is drawn with a fixed seed, so it is the same every time for an unchanged run.
+        return cached_load("shap_background", data_path, self._load_background,
+                           extra=(pipeline_stat.st_size, pipeline_stat.st_mtime_ns), size=1024 * 1024)
+
+    def _load_background(self):
         data_path = os.path.join(self.folder_path, "data.csv")
         config = read_json(self.folder_path, "config_json.json")
         df = pd.read_csv(data_path, nrows=5000)

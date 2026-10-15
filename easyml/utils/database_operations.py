@@ -1,12 +1,9 @@
-import json
 import os
 import shutil
 import sqlite3
 from contextlib import closing
 
-import pandas as pd
-
-from easyml.config.GLOBAL_VARS import db_runs_columns_config
+from easyml.config.constants import db_runs_columns_config
 from easyml.config.paths import DB_DIR
 from easyml.utils.logger import write_log
 
@@ -102,11 +99,13 @@ def get_data_from_database(table_name="runs"):
 
     try:
         with closing(_connect(table_name)) as conn:
-            data = pd.read_sql_query(f"SELECT * FROM {table_name} ORDER BY id", conn)
+            cursor = conn.execute(f"SELECT * FROM {table_name} ORDER BY id")
+            columns = [desc[0] for desc in cursor.description]
+            data = [dict(zip(columns, row)) for row in cursor.fetchall()]
         write_log(f"Data fetched successfully from table '{table_name}'.", "info", os.path.basename(__file__))
         return {
             "status_code": 200,
-            "data": json.loads(data.to_json(orient="records")),
+            "data": data,
         }
     except Exception as e:
         write_log(f"Error fetching data from table '{table_name}': {str(e)}", "error", os.path.basename(__file__))
@@ -180,6 +179,10 @@ def delete_run_by_id(run_id: int, table_name: str = "runs"):
                 }
 
             folder_path = result[0]
+            if folder_path:
+                from easyml.core.model_cache import forget_folder
+
+                forget_folder(folder_path)
             if folder_path and os.path.exists(folder_path):
                 shutil.rmtree(folder_path)
                 write_log(f"Deleted folder at path: {folder_path}", "info", os.path.basename(__file__))

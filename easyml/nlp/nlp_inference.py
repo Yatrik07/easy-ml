@@ -126,7 +126,9 @@ class NLPInferenceController:
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Model '{self.inference_body.model_name}' was not found for this run.")
 
-        self.inference_body.model = joblib.load(model_path)
+        from easyml.core.model_cache import cached_load
+
+        self.inference_body.model = cached_load("nlp_model", model_path, lambda: joblib.load(model_path))
         write_log(f"loaded model from {model_path}", "info", os.path.basename(__file__))
 
         # Load config_json.json for preprocessing config and target encodings

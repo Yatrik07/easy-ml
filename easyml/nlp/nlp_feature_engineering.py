@@ -11,6 +11,7 @@ Fitted vectorizers and embedding configs are saved for inference reuse.
 """
 
 import os
+from collections import OrderedDict
 import json
 import traceback
 import joblib
@@ -270,16 +271,31 @@ def load_fe_config(run_folder: str) -> dict:
     raise FileNotFoundError(f"No fe_config.json found in {run_folder}")
 
 
-_INFERENCE_CACHE = {}
+_INFERENCE_CACHE = OrderedDict()
+_INFERENCE_CACHE_SIZE = 8
 
 
 def _cached(key, loader):
-    """Keep loaded vectorizers / embedding models in memory between inference requests."""
-    if key not in _INFERENCE_CACHE:
-        if len(_INFERENCE_CACHE) > 8:
-            _INFERENCE_CACHE.clear()
-        _INFERENCE_CACHE[key] = loader()
-    return _INFERENCE_CACHE[key]
+    """Keep loaded embedding models in memory between inference requests (least recently used goes first)."""
+    if key in _INFERENCE_CACHE:
+        _INFERENCE_CACHE.move_to_end(key)
+        return _INFERENCE_CACHE[key]
+    value = loader()
+    _INFERENCE_CACHE[key] = value
+    while len(_INFERENCE_CACHE) > _INFERENCE_CACHE_SIZE:
+        _INFERENCE_CACHE.popitem(last=False)
+    return value
+
+
+def _load_vectorizer_cached(run_folder):
+    from easyml.core.model_cache import cached_load
+
+    path = os.path.join(run_folder, "vectorizer.pkl")
+    if not os.path.exists(path):
+        path = os.path.join(run_folder, "vectorizer_config.json")
+    if not os.path.exists(path):
+        return load_vectorizer_for_inference(run_folder)  # raises the usual "not found" error
+    return cached_load("vectorizer", path, lambda: load_vectorizer_for_inference(run_folder))
 
 
 def transform_text_for_inference(text: str, run_folder: str, fe_config: dict):
@@ -300,8 +316,7 @@ def transform_texts_for_inference(texts, run_folder: str, fe_config: dict):
         Feature array suitable for model.predict().
     """
     if fe_config["feature_mode"] == "vectorizer":
-        vectorizer = _cached(("vectorizer", os.path.abspath(run_folder)),
-                             lambda: load_vectorizer_for_inference(run_folder))
+        vectorizer = _load_vectorizer_cached(run_folder)
         return vectorizer.transform(list(texts))
 
     elif fe_config["feature_mode"] == "embedding":

@@ -7,7 +7,7 @@ import io
 import json
 import traceback
 from easyml.cv.cv_config import CV_InferenceBody
-from easyml.config.GLOBAL_VARS import error_code_mappings
+from easyml.config.constants import error_code_mappings
 from easyml.utils.logger import write_log
 from easyml.utils.database_operations import get_record_by_id
 from easyml.cv.cv_model_builder import get_cv_model
@@ -70,11 +70,19 @@ class CVInferenceController:
         img_size = conf["image_size"]
         custom_layers = conf.get("custom_layers", None)
         
-        # Load Model architecture and weights
-        model = get_cv_model(self.inference_body.model_name, num_classes, custom_layers=custom_layers,
-                             image_size=img_size, pretrained=False)
+        # Load Model architecture and weights (kept in memory while the weights file is unchanged)
+        from easyml.core.model_cache import cached_load
+
         model_path = os.path.join(folder_path, f"{self.inference_body.model_name}.pth")
-        model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+
+        def build():
+            model = get_cv_model(self.inference_body.model_name, num_classes, custom_layers=custom_layers,
+                                 image_size=img_size, pretrained=False)
+            model.load_state_dict(torch.load(model_path, map_location=self.device, weights_only=True))
+            return model.to(self.device).eval()
+
+        model = cached_load("cv_model", model_path, build,
+                            extra=(str(self.device), json.dumps([num_classes, img_size, custom_layers], default=str)))
         
         return model, class_names, img_size
         
