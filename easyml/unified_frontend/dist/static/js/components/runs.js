@@ -1,7 +1,7 @@
 // Run History extras: retrain dialog, run import dialog and the "retrained from" badge.
 import { computed, ref } from '../lib/vue.js';
 import { postForm } from '../lib/api.js';
-import { closeRetrain, columnCheck, retrain, submitRetrain, uploadRetrainFile } from '../store/retrain.js';
+import { cleaningRecipe, closeRetrain, columnCheck, retrain, submitRetrain, uploadRetrainFile } from '../store/retrain.js';
 import { loadRuns, openRunDetail, runs } from '../store/runs.js';
 import { training } from '../store/training.js';
 import { toast, toastError, toastSuccess } from '../store/ui.js';
@@ -24,15 +24,18 @@ export const RetrainDialog = {
   setup() {
     const check = computed(() => columnCheck());
     const spec = computed(() => (retrain.spec && retrain.spec.retrain) || null);
+    // With a recipe the raw file's columns can differ (renamed, combined); the server checks them after cleaning.
+    const cleaning = computed(() => cleaningRecipe());
+    const blocking = computed(() => (cleaning.value ? [] : check.value.missing));
     const isFolder = computed(() => !!spec.value && spec.value.input === 'image_folder');
     const busy = computed(() => training.status === 'running');
     const ready = computed(() => {
       if (!spec.value || !spec.value.supported || busy.value || !retrain.name.trim()) return false;
       if (isFolder.value) return !!retrain.folder.trim();
-      return !!retrain.upload.savedPath && !check.value.missing.length;
+      return !!retrain.upload.savedPath && !blocking.value.length;
     });
     function onFile(event) { uploadRetrainFile(event.target.files[0]); }
-    return { retrain, spec, check, isFolder, busy, ready, onFile, closeRetrain, submitRetrain };
+    return { retrain, spec, check, cleaning, blocking, isFolder, busy, ready, onFile, closeRetrain, submitRetrain };
   },
   template: /* html */ `
     <ModalDialog :open="retrain.open" :title="'Retrain run #' + retrain.runId" @close="closeRetrain">
@@ -45,16 +48,20 @@ export const RetrainDialog = {
         <template v-else>
           <div v-if="!isFolder" class="stack-sm">
             <div class="field-label">New data</div>
-            <div class="subtle text-xs">Needs these columns:</div>
+            <div class="subtle text-xs">{{ cleaning ? 'After cleaning, the data needs these columns:' : 'Needs these columns:' }}</div>
             <div class="term-list"><span v-for="c in spec.required_columns" :key="c" class="badge"
-                 :class="{ 'badge-danger': check.missing.includes(c) }">{{ c }}</span></div>
+                 :class="{ 'badge-danger': blocking.includes(c) }">{{ c }}</span></div>
             <label class="btn btn-secondary file-button">
               <Icon name="upload_file" />{{ retrain.upload.fileName || 'Choose a CSV or Excel file' }}
               <input type="file" accept=".csv,.xlsx,.xls" class="sr-only" @change="onFile" />
             </label>
             <div v-if="retrain.upload.uploading" class="row muted text-sm"><Spinner /> Uploading…</div>
-            <div v-if="check.missing.length" class="alert alert-danger"><Icon name="error_outline" />
-              <div>This file is missing {{ check.missing.length }} column(s) the run was trained on: {{ check.missing.join(', ') }}.</div></div>
+            <div v-if="blocking.length" class="alert alert-danger"><Icon name="error_outline" />
+              <div>This file is missing {{ blocking.length }} column(s) the run was trained on: {{ blocking.join(', ') }}.
+                <span v-if="retrain.recipes.length">If a recipe makes them, choose it below.</span></div></div>
+            <div v-else-if="retrain.upload.savedPath && cleaning" class="alert alert-info"><Icon name="cleaning_services" />
+              <div>{{ retrain.upload.rows.toLocaleString() }} rows. They are cleaned with recipe "{{ cleaning.name }}" first;
+                the columns are checked after cleaning.</div></div>
             <div v-else-if="retrain.upload.savedPath" class="alert alert-success"><Icon name="check_circle" />
               <div>{{ retrain.upload.rows.toLocaleString() }} rows with every column the run needs.
                 <span v-if="check.extra.length">{{ check.extra.length }} other column(s) will be ignored.</span></div></div>
@@ -71,6 +78,16 @@ export const RetrainDialog = {
             <input class="input" v-model="retrain.folder" placeholder="Or type a folder path" aria-label="Image folder path" />
             <div v-if="spec.assumed_defaults.length" class="alert alert-warning"><Icon name="info" />
               <div>This run was trained before Easy-ML 0.6.0, so these settings use defaults: {{ spec.assumed_defaults.join(', ') }}.</div></div>
+          </div>
+          <div v-if="!isFolder && (spec.recipe || retrain.recipes.length)" class="stack-xs">
+            <label class="field-label" for="retrain-recipe">Clean the new data first</label>
+            <select id="retrain-recipe" class="select" v-model="retrain.recipeId">
+              <option v-if="spec.recipe" value="">The run's recipe: {{ spec.recipe.name }} ({{ spec.recipe.steps }} steps)</option>
+              <option :value="spec.recipe ? 'none' : ''">No cleaning, use the file as it is</option>
+              <option v-for="r in retrain.recipes" :key="r.id" :value="String(r.id)">Recipe: {{ r.name }} ({{ r.steps }} steps)</option>
+            </select>
+            <div v-if="spec.recipe && retrain.recipeId === ''" class="subtle text-xs">This run was trained on cleaned data,
+              so new files are cleaned with the same steps. A file that is already clean is used as it is.</div>
           </div>
           <div class="stack-xs">
             <label class="field-label" for="retrain-name">Name of the new run</label>

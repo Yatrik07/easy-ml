@@ -3,14 +3,38 @@ import shutil
 import sqlite3
 from contextlib import closing
 
-from easyml.config.constants import db_runs_columns_config
+from easyml.config.constants import db_recipes_columns_config, db_runs_columns_config
 from easyml.config.paths import DB_DIR
 from easyml.utils.logger import write_log
 
 # Use centralized database directory
 db_dir = DB_DIR
 
-_TABLE_COLUMNS = {"runs": db_runs_columns_config}
+_TABLE_COLUMNS = {"runs": db_runs_columns_config, "recipes": db_recipes_columns_config}
+
+
+def _column_names(table_name):
+    return {definition.split()[0] for definition in _TABLE_COLUMNS[table_name]}
+
+
+def update_record(table_name, record_id, **values):
+    """Set ``values`` on one row. Only the table's declared columns can be written."""
+    unknown = set(values) - _column_names(table_name) - {"id"}
+    if unknown or "id" in values:
+        raise ValueError(f"Cannot update column(s) {', '.join(sorted(unknown | ({'id'} & set(values))))}")
+    if not values:
+        return
+    assignments = ", ".join(f"{name} = ?" for name in values)
+    with closing(_connect(table_name)) as conn:
+        conn.execute(f"UPDATE {table_name} SET {assignments} WHERE id = ?", (*values.values(), record_id))
+        conn.commit()
+
+
+def delete_record(table_name, record_id):
+    """Delete one row (for tables without files on disk; runs use delete_run_by_id)."""
+    with closing(_connect(table_name)) as conn:
+        conn.execute(f"DELETE FROM {table_name} WHERE id = ?", (record_id,))
+        conn.commit()
 
 
 class RunNotFoundError(LookupError):

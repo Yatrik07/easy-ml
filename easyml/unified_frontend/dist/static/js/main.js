@@ -10,6 +10,9 @@ import { ClassDistribution, ConfusionMatrix, ModelDetail, PipelineSummary, Resul
 import { AppSidebar, ThemeToggle, TopBar } from './components/shell.js';
 import { CnnBuilder, FolderPicker } from './components/images.js';
 import { ImportRunDialog, LineageBadge, RetrainDialog } from './components/runs.js';
+import {
+  AddStepDialog, MappingField, PreviewTable, ProfileTable, RecipesDialog, SaveRecipeDialog, StepForm, StepList, TrainDialog,
+} from './components/prep.js';
 import { ImportanceChart, ModelCharts, PrChart, ResidualChart, RocChart, ScatterChart, TopTerms } from './components/charts.js';
 
 const app = createApp(App);
@@ -22,6 +25,7 @@ const components = {
   AppSidebar, TopBar, ThemeToggle,
   FolderPicker, CnnBuilder,
   RetrainDialog, ImportRunDialog, LineageBadge,
+  AddStepDialog, MappingField, PreviewTable, ProfileTable, RecipesDialog, SaveRecipeDialog, StepForm, StepList, TrainDialog,
   ModelCharts, RocChart, PrChart, ScatterChart, ResidualChart, ImportanceChart, TopTerms,
 };
 for (const [name, component] of Object.entries(components)) app.component(name, component);

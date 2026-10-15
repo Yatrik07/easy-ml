@@ -10,6 +10,7 @@ pip install "easy-ml-studio[all]"     # + XGBoost/LightGBM/CatBoost, embeddings,
 
 - [Train a model](#train-a-model)
 - [Use a trained model](#use-a-trained-model)
+- [Clean data with recipes](#clean-data-with-recipes)
 - [Retrain on new data](#retrain-on-new-data)
 - [Move runs between computers](#move-runs-between-computers)
 - [Serve a model as a REST API](#serve-a-model-as-a-rest-api)
@@ -131,9 +132,57 @@ Errors:
 - `ValueError` when the model is not part of the run.
 - `TypeError` when the input type does not fit the run.
 
+## Clean data with recipes
+
+The studio's **Data prep** page cleans a table step by step with a live preview (remove columns, fill
+missing values, filter rows, split dates, ...). Saved as a **recipe**, the same steps can be applied to
+new files from Python or the command line:
+
+```python
+from easyml import prep
+
+prep.list_recipes()                                  # [{"id": 1, "name": "customers", "steps": 5, ...}]
+recipe = prep.Recipe.load("customers")               # by name, id, or a recipe .json file
+clean = recipe.apply("october.csv")                  # a pandas DataFrame
+recipe.apply("october.csv", output="october_clean.csv")
+
+prep.profile("october.csv")                          # one summary per column: kind, missing, unique, ...
+```
+
+Recipes can also be written in code. A step is `{"op": ..., "params": {...}}`; `prep.steps()` lists every
+step with its settings:
+
+```python
+recipe = prep.Recipe(name="churn cleanup", steps=[
+    {"op": "drop_columns", "params": {"columns": ["customer_id"]}},
+    {"op": "fill_missing", "params": {"strategy": "median"}},
+    {"op": "clean_text", "params": {"columns": ["city"], "trim": True, "case": "upper"}},
+    {"op": "date_parts", "params": {"column": "signup", "parts": ["year", "month"]}},
+])
+recipe.save()                                        # now listed in the studio too
+print(recipe.to_json())                              # share it as a file; Recipe.load("recipe.json") reads it
+```
+
+| Group | Steps |
+|---|---|
+| Columns | `drop_columns`, `keep_columns`, `rename_columns`, `change_type` |
+| Rows | `remove_duplicates`, `remove_missing`, `filter_rows`, `sort_rows` |
+| Values | `fill_missing`, `replace_values`, `clean_text`, `clip_outliers`, `round_numbers` |
+| New columns | `date_parts`, `bin_numbers`, `combine_columns` |
+
+- Steps run from top to bottom. A step that cannot run on a file (for example a column it needs is
+  missing) makes `apply` raise a `ValueError` that names the step, so a recipe never half-cleans data
+  silently.
+- Steps that use statistics (median/mean fill, outlier limits, ranges) compute them on the data they are
+  applied to, so new data is filled with its own medians.
+- Nothing in a recipe runs code: steps are a fixed list of pandas operations.
+
+A run trained on cleaned data (the **Train with this data** button) remembers its recipe, and
+retraining it cleans new files with the same steps (next section).
+
 ## Retrain on new data
 
-Train a run's recipe again on newer data. The new run uses exactly the same settings as the original
+Train a run again on newer data. The new run uses exactly the same settings as the original
 (models, preprocessing, which columns are categorical, tuning level, text settings, image settings),
 records which run it came from, and leaves the original untouched.
 
@@ -156,6 +205,14 @@ result.load_model().predict("new_customers.csv")
 - Models that are not installed on this computer are skipped with a warning.
 - Image runs take a folder with one sub-folder per class. Image runs trained before 0.6.0 did not save
   their training settings, so defaults are used for those (listed in `result.warnings`).
+- A run trained on cleaned data cleans the new file with the same recipe first. If the file is
+  already clean (the recipe does not fit it), it is used as it is, with a warning. Choose another
+  recipe with `recipe="name"` (or an id, or a `prep.Recipe`), or skip cleaning with `recipe=False`:
+
+  ```python
+  easyml.retrain(5, "october_raw.csv", recipe="customers")
+  easyml.retrain(5, "october_clean.csv", recipe=False)
+  ```
 
 ## Move runs between computers
 
@@ -242,6 +299,11 @@ easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per im
 easy-ml retrain 5 customers_october.csv             # same settings as run #5, new data
 easy-ml retrain 5 october.csv --name churn-oct --models random_forest,light_gbm
 easy-ml retrain 7 new_photos/                       # image runs: a folder of class folders
+easy-ml retrain 5 october_raw.csv --recipe customers   # clean with a recipe first (--recipe none: as it is)
+
+easy-ml prep list                                   # saved data-prep recipes
+easy-ml prep show customers                         # a recipe's steps as JSON
+easy-ml prep apply customers october.csv -o clean.csv   # clean a file (without -o: print the CSV)
 
 easy-ml serve 5 --port 8000                         # REST API for run #5 (Ctrl+C stops it)
 
@@ -250,7 +312,7 @@ easy-ml import churn.zip                            # asks for confirmation; --y
 ```
 
 Without `-o`, the predictions are written to the terminal as CSV, so you can pipe them to another command.
-`easy-ml predict`, `retrain`, `export` and `import` exit with code 1 when something is wrong
+`easy-ml predict`, `retrain`, `prep`, `export` and `import` exit with code 1 when something is wrong
 (unknown run, missing columns, damaged archive, ...) and print the reason.
 
 ## Where runs are stored

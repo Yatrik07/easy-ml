@@ -42,8 +42,11 @@ The top-level package intentionally exports a small API (documented for users in
 
 - `easyml.MLTrainer`: train tabular and text runs from Python
 - `easyml.load_model(run_id, model_name=None)`: a `Predictor` for any saved run (`easyml/predictor.py`)
-- `easyml.retrain(run_id, dataset_path, name=None, models=None)`: a run's recipe on new data (`easyml/retraining.py`)
+- `easyml.retrain(run_id, dataset_path, name=None, models=None, recipe=None)`: a run's settings on new data, optionally cleaned with a data-prep recipe first (`easyml/retraining.py`)
 - `easyml.export_run(...)` / `easyml.import_run(..., trusted=True)`: run archives (`easyml/run_archive.py`)
+- `easyml.serve(run_id, ...)`: a run as a REST API (`easyml/serving/`)
+- `easyml.prep`: data-prep recipes (`Recipe`, `apply`, `profile`, `steps`, `list_recipes`, `delete_recipe`;
+  `easyml/prep.py` over `easyml/dataprep/`)
 
 Everything except `MLTrainer` is a lazy wrapper, so `import easyml` never loads torch, spaCy or SHAP
 (`tests/test_predictor.py` checks this). Other modules are internal.
@@ -60,8 +63,22 @@ easyml/
   routes_cv.py
   routes_frontend.py
   routes_nlp.py
+  routes_prep.py
+  routes_runs.py
   routes_settings.py
   trainer.py
+  predictor.py
+  retraining.py
+  prep.py
+  dataprep/
+    engine.py
+    profile.py
+    recipe.py
+    steps.py
+  serving/
+    docs_page.py
+    runner.py
+    server.py
   config/
     GLOBAL_VARS.py
     paths.py
@@ -191,6 +208,8 @@ classification `target_labels` (labels in code order, with their JSON type) plus
 Decode predicted class codes only through `utils/labels.decoder_from_config`; it falls back to the
 string keys of `target_encodings` for older runs, converting them to numbers only when that is exact.
 Image runs save every training setting (epochs, batch size, splits, learning rate, ...).
+A run trained on data cleaned in Data prep (or retrained with a recipe) also records `recipe`
+(`{name, steps}`); the key is absent otherwise, so other runs' configs are unchanged.
 
 `evaluation.json` is written by `core/evaluation_charts.py` while the fitted models and the test set
 are in memory: per model, ROC and precision-recall curves (probabilities, else decision scores;
@@ -254,8 +273,11 @@ Endpoints that act on one saved run (logic lives in `retraining.py`, `run_archiv
 
 - `GET /runs/<id>/config`: the run's readable settings (`run_summary.settings_for_display`) and what a
   retrain needs (required columns, upload endpoint, models available here); no file paths
-- `POST /runs/<id>/retrain` with `{dataset_path, original_filename?, name?, models?}`: `202` with
-  `job_id` and `warnings`; `400` with `missing_columns` when the data lacks columns the run used
+- `POST /runs/<id>/retrain` with `{dataset_path, original_filename?, name?, models?, recipe_id?}`: `202`
+  with `job_id` and `warnings`; `400` with `missing_columns` when the data lacks columns the run used.
+  `recipe_id` (a recipe id or name) cleans the file first; `"none"` uses it as it is; without it, a run
+  that has a `recipe` in its config re-applies it, falling back to the file as it is when the steps do
+  not fit (an already-cleaned file). The config route's `retrain.recipe` tells the UI about that recipe.
 - `GET /runs/<id>/charts`: `evaluation.json`, or `{available: false, reason}` for older runs
 - `GET /runs/<id>/export?include_data=1`: the run archive (.zip)
 - `POST /runs/import` (multipart `file`, `trusted=true`, optional `name`): `201` with the new run id
@@ -281,6 +303,37 @@ A separate small Flask app (no Socket.IO, no studio routes) around one `Predicto
 `Predictor` is safe to share between threads: its controller is created and fully loaded once under a
 lock (`_ready_controller`); predictions afterwards only read it. Image inputs may be paths, bytes or
 file objects.
+
+### `easyml/routes_prep.py` and `easyml/dataprep/` (Data prep)
+
+`dataprep/` is pure pandas with no Flask imports:
+
+- `steps.py`: the step registry. Each step is a vectorised function `fn(frame, **params) -> (frame, note)`
+  plus a spec (`label`, `category`, `help`, `fields` with types `columns`/`column`/`choice`/`text`/
+  `number`/`bool`/`mapping`/`parts` and optional `show_if`). The UI builds every step form from
+  `public_specs()`, so a new step needs no frontend change. `validate_step` checks params against the
+  spec; `run_step` raises `StepError` for data problems. No step evaluates user expressions.
+- `engine.py`: `apply_steps(frame, steps)` runs the steps, skipping (and reporting) a failed or
+  unfinished one, so the preview always shows the steps before it. `preview(path, steps)` works on the
+  first `PREVIEW_ROWS` (5000) rows and memoises intermediate frames per `(file, mtime, steps[:k])` in a
+  small LRU, so editing step k recomputes only from step k. `apply_file` cleans the whole file.
+- `profile.py`: one summary per column (kind, missing, unique, min/max/mean or top values, samples).
+- `recipe.py`: `Recipe` (JSON round trip, `load` by name/id/.json path, `save`, `apply`, which raises
+  when a step fails) and the `recipes` table helpers. The table lives in `database/recipes.db` and is
+  created on first use.
+
+Endpoints:
+
+- `GET /prep/steps`: step specs and categories
+- `POST /prep/preview` with `{dataset_path, steps}`: preview rows, columns, profile, per-step reports
+- `POST /prep/apply`: cleans the whole file into `uploads/clean_<hex>.csv` and answers like `/load_data`
+  (so the wizard can train on it) plus `steps` and `failed_steps`
+- `POST /prep/download`: the cleaned CSV as an attachment
+- `GET|POST /prep/recipes`, `GET|PUT|DELETE /prep/recipes/<id>`
+
+Training routes accept an optional `recipe` (`{name, steps}`), which `route_helpers.recipe_summary`
+validates and the controllers store in `config_json.json`. `run_summary` hides `clean_<hex>.csv`
+upload names like the other internal names.
 
 ### `easyml/routes_settings.py`
 

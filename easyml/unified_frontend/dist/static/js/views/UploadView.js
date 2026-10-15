@@ -2,6 +2,7 @@ import { computed, ref } from '../lib/vue.js';
 import { formatNumber, truncate } from '../lib/format.js';
 import { featureAvailable, installHint, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
+import { useDataset } from '../store/prep.js';
 import {
   confirmImageFolder, dataReady, isImage, isText, openEdaReport, openFolderPicker, uploadDataset, wizard,
 } from '../store/wizard.js';
@@ -24,12 +25,19 @@ export default {
       uploadDataset(event.dataTransfer.files[0]);
     }
 
+    function cleanFirst() {
+      const data = wizard.upload.data;
+      useDataset({ path: wizard.config.dataset_path, fileName: wizard.config.original_filename || wizard.upload.fileName,
+        rows: data.rows, cols: data.cols });
+      navigate('prep');
+    }
+
     const subtitle = computed(() => (isImage.value
       ? 'Choose a folder of images with one sub-folder per class, for example cats/ and dogs/.'
       : 'Upload a CSV or Excel file. The first row must contain the column names.'));
 
     return {
-      wizard, upload, columns, preview, fileInput, dragging, pick, onFile, onDrop, isImage, isText, dataReady,
+      wizard, upload, columns, preview, fileInput, cleanFirst, dragging, pick, onFile, onDrop, isImage, isText, dataReady,
       subtitle, taskLabel, navigate, openEdaReport, openFolderPicker, confirmImageFolder, featureAvailable,
       installHint, formatNumber, truncate,
     };
@@ -66,6 +74,8 @@ export default {
                         :title="featureAvailable('eda_report') ? 'Open an automatic exploratory data analysis report' : 'Needs: ' + installHint('eda_report')">
                   <Spinner v-if="wizard.edaLoading" /><Icon v-else name="query_stats" />Explore data
                 </button>
+                <button class="btn btn-ghost btn-sm" @click="cleanFirst" title="Open this file in Data prep to clean it before training">
+                  <Icon name="cleaning_services" />Clean this data first</button>
                 <button class="btn btn-ghost btn-sm" @click="pick"><Icon name="swap_horiz" />Replace file</button>
                 <input ref="fileInput" type="file" accept=".csv,.xlsx,.xls" hidden @change="onFile" />
               </div>

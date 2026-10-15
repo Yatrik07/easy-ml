@@ -34,6 +34,16 @@ db_runs_columns_config = [
     "origin TEXT",            # NULL (trained here), "retrain" or "import"
 ]
 
+# Data-prep recipes (0.8.0)
+db_recipes_columns_config = [
+    "id INTEGER PRIMARY KEY AUTOINCREMENT",
+    "name TEXT",
+    "steps_json TEXT",
+    "source_columns_json TEXT",
+    "created_at TEXT",
+    "updated_at TEXT",
+]
+
 # Bumped when config_json.json gains keys that later code relies on (retrain, export).
 CONFIG_VERSION = 2
 

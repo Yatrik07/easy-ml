@@ -6,6 +6,7 @@ from easyml.capabilities import get_capabilities
 from easyml.nlp.nlp_config import AVAILABLE_NLP_MODELS
 from easyml.nlp.nlp_inference import NLPInferenceController
 from easyml.route_helpers import (
+    recipe_summary,
     clean_display_filename,
     create_run_folder,
     error_response,
@@ -102,6 +103,7 @@ def nlp_predict():
             timestamp=timestamp,
             imbalance_handling=data.get("imbalance_handling", "none"),
             original_dataset_name=clean_display_filename(data.get("original_filename")),
+            recipe=recipe_summary(data.get("recipe")),
         )
     except Exception as exc:
         remove_orphan_run_folder(path_to_save)

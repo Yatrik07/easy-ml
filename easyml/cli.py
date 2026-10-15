@@ -9,6 +9,7 @@
     easy-ml export 5 -o churn.zip                   # move a run to another computer...
     easy-ml import churn.zip                        # ...and load it there
     easy-ml serve 5 --port 8000                     # a REST API for run #5
+    easy-ml prep apply customers new.csv -o clean.csv
 """
 
 import csv
@@ -150,7 +151,7 @@ def _print_leaderboard(task, performance, out):
         print(f"  {m['label'].ljust(width)}  {_format_score(m['test_score'], metric)}", file=out)
 
 
-def retrain(run_id, data, name=None, models=None, as_json=False, out=None):
+def retrain(run_id, data, name=None, models=None, as_json=False, out=None, recipe=None):
     _quiet_logs()
     from easyml.retraining import DatasetMismatchError, retrain as retrain_run
     from easyml.utils.database_operations import RunNotFoundError
@@ -165,7 +166,7 @@ def retrain(run_id, data, name=None, models=None, as_json=False, out=None):
 
     try:
         with progress_listener(show):
-            result = retrain_run(run_id, data, name=name, models=models)
+            result = retrain_run(run_id, data, name=name, models=models, recipe=recipe)
     except RunNotFoundError:
         print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
         return 1
@@ -249,3 +250,43 @@ def serve(run_id, model=None, host="127.0.0.1", port=8000, threads=4, api_key=No
     except KeyboardInterrupt:
         pass
     return 0
+
+
+def prep(command, recipe=None, source=None, output=None, out=None):
+    _quiet_logs()
+    from easyml.dataprep.recipe import Recipe, list_recipes
+
+    out = out or sys.stdout
+    try:
+        if command == "list" or command is None:
+            recipes = list_recipes()
+            if not recipes:
+                print("No recipes yet. Save one from the studio's Data prep page.", file=out)
+                return 0
+            print(f"{'ID':<4}  {'NAME':<32}  {'STEPS':>5}  UPDATED", file=out)
+            for r in recipes:
+                print(f"{r['id']:<4}  {r['name'][:32]:<32}  {r['steps']:>5}  {(r['updated_at'] or '').replace('T', ' ')}",
+                      file=out)
+            return 0
+        loaded = Recipe.load(int(recipe) if str(recipe).isdigit() else recipe)
+        if command == "show":
+            out.write(loaded.to_json() + "\n")
+            return 0
+        if command == "apply":
+            if not os.path.isfile(source):
+                print(f"File not found: {source}", file=sys.stderr)
+                return 1
+            frame = loaded.apply(source, output=output)
+            if output:
+                print(f"Wrote {len(frame):,} rows x {len(frame.columns)} columns to {output}", file=sys.stderr)
+            else:
+                frame.to_csv(out, index=False, lineterminator="\n")
+            return 0
+    except LookupError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except (ValueError, OSError) as exc:
+        print(f"Data prep failed: {exc}", file=sys.stderr)
+        return 1
+    print("Use: easy-ml prep list | show RECIPE | apply RECIPE INPUT [-o OUTPUT]", file=sys.stderr)
+    return 1

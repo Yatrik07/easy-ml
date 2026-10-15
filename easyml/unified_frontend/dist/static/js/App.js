@@ -11,6 +11,7 @@ import HistoryView from './views/HistoryView.js';
 import SettingsView from './views/SettingsView.js';
 import AboutView from './views/AboutView.js';
 import CompareView from './views/CompareView.js';
+import PrepView from './views/PrepView.js';
 
 const VIEWS = {
   home: HomeView,
@@ -24,6 +25,7 @@ const VIEWS = {
   settings: SettingsView,
   about: AboutView,
   compare: CompareView,
+  prep: PrepView,
 };
 
 export default {

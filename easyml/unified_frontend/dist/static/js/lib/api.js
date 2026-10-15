@@ -42,6 +42,15 @@ export async function postJSON(url, body, fallback = 'Request failed') {
   return res.json();
 }
 
+export async function putJSON(url, body, fallback = 'Request failed') {
+  const res = await request(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  }, fallback);
+  return res.json();
+}
+
 export async function deleteJSON(url, body, fallback = 'Request failed') {
   const res = await request(url, {
     method: 'DELETE',

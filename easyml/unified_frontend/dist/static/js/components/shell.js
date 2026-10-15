@@ -33,6 +33,7 @@ export const AppSidebar = {
     const main = [
       { view: 'home', label: 'Home', icon: 'home' },
       { view: 'history', label: 'Run history', icon: 'history' },
+      { view: 'prep', label: 'Data prep', icon: 'cleaning_services' },
     ];
     const footer = [
       { view: 'settings', label: 'Settings', icon: 'settings' },

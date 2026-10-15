@@ -2,9 +2,9 @@ import { computed, onMounted, ref } from '../lib/vue.js';
 import { getJSON } from '../lib/api.js';
 import { formatScore, relativeTime } from '../lib/format.js';
 import { featureAvailable, installHint, session } from '../store/session.js';
-import { navigate, toastError, confirmAction } from '../store/ui.js';
-import { resetWizard, wizard } from '../store/wizard.js';
-import { isRunning, resetTraining, training } from '../store/training.js';
+import { navigate, toastError } from '../store/ui.js';
+import { wizard } from '../store/wizard.js';
+import { beginNewRun } from '../store/newrun.js';
 import { loadRuns, openRunDetail, runs } from '../store/runs.js';
 import { openInference } from '../store/inference.js';
 
@@ -16,7 +16,6 @@ const TASKS = [
 ];
 
 const UPCOMING = [
-  { icon: 'cleaning_services', title: 'Data prep (ETL)', text: 'Clean, transform and export a dataset without training a model.', badge: 'Planned' },
   { icon: 'timeline', title: 'Time-series forecasting', text: 'Forecast future values from dated data.', badge: 'Planned' },
   { icon: 'autorenew', title: 'Scheduled retraining', text: 'Retrain a run automatically on a schedule or when new data arrives. Manual retraining is already in Run history.', badge: 'Planned' },
   { icon: 'psychology', title: 'LLM fine-tuning', text: 'Fine-tune small language models on your own text.', badge: 'Exploring' },
@@ -84,17 +83,7 @@ export default {
         toastError(task.title + ' needs an optional extra: ' + installHint(task.feature));
         return;
       }
-      if (isRunning()) {
-        const ok = await confirmAction({
-          title: 'Training in progress',
-          message: 'A model is still training. Starting a new run stops following it here (it keeps running on the server).',
-          confirmLabel: 'Start new run',
-        });
-        if (!ok) return;
-      }
-      if (training.status !== 'running') resetTraining();
-      resetWizard(task.id);
-      navigate('upload');
+      if (await beginNewRun(task.id)) navigate('upload');
     }
 
     function openRun(run) {
@@ -155,6 +144,21 @@ export default {
               </template>
               <span v-else v-for="tag in task.tags" :key="tag" class="badge">{{ tag }}</span>
             </div>
+          </button>
+        </div>
+      </section>
+
+      <section class="stack">
+        <div class="section-title">
+          <h2>Prepare data</h2>
+          <p>Clean a table before training, and save the steps to reuse on new files.</p>
+        </div>
+        <div class="grid-4">
+          <button class="task-card" @click="navigate('prep')">
+            <span class="task-icon"><Icon name="cleaning_services" /></span>
+            <h3>Data prep</h3>
+            <p>Remove columns, fix types, fill gaps, filter rows and more, with a live preview of the result.</p>
+            <div class="task-meta"><span class="badge">No code</span><span class="badge">Reusable recipes</span></div>
           </button>
         </div>
       </section>

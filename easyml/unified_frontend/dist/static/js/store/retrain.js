@@ -15,6 +15,8 @@ export const retrain = reactive({
   folders: [],
   folder: '',
   name: '',
+  recipes: [],      // saved data-prep recipes [{id, name, steps}]
+  recipeId: '',     // '' = automatic (the run's own recipe, if any), 'none' = use the file as it is, or a recipe id
 });
 
 function emptyUpload() {
@@ -22,12 +24,18 @@ function emptyUpload() {
 }
 
 export async function openRetrain(runId) {
-  Object.assign(retrain, { open: true, runId, spec: null, loading: true, error: '', upload: emptyUpload(), folders: [], folder: '', name: '' });
+  Object.assign(retrain, {
+    open: true, runId, spec: null, loading: true, error: '', upload: emptyUpload(), folders: [], folder: '', name: '',
+    recipes: [], recipeId: '',
+  });
   try {
     retrain.spec = await getJSON('/runs/' + runId + '/config', 'Could not load run #' + runId);
     retrain.name = retrain.spec.retrain.default_name || '';
     if (retrain.spec.retrain.input === 'image_folder') {
       retrain.folders = (await getJSON('/cv/list_datasets', 'Could not list image folders')).folders || [];
+    } else {
+      // Optional: without saved recipes the dialog simply offers none.
+      retrain.recipes = (await getJSON('/prep/recipes', 'Could not load recipes').catch(() => ({ recipes: [] }))).recipes || [];
     }
   } catch (e) {
     retrain.error = e.message;
@@ -57,6 +65,15 @@ export async function uploadRetrainFile(file) {
   }
 }
 
+// The recipe that will clean the new file before training, or null when it is used as it is.
+export function cleaningRecipe() {
+  const spec = retrain.spec && retrain.spec.retrain;
+  if (!spec || spec.input === 'image_folder' || retrain.recipeId === 'none') return null;
+  if (retrain.recipeId === '') return spec.recipe ? { name: spec.recipe.name, steps: spec.recipe.steps, own: true } : null;
+  const saved = retrain.recipes.find(r => String(r.id) === String(retrain.recipeId));
+  return saved ? { name: saved.name, steps: saved.steps, own: false } : null;
+}
+
 // Columns the run needs that the uploaded file lacks, and columns it has that the run never used.
 export function columnCheck() {
   const spec = retrain.spec && retrain.spec.retrain;
@@ -82,6 +99,7 @@ export async function submitRetrain() {
   } else {
     body.dataset_path = retrain.upload.savedPath;
     body.original_filename = retrain.upload.originalFilename;
+    if (retrain.recipeId) body.recipe_id = retrain.recipeId;
   }
   retrain.open = false;
   closeRunDetail();

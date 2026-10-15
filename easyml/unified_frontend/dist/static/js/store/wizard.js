@@ -11,6 +11,7 @@ function defaultConfig(task = '') {
     target_column: '',
     dataset_path: '',
     original_filename: '',
+    recipe: null, // data-prep steps that produced the dataset (recorded with the run)
     hyper_parameter_tuning: 0,
     models: [],
     imputation_strategy: 'impute',

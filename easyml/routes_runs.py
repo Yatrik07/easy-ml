@@ -45,7 +45,8 @@ def retrain_run(run_id):
         else:
             dataset_path = resolve_data_file(data.get("dataset_path"))
         plan = plan_retrain(run_id, dataset_path, name=data.get("name"), models=data.get("models") or None,
-                            original_dataset_name=clean_display_filename(data.get("original_filename")))
+                            original_dataset_name=clean_display_filename(data.get("original_filename")),
+                            recipe=data.get("recipe_id") or None)
     except DatasetMismatchError as exc:
         return jsonify({"status": "error", "status_code": 400, "error_message": str(exc), "message": str(exc),
                         "missing_columns": exc.missing_columns, "required_columns": exc.required_columns}), 400

@@ -127,7 +127,7 @@ class NLPTextClassificationController:
                  embedding_model="all-MiniLM-L6-v2", embedding_batch_size=32,
                  embedding_max_length=256,
                  models=None, hyper_parameter_tuning=0, imputation=True,
-                 path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, parent_run_id=None, **kwargs):
+                 path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, parent_run_id=None, recipe=None, **kwargs):
         """
         Initialize the NLP text classification controller.
 
@@ -190,6 +190,7 @@ class NLPTextClassificationController:
             path_to_save=path_to_save,
             original_dataset_name=original_dataset_name,
             parent_run_id=parent_run_id,
+            recipe=recipe or None,
         )
 
     @staticmethod

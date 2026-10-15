@@ -214,6 +214,18 @@ def start_training_job(train_fn, label, run_folder=None):
     return job
 
 
+def recipe_summary(recipe):
+    """{"name", "steps"} of a data-prep recipe sent with a training request, validated; None if absent."""
+    if not recipe:
+        return None
+    from easyml.dataprep.steps import validate_step
+
+    if not isinstance(recipe, dict) or not isinstance(recipe.get("steps"), list):
+        raise ValueError("'recipe' must be {'name': ..., 'steps': [...]}.")
+    return {"name": str(recipe.get("name") or "Unsaved steps")[:80],
+            "steps": [validate_step(step) for step in recipe["steps"]]}
+
+
 def error_response(exc, default_status=500):
     """Map an exception to a JSON error response with a meaningful HTTP status."""
     if isinstance(exc, RunNotFoundError):

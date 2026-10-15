@@ -315,6 +315,7 @@ class ML_RequestBody(BaseModel):
     original_dataset_name: Optional[str] = None
     target_dtype: Optional[str] = None
     parent_run_id: Optional[int] = None
+    recipe: Optional[dict] = None  # the data-prep recipe that produced the training data, if any
     requested_categorical_columns: Optional[List[str]] = Field(default_factory=list)
     # Kept in memory for the result charts (evaluation.json); never serialized.
     pipeline: Any = None
@@ -355,6 +356,8 @@ class ML_RequestBody(BaseModel):
         to_dump["target_labels"] = labels_in_code_order(self.target_encodings)
         to_dump["target_dtype"] = self.target_dtype
         to_dump["run_id"] = getattr(self, "run_id", None)
+        if self.recipe:
+            to_dump["recipe"] = self.recipe
         return to_dump
 
 class ML_InferenceBody(BaseModel):

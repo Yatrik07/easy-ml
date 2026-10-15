@@ -51,6 +51,7 @@ python -m easyml             # same as easy-ml
 ## Features
 
 - Train several models in one run and compare accuracy, confusion matrices and classification reports
+- Data prep without code: clean a table step by step with a live preview, then train on it or save the steps as a reusable recipe
 - Result charts for every model: ROC and precision-recall curves, predicted vs actual, errors, feature importance and top words
 - Light or thorough hyperparameter search (GridSearchCV)
 - Missing-value imputation, scaling, PCA, one-hot encoding, and SMOTE / Tomek Links for imbalanced classes
@@ -87,10 +88,11 @@ easy-ml runs                                        # list runs with their best 
 easy-ml predict 5 new_customers.csv -o out.csv      # adds Prediction (and Confidence) columns
 easy-ml predict 3 "my laptop got a software update" # text runs print the label
 easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per image
-easy-ml retrain 5 october.csv                       # run #5's recipe on new data
+easy-ml retrain 5 october.csv                       # run #5's settings on new data
 easy-ml export 5 -o churn.zip                       # move run #5 to another computer...
 easy-ml import churn.zip                            # ...and load it there
 easy-ml serve 5                                     # REST API for run #5 on http://127.0.0.1:8000
+easy-ml prep apply customers october.csv -o clean.csv   # clean a file with a saved data-prep recipe
 ```
 
 Pick a specific model with `model_name=` / `--model` (for example `RandomForestClassifier`). The studio's prediction page shows these snippets pre-filled for each run.

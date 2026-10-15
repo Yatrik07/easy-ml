@@ -145,6 +145,43 @@ The normal workflow looks like this:
 7. Review results.
 8. Reuse the saved run for inference, export, or later comparison.
 
+If the data needs cleaning first (an ID column to remove, missing values, messy text, dates to split),
+use **Data prep** before step 3; see the next section.
+
+## Data Prep
+
+**Data prep** (sidebar) cleans a table before training, without code:
+
+1. Drop a CSV or Excel file on the page, or choose **Clean this data first** on the new-run upload step.
+2. **Add step** and pick what to do. Each step has a short form; the preview on the right updates as you
+   type and each step says what it changed ("removed 12 rows"). The **Columns** tab shows every column's
+   kind, missing values and unique values, so you can see what still needs work.
+3. Steps run from top to bottom. Move, switch off or delete them at any time. A step whose required
+   settings are not filled in yet is shown as "Not run yet".
+4. When the preview looks right:
+   - **Train with this data** cleans the whole file and opens the new-run wizard with it, the target
+     already chosen;
+   - **Download CSV** saves the cleaned file;
+   - **Save recipe** keeps the steps under a name, to clean the next file the same way (**Recipes**
+     loads one).
+
+Available steps:
+
+| Group | Steps |
+|---|---|
+| Columns | remove columns, keep only some columns, rename, change type (number, date, yes/no, category, text) |
+| Rows | remove duplicates, remove rows with missing values, filter rows (equals, greater than, contains, is empty, ...), sort |
+| Values | fill missing values (fixed value, mean, median, most frequent, the value above or below), replace values, clean text (trim, case), limit extreme values, round |
+| New columns | split a date (year, month, day, weekday, hour, quarter, ...), group numbers into ranges, combine two columns |
+
+The preview uses the first 5,000 rows so it stays fast on big files; downloading and training clean
+every row. Steps that use statistics (median, outlier limits) compute them on the data they clean.
+
+A run trained on cleaned data remembers its recipe (shown in the run's settings). When you retrain it,
+the new file is cleaned with the same steps first, so you can retrain on raw data. Recipes also work
+outside the studio: `easy-ml prep apply <recipe> new.csv -o clean.csv`, or `easyml.prep` in Python
+(see the Python guide).
+
 ## Tabular Classification and Regression
 
 ### Typical use cases
@@ -342,7 +379,8 @@ Run history helps you:
 - **retrain** a run on new data: the retrain button (or **Retrain** in the details) asks for a new file
   with the same columns and trains a new run with exactly the same settings. Columns the original run did
   not use are ignored; missing columns are listed before anything starts. The new run shows
-  "Retrained from #N".
+  "Retrained from #N". **Clean the new data first** applies a data-prep recipe before training; a run
+  trained on cleaned data uses its own recipe unless you choose "No cleaning".
 - **compare** two runs of the same task: tick both and choose **Compare**, or use **Compare with parent**
   on a retrained run. You see both runs' scores per model and their settings with the differences highlighted.
 - **download** a run as a .zip (**Download run (.zip)** in the details) and **import** it on another

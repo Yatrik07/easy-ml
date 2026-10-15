@@ -1,5 +1,5 @@
 """
-Retrain a saved run on new data, with the same recipe.
+Retrain a saved run on new data, with the same settings (optionally cleaning it with a data-prep recipe first).
 
     import easyml
 
@@ -209,7 +209,32 @@ def _image_folders(dataset_path):
 
 # --------------------------------------------------------------------------- planning
 
-def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_name=None):
+def _apply_recipe(recipe, dataset_path, warnings):
+    """Clean ``dataset_path`` with ``recipe`` into a new file in the uploads folder; returns (path, summary)."""
+    import uuid
+
+    from easyml.config.paths import UPLOADS_DIR
+    from easyml.dataprep.engine import apply_file
+    from easyml.dataprep.recipe import Recipe
+
+    if not isinstance(recipe, Recipe):
+        try:
+            recipe = Recipe.load(int(recipe) if str(recipe).isdigit() else recipe)
+        except LookupError as exc:  # a deleted or mistyped recipe is bad input, not a server error
+            raise ValueError(str(exc)) from exc
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+    output = os.path.join(UPLOADS_DIR, f"clean_{uuid.uuid4().hex[:8]}.csv")
+    _, reports = apply_file(dataset_path, recipe.steps, output)
+    failed = [r for r in reports if r.get("error")]
+    if failed:
+        os.remove(output)
+        raise ValueError(f"Recipe '{recipe.name}' could not clean this file: "
+                         + "; ".join(f"{r['label']}: {r['error']}" for r in failed))
+    warnings.append(f"Cleaned the new data with recipe '{recipe.name}' ({len(recipe.steps)} steps).")
+    return output, {"name": recipe.name, "steps": recipe.steps}
+
+
+def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_name=None, recipe=None):
     """
     Check the new dataset against a saved run and work out the training arguments.
 
@@ -228,6 +253,26 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
     warnings, assumed = [], []
     name = (str(name).strip() if name else "") or f"{record.get('run_name') or 'run'}-retrain"
     capabilities = get_capabilities()
+    recipe_info = None
+    if recipe is False or (isinstance(recipe, str) and recipe.strip().lower() == "none"):
+        recipe = False  # explicitly use the new file as it is
+    if recipe is None and config.get("recipe") and task != IMAGE_TASK:
+        # The run was trained on cleaned data: clean the new file with the same steps. If they don't fit
+        # (e.g. the file was already cleaned and a column to remove is gone), use the file as it is.
+        from easyml.dataprep.recipe import Recipe
+
+        own = Recipe(name=config["recipe"].get("name") or "run recipe", steps=config["recipe"].get("steps") or [])
+        original_dataset_name = original_dataset_name or os.path.basename(str(dataset_path))
+        try:
+            dataset_path, recipe_info = _apply_recipe(own, dataset_path, warnings)
+        except ValueError:
+            warnings.append(f"The run's data-prep recipe '{own.name}' did not fit this file, so it was used as is "
+                            "(it looks already cleaned).")
+    elif recipe:
+        if task == IMAGE_TASK:
+            raise ValueError("Data-prep recipes apply to tables and text, not image folders.")
+        original_dataset_name = original_dataset_name or os.path.basename(str(dataset_path))
+        dataset_path, recipe_info = _apply_recipe(recipe, dataset_path, warnings)
 
     if task in TABULAR_TASKS:
         frame = _read_table(dataset_path)
@@ -263,6 +308,7 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
             "models": _replay_models(task, config, metrics, models, warnings),
             "original_dataset_name": original_dataset_name or os.path.basename(dataset_path),
             "parent_run_id": run_id,
+            "recipe": recipe_info,
         }
 
     elif task == TEXT_TASK:
@@ -288,6 +334,7 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
             "models": _replay_models(task, config, metrics, models, warnings),
             "original_dataset_name": original_dataset_name or os.path.basename(dataset_path),
             "parent_run_id": run_id,
+            "recipe": recipe_info,
         })
 
     elif task == IMAGE_TASK:
@@ -336,7 +383,7 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
                        assumed_defaults=assumed)
 
 
-def retrain(run_id, dataset_path, name=None, models=None):
+def retrain(run_id, dataset_path, name=None, models=None, recipe=None):
     """
     Train a new run on ``dataset_path`` with the same settings as run ``run_id``.
 
@@ -346,12 +393,15 @@ def retrain(run_id, dataset_path, name=None, models=None):
             sub-folder per class (image runs).
         name: Name of the new run (default: ``"<parent name>-retrain"``).
         models: Model keys to train instead of the parent's, e.g. ``["random_forest"]``.
+        recipe: A data-prep recipe (name, id or :class:`easyml.prep.Recipe`) applied to the new data first.
+            By default a run trained on cleaned data cleans new files with its own recipe;
+            ``recipe=False`` uses the new file as it is.
 
     Returns:
         RunResult
     """
     dataset_path = str(dataset_path)
-    plan = plan_retrain(run_id, dataset_path, name=name, models=models)
+    plan = plan_retrain(run_id, dataset_path, name=name, models=models, recipe=recipe)
     if plan.task == IMAGE_TASK:
         from easyml.cv.cv_controllers import CVController
 
@@ -417,6 +467,9 @@ def run_spec(run_id):
         "feature_columns": [],
         "required_columns": [],
         "classes": config.get("target_labels") or config.get("classes") or list((config.get("target_encodings") or {})),
+        # The data-prep recipe the run was trained with; new files are cleaned with it unless told otherwise.
+        "recipe": ({"name": config["recipe"].get("name"), "steps": len(config["recipe"].get("steps") or [])}
+                   if isinstance(config.get("recipe"), dict) and task != IMAGE_TASK else None),
     }
     if task in TABULAR_TASKS:
         features = _feature_columns(run["column_data"])

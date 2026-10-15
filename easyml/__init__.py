@@ -1,6 +1,6 @@
 """Easy-ML Studio: a no-code machine learning studio with a browser UI."""
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 from easyml.trainer import MLTrainer  # noqa: E402
 
@@ -19,7 +19,7 @@ def load_model(run_id, model_name=None):
     return _load_model(run_id, model_name=model_name)
 
 
-def retrain(run_id, dataset_path, name=None, models=None):
+def retrain(run_id, dataset_path, name=None, models=None, recipe=None):
     """
     Train a new run on new data with the same settings as an earlier run.
 
@@ -30,7 +30,7 @@ def retrain(run_id, dataset_path, name=None, models=None):
     """
     from easyml.retraining import retrain as _retrain
 
-    return _retrain(run_id, dataset_path, name=name, models=models)
+    return _retrain(run_id, dataset_path, name=name, models=models, recipe=recipe)
 
 
 def export_run(run_id, output_path=None, include_data=True):

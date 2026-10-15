@@ -244,6 +244,7 @@ class NLP_RequestBody(BaseModel):
     original_dataset_name: Optional[str] = None
     target_dtype: Optional[str] = None
     parent_run_id: Optional[int] = None
+    recipe: Optional[dict] = None  # the data-prep recipe that produced the training data, if any
     # Kept in memory for the result charts (evaluation.json); never serialized.
     vectorizer: Optional[Any] = None
     charts: dict = Field(default_factory=dict)
@@ -256,7 +257,9 @@ class NLP_RequestBody(BaseModel):
         from easyml.config.constants import CONFIG_VERSION
         from easyml.utils.labels import labels_in_code_order
 
+        extra = {"recipe": self.recipe} if self.recipe else {}
         return {
+            **extra,
             "config_version": CONFIG_VERSION,
             "easyml_version": __version__,
             "task": self.task,

@@ -9,6 +9,7 @@ from easyml.routes_core import core_bp
 from easyml.routes_cv import cv_bp
 from easyml.routes_frontend import frontend_bp
 from easyml.routes_nlp import nlp_bp
+from easyml.routes_prep import prep_bp
 from easyml.routes_runs import runs_bp
 from easyml.routes_settings import settings_bp
 from easyml.utils.database_operations import create_database_table
@@ -95,6 +96,7 @@ def create_app(allowed_origins=None):
     app.register_blueprint(core_bp)
     app.register_blueprint(cv_bp)
     app.register_blueprint(nlp_bp)
+    app.register_blueprint(prep_bp)
     app.register_blueprint(runs_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(frontend_bp)

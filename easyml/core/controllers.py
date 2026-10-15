@@ -25,7 +25,7 @@ class _TabularController:
     def __init__(self, name, dataset_path, target_column, timestamp, preprocessing=True, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, categorical_columns=None, path_to_save=None,
                  reduce_features=False, ignore_columns=None, task=None, imbalance_handling="none",
-                 original_dataset_name=None, parent_run_id=None, **kwargs):
+                 original_dataset_name=None, parent_run_id=None, recipe=None, **kwargs):
         """
         Args:
             name (str): Name of the run.
@@ -66,6 +66,7 @@ class _TabularController:
             imbalance_handling=imbalance_handling if self.supports_imbalance_handling else "none",
             original_dataset_name=original_dataset_name,
             parent_run_id=parent_run_id,
+            recipe=recipe or None,
         )
 
     supports_imbalance_handling = False

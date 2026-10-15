@@ -6,9 +6,10 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml download-models      fetch the spaCy English model used for lemmatization
     easy-ml runs                 list trained runs
     easy-ml predict 5 data.csv   predict with run #5 (see `easy-ml predict --help`)
-    easy-ml retrain 5 new.csv    train run #5's recipe on new data
+    easy-ml retrain 5 new.csv    train run #5's settings on new data
     easy-ml export 5             save run #5 as a .zip; `easy-ml import file.zip` loads it elsewhere
     easy-ml serve 5              serve run #5 as a REST API on http://127.0.0.1:8000
+    easy-ml prep apply customers new.csv -o clean.csv    re-apply a saved data-prep recipe
 """
 
 import argparse
@@ -53,11 +54,13 @@ def _build_parser():
     predict.add_argument("-o", "--output", help="Write the predictions to this CSV file instead of the console.")
     predict.add_argument("--text-column", help="Text column of the input CSV (text runs; default: the training column).")
 
-    retrain = subcommands.add_parser("retrain", help="Train a run's recipe again on new data.")
+    retrain = subcommands.add_parser("retrain", help="Train a run again on new data, with the same settings.")
     retrain.add_argument("run_id", type=int, help="Run to retrain (see `easy-ml runs`).")
     retrain.add_argument("input", help="New CSV/Excel file, or image folder for image runs.")
     retrain.add_argument("--name", help="Name of the new run (default: '<run name>-retrain').")
     retrain.add_argument("--models", help="Comma-separated model keys to train instead of the run's models.")
+    retrain.add_argument("--recipe", help="Data-prep recipe (name or id) to clean the new data with first; 'none' uses "
+                                          "the file as it is. Default: the recipe the run was trained with, if any.")
     retrain.add_argument("--json", action="store_true", help="Print the result as JSON.")
 
     export = subcommands.add_parser("export", help="Save a run as a .zip to move it to another computer.")
@@ -82,6 +85,16 @@ def _build_parser():
                        help="Let web pages from this origin call the API from a browser (repeatable, * for any).")
     serve.add_argument("--max-mb", type=float, default=20, help="Largest request accepted, in MB (default 20).")
     serve.add_argument("--access-log", action="store_true", help="Print one line per request.")
+
+    prep = subcommands.add_parser("prep", help="Data-prep recipes: list, show, apply to a file.")
+    prep_commands = prep.add_subparsers(dest="prep_command")
+    prep_commands.add_parser("list", help="List saved recipes.")
+    show = prep_commands.add_parser("show", help="Print a recipe's steps (as JSON).")
+    show.add_argument("recipe", help="Recipe name or id.")
+    apply_ = prep_commands.add_parser("apply", help="Apply a recipe to a CSV/Excel file.")
+    apply_.add_argument("recipe", help="Recipe name, id, or a recipe .json file.")
+    apply_.add_argument("input", help="CSV or Excel file to clean.")
+    apply_.add_argument("-o", "--output", help="Write the cleaned CSV here (default: print it).")
     return parser
 
 
@@ -148,13 +161,17 @@ def main(argv=None):
     if args.command == "retrain":
         from easyml.cli import retrain
         models = [m.strip() for m in args.models.split(",") if m.strip()] if args.models else None
-        return retrain(args.run_id, args.input, name=args.name, models=models, as_json=args.json)
+        return retrain(args.run_id, args.input, name=args.name, models=models, as_json=args.json, recipe=args.recipe)
     if args.command == "export":
         from easyml.cli import export_run
         return export_run(args.run_id, output=args.output, include_data=not args.no_data)
     if args.command == "import":
         from easyml.cli import import_run
         return import_run(args.file, name=args.name, assume_yes=args.yes)
+    if args.command == "prep":
+        from easyml.cli import prep
+        return prep(args.prep_command, recipe=getattr(args, "recipe", None), source=getattr(args, "input", None),
+                    output=getattr(args, "output", None))
     if args.command == "serve":
         from easyml.cli import serve
         return serve(args.run_id, model=args.model, host=args.serve_host, port=args.serve_port, threads=args.threads,

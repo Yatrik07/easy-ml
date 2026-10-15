@@ -40,7 +40,7 @@ MODEL_LABELS = {
     "SimpleCNN": "Simple CNN", "ResNet18": "ResNet-18", "MobileNetV2": "MobileNet V2", "CustomCNN": "Custom CNN",
 }
 
-_INTERNAL_UPLOAD_NAME = re.compile(r"^data(_nlp)?_[0-9a-f]{8}\.csv$")
+_INTERNAL_UPLOAD_NAME = re.compile(r"^(data|data_nlp|clean)_[0-9a-f]{8}\.csv$")
 
 
 def task_label(task):
@@ -203,6 +203,8 @@ def _yes_no(value):
 
 # (key, label, group, formatter) per task; formatters turn saved config values into display text.
 _COMMON_SETTINGS = [
+    ("recipe", "Data prep recipe", "Data",
+     lambda v: f"{v.get('name')} ({len(v.get('steps') or [])} steps)" if isinstance(v, dict) else "None"),
     ("models", "Models", "Models", lambda v: _list([model_label(m) for m in (v or [])])),
     ("hyper_parameter_tuning", "Hyperparameter tuning", "Models", lambda v: TUNING_LABELS.get(v, str(v))),
     ("imbalance_handling", "Class imbalance", "Models", lambda v: IMBALANCE_LABELS.get(v or "none", v)),
