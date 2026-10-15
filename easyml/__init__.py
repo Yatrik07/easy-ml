@@ -1,6 +1,6 @@
 """Easy-ML Studio: a no-code machine learning studio with a browser UI."""
 
-__version__ = "0.6.2"
+__version__ = "0.7.0"
 
 from easyml.trainer import MLTrainer  # noqa: E402
 
@@ -47,4 +47,17 @@ def import_run(path, name=None, trusted=False):
     return _import_run(path, name=name, trusted=trusted)
 
 
-__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "__version__"]
+def serve(run_id, model_name=None, host="127.0.0.1", port=8000, threads=4, api_key=None, cors_origins=None,
+          max_mb=20, access_log=False):
+    """
+    Serve a trained run as a REST API (blocks until stopped). See :func:`easyml.serving.runner.serve`.
+
+        easyml.serve(5)   # http://127.0.0.1:8000/predict
+    """
+    from easyml.serving.runner import serve as _serve
+
+    return _serve(run_id, model_name=model_name, host=host, port=port, threads=threads, api_key=api_key,
+                  cors_origins=cors_origins, max_mb=max_mb, access_log=access_log)
+
+
+__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "serve", "__version__"]

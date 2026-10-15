@@ -265,6 +265,23 @@ files with sha256) and `run/<file>`. Import never unpickles anything, streams en
 `extractall`, and rejects links, path traversal, nested or unexpected files, duplicates, encrypted
 entries, checksum mismatches, missing model files and archives over `EASYML_MAX_IMPORT_MB` (2048).
 
+### `easyml/serving/` (`easy-ml serve`)
+
+A separate small Flask app (no Socket.IO, no studio routes) around one `Predictor`, run by waitress:
+
+- `server.py`: `create_serve_app(predictor, api_key, cors_origins, max_mb, access_log, state)`.
+  Endpoints `GET /`, `/health`, `/info`, `POST /predict`. `run_prediction` maps request bodies to
+  `Predictor.predict_with_confidence` (features/rows, text/texts, file/image_base64/images_base64).
+  `ServeState` holds the served predictor and can swap it atomically (used to follow a schedule's
+  champion). The API key is compared with `hmac.compare_digest`; `/` and `/health` stay open.
+- `runner.py`: `serve(...)` checks the port, loads the model up front (`Predictor.warm_up()`), prints
+  the URLs and runs waitress (falls back to Flask's server only if waitress is missing).
+- `docs_page.py`: the HTML help page with curl / PowerShell / Python examples.
+
+`Predictor` is safe to share between threads: its controller is created and fully loaded once under a
+lock (`_ready_controller`); predictions afterwards only read it. Image inputs may be paths, bytes or
+file objects.
+
 ### `easyml/routes_settings.py`
 
 Operational and storage endpoints.

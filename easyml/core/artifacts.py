@@ -7,6 +7,7 @@ Shared by inference, explainability and export so they agree on file naming and 
 import json
 import os
 import re
+from functools import lru_cache
 
 import joblib
 import numpy as np
@@ -98,6 +99,27 @@ def _blank_strings(series):
         return series.map(lambda v: isinstance(v, str) and not v.strip()).astype(bool)
 
 
+@lru_cache(maxsize=256)
+def _column_kinds(dtype_items):
+    """(column, "b" | "i" | "f" | None) for each recorded training dtype; cached per run's column list."""
+    kinds = []
+    for col, dtype in dtype_items:
+        try:
+            resolved = pd.api.types.pandas_dtype(dtype)
+        except TypeError:
+            kinds.append((col, None))
+            continue
+        if pd.api.types.is_bool_dtype(resolved):
+            kinds.append((col, "b"))
+        elif pd.api.types.is_integer_dtype(resolved):
+            kinds.append((col, "i"))
+        elif pd.api.types.is_float_dtype(resolved):
+            kinds.append((col, "f"))
+        else:
+            kinds.append((col, None))
+    return tuple(kinds)
+
+
 def coerce_feature_frame(df, column_data):
     """
     Cast raw inference input (often strings from an HTML form) to the dtypes seen at training time.
@@ -115,21 +137,15 @@ def coerce_feature_frame(df, column_data):
         # Runs created before 0.4.0 only recorded the numeric column list.
         dtypes = {col: "float64" for col in column_data.get("numerical_columns", [])}
 
-    for col, dtype in dtypes.items():
+    for col, kind in _column_kinds(tuple(dtypes.items())):
         if col not in df.columns:
             df[col] = np.nan
             continue
-        try:
-            resolved = pd.api.types.pandas_dtype(dtype)
-        except TypeError:
+        if kind is None:
             continue
-        if pd.api.types.is_bool_dtype(resolved):
-            kind = "b"
-        elif pd.api.types.is_integer_dtype(resolved):
-            kind = "i"
-        elif pd.api.types.is_float_dtype(resolved):
-            kind = "f"
-        else:
+        current = df[col].dtype
+        # Already the type the conversion below would produce: nothing to do (saves time per request).
+        if (kind == "f" and current == np.float64) or (kind == "i" and current == np.int64):
             continue
         if kind in "if":
             values = pd.to_numeric(df[col], errors="coerce")

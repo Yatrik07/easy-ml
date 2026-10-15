@@ -12,6 +12,7 @@ pip install "easy-ml-studio[all]"     # + XGBoost/LightGBM/CatBoost, embeddings,
 - [Use a trained model](#use-a-trained-model)
 - [Retrain on new data](#retrain-on-new-data)
 - [Move runs between computers](#move-runs-between-computers)
+- [Serve a model as a REST API](#serve-a-model-as-a-rest-api)
 - [Command line](#command-line)
 - [Where runs are stored](#where-runs-are-stored)
 
@@ -176,6 +177,55 @@ because saved models may then behave differently or fail to load.
 Model files can run code when they are loaded, so only import archives from people you trust.
 `import_run` refuses to import unless you pass `trusted=True`.
 
+## Serve a model as a REST API
+
+One command turns any run (tables, text or images) into a web service that other programs call:
+
+```bash
+easy-ml serve 5                      # http://127.0.0.1:8000, the run's best model
+easy-ml serve 5 --model RandomForestClassifier --port 9000
+easy-ml serve 5 --host 0.0.0.0 --api-key s3cret    # reachable from your network, with a key
+```
+
+```python
+import easyml
+
+easyml.serve(5, port=8000)           # blocks until stopped (Ctrl+C)
+```
+
+Open <http://127.0.0.1:8000/> for the model's inputs and copy-paste examples. Endpoints:
+
+| Endpoint | What it does |
+|---|---|
+| `POST /predict` | Predictions (formats below) |
+| `GET /info` | The model, its task, input columns, classes and an example request |
+| `GET /health` | `{"status": "ok"}` while the service is running |
+
+| Run type | Request body | Answer |
+|---|---|---|
+| Tabular | `{"features": {"age": 45, "city": "NY"}}` | `{"prediction": ..., "confidence": ...}` |
+| Tabular, many rows | `{"rows": [{...}, {...}]}` | `{"predictions": [...], "confidences": [...]}` |
+| Text | `{"text": "..."}` or `{"texts": ["...", "..."]}` | same as above |
+| Image | multipart `file` (one or several), `{"image_base64": "..."}` or `{"images_base64": [...]}` | same as above |
+
+Regression answers have no confidence. The single-row format is the same as the "Export as API"
+package, so a program written for one works with the other.
+
+```python
+import requests
+
+answer = requests.post("http://127.0.0.1:8000/predict", json={"features": {"age": 45, "city": "NY"}}).json()
+```
+
+Options: `--threads` (requests handled in parallel, default 4), `--api-key` or the `EASYML_SERVE_KEY`
+variable (then send `Authorization: Bearer <key>` or `X-API-Key`), `--cors-origin URL` (let web pages
+call it from a browser; repeatable, `*` for any), `--max-mb` (largest request, default 20),
+`--access-log`. The model is loaded once at start, so every request is fast; the service runs on the
+waitress web server.
+
+By default the service only accepts requests from this computer. With `--host 0.0.0.0` anyone who can
+reach the computer can use it, so add `--api-key` on shared networks.
+
 ## Command line
 
 ```bash
@@ -192,6 +242,8 @@ easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per im
 easy-ml retrain 5 customers_october.csv             # same settings as run #5, new data
 easy-ml retrain 5 october.csv --name churn-oct --models random_forest,light_gbm
 easy-ml retrain 7 new_photos/                       # image runs: a folder of class folders
+
+easy-ml serve 5 --port 8000                         # REST API for run #5 (Ctrl+C stops it)
 
 easy-ml export 5 -o churn.zip                       # save run #5 as a .zip (add --no-data to leave out data.csv)
 easy-ml import churn.zip                            # asks for confirmation; --yes skips the question

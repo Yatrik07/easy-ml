@@ -195,3 +195,61 @@ def test_exported_api_explains_itself(client, classification_csv):
     # the one-line example uses this run's real columns, in the dataset's order
     assert json.dumps({"features": example_features(run.path_to_save)}) in readme
     assert "`labels.json`" in readme
+
+
+def _coerce_reference(df, column_data):
+    """coerce_feature_frame as it was before the per-column shortcuts (the reference behaviour)."""
+    df = df.copy()
+    for col in df.columns:
+        if df[col].dtype == object:
+            blank = df[col].map(lambda v: isinstance(v, str) and not v.strip())
+            df[col] = df[col].where(~blank, np.nan)
+    dtypes = column_data.get("column_dtypes") or {}
+    if not dtypes:
+        dtypes = {col: "float64" for col in column_data.get("numerical_columns", [])}
+    for col, dtype in dtypes.items():
+        if col not in df.columns:
+            df[col] = np.nan
+            continue
+        try:
+            resolved = pd.api.types.pandas_dtype(dtype)
+        except TypeError:
+            continue
+        if pd.api.types.is_bool_dtype(resolved):
+            kind = "b"
+        elif pd.api.types.is_integer_dtype(resolved):
+            kind = "i"
+        elif pd.api.types.is_float_dtype(resolved):
+            kind = "f"
+        else:
+            continue
+        if kind in "if":
+            values = pd.to_numeric(df[col], errors="coerce")
+            if kind == "i" and values.notna().all() and (values % 1 == 0).all():
+                values = values.astype("int64")
+            df[col] = values
+        else:
+            df[col] = df[col].map(
+                lambda v: v if isinstance(v, bool) or pd.isna(v) else str(v).strip().lower() in ("true", "1", "yes"))
+    return df
+
+
+@pytest.mark.parametrize("rows", [
+    [{"i": 3, "f": 1.5, "s": "NY", "b": "yes"}],
+    [{"i": "3", "f": "", "s": " ", "b": True}, {"i": None, "f": "2", "s": "LA", "b": "0"}],
+    [{"i": 2.0, "f": 4, "s": 7, "b": None}],
+    [{"i": 2.5, "f": np.nan, "extra": 1}],
+    [{"f": 1.0}],
+    [{"i": np.int32(4), "f": np.float32(1.5), "s": "x", "b": False}],
+])
+def test_coerce_shortcuts_match_reference(rows):
+    from easyml.core.artifacts import coerce_feature_frame
+
+    column_data = {"column_dtypes": {"i": "int64", "f": "float64", "s": "object", "b": "bool", "missing": "int64"}}
+    frame = pd.DataFrame(rows)
+    if rows[-1].get("i") is not None and isinstance(rows[-1].get("i"), np.int32):
+        frame["i"] = frame["i"].astype("int32")
+        frame["f"] = frame["f"].astype("float32")
+    pd.testing.assert_frame_equal(coerce_feature_frame(frame, column_data), _coerce_reference(frame, column_data))
+    legacy = {"numerical_columns": ["i", "f"]}
+    pd.testing.assert_frame_equal(coerce_feature_frame(frame, legacy), _coerce_reference(frame, legacy))

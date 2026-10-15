@@ -395,6 +395,20 @@ This is useful when you want a quick overview of:
 
 You need the `[eda]` extra installed for this feature to work reliably.
 
+## Serve a Model as an API
+
+To let other programs on this computer (or your network) use a model, run in a terminal:
+
+```bash
+easy-ml serve <run id>
+```
+
+The model then answers at `http://127.0.0.1:8000/predict`, and `http://127.0.0.1:8000/` shows its inputs
+and ready-to-copy examples. The prediction page's "Serve as API" tab shows the exact command and a
+request for the run you are looking at. It works for table, text and image runs. Unlike **Export as
+API**, nothing needs to be unzipped or installed; use the export when the model must run on a computer
+without Easy-ML.
+
 ## Model Export
 
 **Export as API** (on the prediction page of a tabular run) turns the selected model into a small,

@@ -103,6 +103,15 @@ class CVInferenceController:
         ])
         return transform(img.convert("RGB")).unsqueeze(0)  # Add batch dimension
 
+    def load_model(self):
+        """Load (once) and return ``(model, class_names, image_size)`` ready for inference."""
+        if not hasattr(self, "_loaded"):
+            model, class_names, img_size = self.load_objects()
+            model = model.to(self.device)
+            model.eval()
+            self._loaded = (model, class_names, img_size)
+        return self._loaded
+
     def predict_images(self, paths, batch_size=32):
         """
         Classify image files.
@@ -110,12 +119,7 @@ class CVInferenceController:
         Returns:
             tuple: (labels, confidences) in the order of ``paths``.
         """
-        if not hasattr(self, "_loaded"):
-            model, class_names, img_size = self.load_objects()
-            model = model.to(self.device)
-            model.eval()
-            self._loaded = (model, class_names, img_size)
-        model, class_names, img_size = self._loaded
+        model, class_names, img_size = self.load_model()
 
         labels, confidences = [], []
         for start in range(0, len(paths), batch_size):

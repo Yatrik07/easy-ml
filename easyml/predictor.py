@@ -11,7 +11,9 @@ Runs are read from the Easy-ML data directory (``EASYML_DATA_DIR`` or the platfo
 so this works on the machine where the model was trained, or wherever that folder is copied.
 """
 
+import io
 import os
+import threading
 
 from easyml.core.artifacts import validate_model_name
 from easyml.utils.database_operations import get_record_by_id
@@ -47,6 +49,9 @@ class Predictor:
             )
         self.model_name = model_name
         self._controller = None
+        # One Predictor may serve many threads (easy-ml serve): the model is loaded once, under this
+        # lock, and predictions afterwards only read it.
+        self._lock = threading.Lock()
 
     def __repr__(self):
         return (f"Predictor(run_id={self.run_id}, task={task_label(self.task)!r}, "
@@ -74,12 +79,57 @@ class Predictor:
             return self._predict_images(data)
         raise ValueError(f"Unsupported task {self.task!r}")
 
+    def warm_up(self):
+        """Load the model now instead of on the first prediction. Returns self."""
+        self._ready_controller()
+        return self
+
+    @property
+    def is_image(self):
+        return self.task == IMAGE_TASK
+
+    @property
+    def is_text(self):
+        return self.task == TEXT_TASK
+
+    def _ready_controller(self):
+        """The task's inference controller, created and fully loaded exactly once."""
+        controller = self._controller
+        if controller is not None:
+            return controller
+        with self._lock:
+            if self._controller is None:
+                self._controller = self._load_controller()
+            return self._controller
+
+    def _load_controller(self):
+        if self.task in TABULAR_TASKS:
+            from easyml.core.inference import MLInferenceController
+
+            controller = MLInferenceController(run_id=self.run_id, data=None, model_name=self.model_name)
+            controller.load_objects()
+        elif self.task == TEXT_TASK:
+            from easyml.nlp.nlp_inference import NLPInferenceController
+
+            controller = NLPInferenceController(run_id=self.run_id, data=None, model_name=self.model_name)
+            controller._load_artifacts()
+        elif self.task == IMAGE_TASK:
+            try:
+                from easyml.cv.cv_inference import CVInferenceController
+            except (ImportError, OSError) as exc:
+                raise ImportError('Image models need PyTorch: pip install "easy-ml-studio[cv]"') from exc
+
+            controller = CVInferenceController(run_id=self.run_id, model_name=self.model_name, image_base64="")
+            controller.load_model()
+        else:
+            raise ValueError(f"Unsupported task {self.task!r}")
+        return controller
+
     # ------------------------------------------------------------------ task specific
 
     def _predict_tabular(self, data):
         import pandas as pd
 
-        from easyml.core.inference import MLInferenceController
         from easyml.utils.data_loader import load_data_from_path
 
         if isinstance(data, (str, os.PathLike)):
@@ -93,9 +143,7 @@ class Predictor:
         else:
             raise TypeError("Tabular input must be a dict, a list of dicts, a DataFrame or a CSV/Excel path.")
 
-        if self._controller is None:
-            self._controller = MLInferenceController(run_id=self.run_id, data=None, model_name=self.model_name)
-        return self._controller.predict_frame(frame)
+        return self._ready_controller().predict_frame(frame)
 
     def text_column(self):
         import json
@@ -107,8 +155,6 @@ class Predictor:
             return None
 
     def _predict_text(self, data, text_column=None, frame=None):
-        from easyml.nlp.nlp_inference import NLPInferenceController
-
         if isinstance(data, (str, os.PathLike)) and str(data).lower().endswith((".csv", ".xlsx", ".xls")) \
                 and os.path.isfile(str(data)):
             if frame is None:  # the CLI passes the frame it already loaded
@@ -131,28 +177,33 @@ class Predictor:
             else:
                 raise TypeError("Text input must be a string, a list of strings, or a CSV path.")
 
-        if self._controller is None:
-            self._controller = NLPInferenceController(run_id=self.run_id, data=None, model_name=self.model_name)
-        return self._controller.predict_texts(texts)
+        return self._ready_controller().predict_texts(texts)
 
     def _predict_images(self, data):
-        try:
-            from easyml.cv.cv_inference import CVInferenceController
-        except (ImportError, OSError) as exc:
-            raise ImportError('Image models need PyTorch: pip install "easy-ml-studio[cv]"') from exc
-
         paths = image_paths(data)
         if not paths:
             raise ValueError(f"No images found in {data!r}.")
-        if self._controller is None:
-            self._controller = CVInferenceController(run_id=self.run_id, model_name=self.model_name, image_base64="")
-        return self._controller.predict_images(paths)
+        return self._ready_controller().predict_images(paths)
+
+
+def _image_source(item):
+    """A path stays a path string; raw bytes become a readable file object; file objects pass through."""
+    if isinstance(item, (bytes, bytearray)):
+        return io.BytesIO(item)
+    if hasattr(item, "read"):
+        return item
+    return str(item)
 
 
 def image_paths(data):
-    """Expand an image path, a folder, or a list of paths into a sorted list of image files."""
+    """
+    Expand an image path, a folder, or a list of paths into a sorted list of image files.
+    Image bytes and file objects (alone or in a list) are passed through as readable sources.
+    """
     if isinstance(data, (list, tuple)):
-        return [str(p) for p in data]
+        return [_image_source(p) for p in data]
+    if isinstance(data, (bytes, bytearray)) or hasattr(data, "read"):
+        return [_image_source(data)]
     path = str(data)
     if os.path.isdir(path):
         found = []

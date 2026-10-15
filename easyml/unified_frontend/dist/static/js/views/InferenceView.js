@@ -29,6 +29,35 @@ export default {
     const isImage = computed(() => inference.task === 'ImageClassification');
     const usesBest = computed(() => inference.modelName === inference.bestModel);
 
+    // `easy-ml serve` plus one request in the format the service expects for this task.
+    function serveExample() {
+      const id = inference.runId;
+      const cliModel = usesBest.value ? '' : ' --model ' + inference.modelName;
+      let call;
+      if (isImage.value) {
+        call = 'curl -X POST http://127.0.0.1:8000/predict -F "file=@photo.jpg"';
+      } else {
+        let body;
+        if (isText.value) {
+          body = { text: 'Your text to classify' };
+        } else {
+          const row = {};
+          for (const col of inference.columns) row[col] = exampleValue(col);
+          body = { features: row };
+        }
+        call = 'curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d \'' + JSON.stringify(body) + '\'';
+      }
+      return [
+        '# a REST API for this model, on this computer (Ctrl+C stops it)',
+        'easy-ml serve ' + id + cliModel,
+        '',
+        '# from another terminal or program:',
+        call,
+        '',
+        '# help, inputs and more examples: http://127.0.0.1:8000/',
+      ].join('\n');
+    }
+
     const codeTabs = computed(() => {
       const id = inference.runId;
       const modelArg = usesBest.value ? '' : ', model_name="' + inference.modelName + '"';
@@ -54,6 +83,7 @@ export default {
       return [
         { id: 'python', label: 'Python', code: 'import easyml\n\nmodel = easyml.load_model(' + id + modelArg + ')\n' + example },
         { id: 'cli', label: 'Command line', code: 'easy-ml runs            # list your runs\n' + cli },
+        { id: 'serve', label: 'Serve as API', code: serveExample() },
       ];
     });
 
@@ -211,6 +241,9 @@ export default {
             </ul>
           </div>
           <div class="stack-xs">
+            <div class="alert alert-info"><Icon name="info" />
+              <div>Only need it on this computer? <code>easy-ml serve {{ inference.runId }}</code> serves the same API
+                straight from Easy-ML, without unzipping anything (see the "Serve as API" tab below the form).</div></div>
             <div class="field-label">How to use it</div>
             <CodeTabs :key="'api' + inference.runId + inference.modelName" :tabs="apiTabs" />
             <p class="subtle text-xs">The example uses {{ inference.columns.length }} input column{{ inference.columns.length === 1 ? '' : 's' }}

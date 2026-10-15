@@ -8,6 +8,7 @@
     easy-ml retrain 5 october.csv --name churn-oct  # same settings as run #5, new data
     easy-ml export 5 -o churn.zip                   # move a run to another computer...
     easy-ml import churn.zip                        # ...and load it there
+    easy-ml serve 5 --port 8000                     # a REST API for run #5
 """
 
 import csv
@@ -227,4 +228,24 @@ def import_run(path, name=None, assume_yes=False, out=None):
     for note in notes:
         print(f"Note: {note}", file=sys.stderr)
     print(f"Imported as run #{run_id}. Try: easy-ml predict {run_id} <file>", file=out)
+    return 0
+
+
+def serve(run_id, model=None, host="127.0.0.1", port=8000, threads=4, api_key=None, cors_origins=None, max_mb=20,
+          access_log=False):
+    _quiet_logs()
+    from easyml.serving.runner import serve as run_service
+    from easyml.utils.database_operations import RunNotFoundError
+
+    try:
+        run_service(run_id, model_name=model, host=host, port=port, threads=threads, api_key=api_key,
+                    cors_origins=cors_origins, max_mb=max_mb, access_log=access_log)
+    except RunNotFoundError:
+        print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except (ValueError, OSError, ImportError) as exc:
+        print(f"Could not start the service: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        pass
     return 0

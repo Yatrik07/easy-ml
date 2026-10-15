@@ -8,6 +8,7 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml predict 5 data.csv   predict with run #5 (see `easy-ml predict --help`)
     easy-ml retrain 5 new.csv    train run #5's recipe on new data
     easy-ml export 5             save run #5 as a .zip; `easy-ml import file.zip` loads it elsewhere
+    easy-ml serve 5              serve run #5 as a REST API on http://127.0.0.1:8000
 """
 
 import argparse
@@ -68,6 +69,19 @@ def _build_parser():
     import_.add_argument("file", help="The .zip archive.")
     import_.add_argument("--name", help="Name for the imported run (default: its original name).")
     import_.add_argument("--yes", action="store_true", help="Do not ask for confirmation (only for trusted files).")
+
+    serve = subcommands.add_parser("serve", help="Serve a run as a REST API that other programs can call.")
+    serve.add_argument("run_id", type=int, help="Run to serve (see `easy-ml runs`).")
+    serve.add_argument("--model", help="Model class name (default: the run's best model).")
+    serve.add_argument("--host", dest="serve_host", default="127.0.0.1", metavar="HOST",
+                       help="Interface to listen on (default 127.0.0.1: this computer only; 0.0.0.0: your network).")
+    serve.add_argument("--port", dest="serve_port", type=int, default=8000, metavar="PORT", help="Port (default 8000).")
+    serve.add_argument("--threads", type=int, default=4, help="Requests handled in parallel (default 4).")
+    serve.add_argument("--api-key", metavar="KEY", help="Require this key (default: the EASYML_SERVE_KEY environment variable).")
+    serve.add_argument("--cors-origin", action="append", default=[], metavar="URL",
+                       help="Let web pages from this origin call the API from a browser (repeatable, * for any).")
+    serve.add_argument("--max-mb", type=float, default=20, help="Largest request accepted, in MB (default 20).")
+    serve.add_argument("--access-log", action="store_true", help="Print one line per request.")
     return parser
 
 
@@ -141,6 +155,11 @@ def main(argv=None):
     if args.command == "import":
         from easyml.cli import import_run
         return import_run(args.file, name=args.name, assume_yes=args.yes)
+    if args.command == "serve":
+        from easyml.cli import serve
+        return serve(args.run_id, model=args.model, host=args.serve_host, port=args.serve_port, threads=args.threads,
+                     api_key=args.api_key, cors_origins=args.cors_origin, max_mb=args.max_mb,
+                     access_log=args.access_log)
     return run_server(
         host=args.host,
         port=args.port,

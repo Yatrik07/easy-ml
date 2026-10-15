@@ -27,6 +27,7 @@ const SDK_POINTS = [
   'Train tabular and text models from a script',
   'Batch predictions from the terminal, no code needed',
   'Retrain a run on new data, and move runs between computers',
+  'Serve any model as a REST API with one command',
 ];
 
 // Code lines with their comments lined up in one column.
@@ -56,6 +57,10 @@ function sdkTabs(runId) {
       ['    models=["logistic_regression", "random_forest"],'],
       [').run()'],
       ['print(run.run_id, run.performance)'],
+    ]) },
+    { id: 'serve', label: 'Serve as API', code: commented([
+      ['easy-ml serve ' + id, 'REST API on http://127.0.0.1:8000'],
+      ['curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d \'{"features": {...}}\''],
     ]) },
     { id: 'cli', label: 'Command line', code: commented([
       ['easy-ml runs', 'list runs and their best model'],
