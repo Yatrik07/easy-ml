@@ -397,18 +397,32 @@ You need the `[eda]` extra installed for this feature to work reliably.
 
 ## Model Export
 
-Easy-ML can package a trained model into a standalone FastAPI application.
+**Export as API** (on the prediction page of a tabular run) turns the selected model into a small,
+standalone web service. It runs without Easy-ML Studio, on any computer or server with Python or
+Docker, and other programs send it a row of data to get a prediction back.
 
-The exported ZIP includes:
+Clicking the button opens a short guide with the steps and a ready-to-copy example request built from
+your run's columns (using the values in the form, or a real row of your training data). **Download
+.zip** saves the package. It contains:
 
-- model artifact
-- preprocessing pipeline
-- generated `main.py`
-- generated `requirements.txt`
-- generated `Dockerfile`
-- generated `README.md`
+- the trained model and its preprocessing pipeline
+- `main.py`: the web service (FastAPI)
+- `requirements.txt` with the exact library versions the model was trained with, and a `Dockerfile`
+- `README.md` with the same steps and examples for this model
 
-This is useful if you want to deploy the trained model outside Easy-ML.
+To run it: unzip, then in that folder
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate        # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --port 8000
+```
+
+Open <http://127.0.0.1:8000/docs> to try it in the browser, or send a `POST` to
+`http://127.0.0.1:8000/predict` with `{"features": {"column": value, ...}}`. Classification answers
+`{"prediction": ..., "confidence": ...}`; regression answers `{"prediction": ...}`. The predictions are
+the same as the studio's.
 
 ## Frequently Asked Questions
 

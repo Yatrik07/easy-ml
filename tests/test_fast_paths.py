@@ -172,3 +172,26 @@ def test_cli_and_package_start_without_ml_libraries(data_dir):
                             env={**os.environ, "EASYML_NO_CONSOLE_LOGS": "1", "EASYML_DATA_DIR": data_dir})
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == ""
+
+
+def test_exported_api_explains_itself(client, classification_csv):
+    from easyml.trainer import MLTrainer
+
+    run = MLTrainer(task="MLClassification", name="export-guide", dataset_path=classification_csv,
+                    target_column="label", models=["logistic_regression"]).run()
+    data = client.get(f"/get_run_data?run_id={run.run_id}").get_json()
+    row = data["example_row"]
+    assert set(row) == {"age", "income", "city", "owns_car", "rooms"}
+    assert isinstance(row["age"], int)
+
+    archive = zipfile.ZipFile(io.BytesIO(client.post("/export", json={"run_id": run.run_id,
+                                                                     "model_name": "LogisticRegression"}).data))
+    readme = archive.read("README.md").decode("utf-8")
+    assert "uvicorn main:app" in readme and "pip install -r requirements.txt" in readme
+    assert "Invoke-RestMethod" in readme and "curl -X POST" in readme and "/docs" in readme
+    from easyml.utils.export_utils import example_features
+
+    assert example_features(run.path_to_save) == row
+    # the one-line example uses this run's real columns, in the dataset's order
+    assert json.dumps({"features": example_features(run.path_to_save)}) in readme
+    assert "`labels.json`" in readme

@@ -16,7 +16,8 @@ JS_ROOT = os.path.join(STATIC, "js")
 
 IMPORT_RE = re.compile(r"""(?:import|export)\s+(?:[^'"]*?\sfrom\s+)?['"](\.{1,2}/[^'"]+)['"]|import\(\s*['"](\.{1,2}/[^'"]+)['"]\s*\)""")
 ALLOWED_EXTERNAL = ("https://pypi.org/", "https://pytorch.org/", "https://www.linkedin.com/", "https://github.com/",
-                    "https://download.pytorch.org/")
+                    "https://download.pytorch.org/",
+                    "http://127.0.0.1:")  # localhost addresses in copyable code examples
 
 
 def _read(path):

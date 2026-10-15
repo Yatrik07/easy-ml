@@ -259,7 +259,20 @@ def get_run_data():
         "best_model": summary["best_model"],
         "metric": primary_metric(result.get("task")),
         "model_scores": {m["key"]: m["test_score"] for m in ranked},
+        "example_row": _example_row(result.get("task"), data_path),
     }), 200
+
+
+def _example_row(task, folder):
+    """A real input row from the training data, used for the 'Export as API' examples."""
+    if task not in ("MLClassification", "MLRegression"):
+        return {}
+    from easyml.utils.export_utils import example_features
+
+    try:
+        return example_features(folder)
+    except Exception:
+        return {}
 
 
 @core_bp.route("/inference", methods=["POST"])

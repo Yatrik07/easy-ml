@@ -46,7 +46,7 @@ def create_deployment_package(run_id: int, model_name: str) -> str:
         "main.py": generate_fastapi_app(task, model_name, model_filename),
         "requirements.txt": generate_requirements(model_name),
         "Dockerfile": generate_dockerfile(model_name),
-        "README.md": generate_readme(task, model_name),
+        "README.md": generate_readme(task, model_name, model_filename, example_features(folder_path)),
     }
     if task == "MLClassification":
         decoder = load_target_decoder(folder_path)
@@ -198,23 +198,119 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 """
 
 
-def generate_readme(task: str, model_name: str) -> str:
-    return f"""# Generated Deployment for {model_name}
+def example_features(folder_path, limit=None):
+    """One real input row from the training data (target and ignored columns removed), for examples."""
+    import math
 
-This package contains a FastAPI wrapper for your Easy-ML Studio model ({task}).
+    import pandas as pd
 
-## Running Locally
-1. `pip install -r requirements.txt`
-2. `uvicorn main:app --reload`
-3. Visit `http://127.0.0.1:8000/docs` to test the API.
+    from easyml.core.artifacts import read_json
 
-## Example request
-```bash
-curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" \\
-     -d '{{"features": {{"column_a": 1.5, "column_b": "value"}}}}'
+    columns = list((read_json(folder_path, "column_data.json").get("column_dtypes") or {}).keys())
+    data_path = os.path.join(folder_path, "data.csv")
+    row = {}
+    if columns and os.path.exists(data_path):
+        try:
+            first = pd.read_csv(data_path, nrows=1, usecols=lambda c: c in columns)
+            if len(first):
+                row = {c: first[c].iloc[0] for c in columns if c in first.columns}  # per column: keeps ints as ints
+        except (OSError, ValueError):
+            row = {}
+    example = {}
+    for column in columns[:limit] if limit else columns:
+        value = row.get(column)
+        if hasattr(value, "item"):
+            value = value.item()
+        if value is None or (isinstance(value, float) and math.isnan(value)):
+            value = None
+        example[column] = value
+    return example
+
+
+def generate_readme(task: str, model_name: str, model_filename: str = "model.pkl", example=None) -> str:
+    from easyml.utils.run_summary import model_label, task_label
+
+    example = example or {"column_a": 1.5, "column_b": "value"}
+    is_classification = "classification" in task.lower()
+    body = json.dumps({"features": example}, indent=2)
+    one_line = json.dumps({"features": example})
+    response = ('{"prediction": "<class>", "confidence": 0.93}' if is_classification
+                else '{"prediction": 123.45}')
+    columns = "\n".join(f"- `{name}`" for name in example)
+    label_file = "| `labels.json` | Class names, in the order the model uses them |\n" if is_classification else ""
+    return f"""# {model_label(model_name)} prediction API
+
+Exported from Easy-ML Studio: your trained **{task_label(task)}** model ({model_name}) as a small
+web service. It runs on its own, without Easy-ML Studio, on any computer or server with Python 3.10+
+(or Docker). Other programs send it one row of data and get the prediction back as JSON.
+
+## What is in this folder
+
+| File | What it is |
+|---|---|
+| `main.py` | The web service (FastAPI) |
+| `{model_filename}` | The trained model |
+| `pipeline.pkl` | The preprocessing used in training (missing values, encoding, scaling) |
+| `config.json`, `column_data.json` | The run's settings and input columns |
+{label_file}| `requirements.txt` | The exact library versions the model was trained with |
+| `Dockerfile` | Runs the service in a container |
+
+## Run it
+
+1. Unzip this file and open a terminal in the folder.
+2. Create an environment and install the libraries:
+   ```bash
+   python -m venv .venv
+   .venv\\Scripts\\activate        # Windows  (macOS/Linux: source .venv/bin/activate)
+   pip install -r requirements.txt
+   ```
+3. Start the service:
+   ```bash
+   uvicorn main:app --port 8000
+   ```
+4. Open <http://127.0.0.1:8000/docs> in a browser: an interactive page where you can send test requests.
+
+## Make a prediction
+
+Send a `POST` request to `/predict` with the input columns under `"features"`:
+
+```json
+{body}
 ```
 
-## Running via Docker
-1. `docker build -t my-model-api .`
-2. `docker run -p 8000:8000 my-model-api`
+Python:
+```python
+import requests  # pip install requests
+
+row = {json.dumps(example)}
+print(requests.post("http://127.0.0.1:8000/predict", json={{"features": row}}).json())
+```
+
+curl (macOS/Linux):
+```bash
+curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d '{one_line}'
+```
+
+PowerShell (Windows):
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/predict -ContentType "application/json" -Body '{one_line}'
+```
+
+Answer:
+```json
+{response}
+```
+
+Input columns:
+{columns}
+
+Values can be numbers or text, like in the studio's form. A missing column counts as a missing value.
+Other endpoints: `GET /health` (is the service up) and `GET /docs` (interactive documentation).
+
+## Run it with Docker
+
+```bash
+docker build -t my-model-api .
+docker run -p 8000:8000 my-model-api
+```
 """

@@ -15,6 +15,7 @@ export const inference = reactive({
   modelScores: {},
   columns: [],
   columnDetails: {},
+  exampleRow: {}, // a real row from the training data, for the API examples
   modelName: '',
   mode: 'manual', // manual | batch
   values: {},
@@ -48,7 +49,8 @@ export async function openInference(runId) {
       modelScores: data.model_scores || {},
       columns: (data.columns || []).filter(c => c !== data.target_column),
       columnDetails: data.column_details || {},
-      modelName: (data.models || [])[0] || '',
+      exampleRow: data.example_row || {},
+      modelName:(data.models || [])[0] || '',
       mode: 'manual',
       values: {},
       batchFile: null,
@@ -130,7 +132,7 @@ export async function exportModel() {
   try {
     const blob = await postForBlob('/export', { run_id: inference.runId, model_name: inference.modelName }, 'Export failed');
     saveBlob(blob, 'deploy_' + inference.modelName + '_' + inference.runId + '.zip');
-    toastSuccess('Deployment package downloaded.');
+    toastSuccess('API package downloaded. Unzip it and follow README.md inside.');
   } catch (e) {
     toastError(e.message);
   } finally {

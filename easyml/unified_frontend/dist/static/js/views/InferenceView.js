@@ -1,10 +1,21 @@
-import { computed } from '../lib/vue.js';
+import { computed, ref } from '../lib/vue.js';
 import { formatPercent, formatPrediction, formatScore } from '../lib/format.js';
 import { featureAvailable, modelLabel, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
 import {
   columnChoices, explain, exportModel, inference, predict, predictBatch, setImage,
 } from '../store/inference.js';
+
+// A value for the API example: what the user typed, else a real value from the training data.
+function exampleValue(column) {
+  const typed = inference.values[column];
+  const choices = columnChoices(column);
+  if (typed !== '' && typed !== null && typed !== undefined) {
+    return choices.length || Number.isNaN(Number(typed)) ? String(typed) : Number(typed);
+  }
+  if (column in inference.exampleRow) return inference.exampleRow[column];
+  return choices.length ? choices[0] : 0;
+}
 
 function pyValue(value, numeric) {
   if (value === '' || value === null || value === undefined) return 'None';
@@ -46,11 +57,43 @@ export default {
       ];
     });
 
+    const exportOpen = ref(false);
+    const apiTabs = computed(() => {
+      const row = {};
+      for (const col of inference.columns) row[col] = exampleValue(col);
+      const oneLine = JSON.stringify({ features: row });
+      return [
+        { id: 'run', label: 'Start it', code: [
+          '# unzip the file, open a terminal in the folder, then:',
+          'python -m venv .venv',
+          '.venv\\Scripts\\activate          # macOS/Linux: source .venv/bin/activate',
+          'pip install -r requirements.txt',
+          'uvicorn main:app --port 8000',
+          '',
+          '# then open http://127.0.0.1:8000/docs to try it in the browser',
+        ].join('\n') },
+        { id: 'python', label: 'Python', code: [
+          'import requests  # pip install requests',
+          '',
+          'row = ' + JSON.stringify(row, null, 4),
+          'answer = requests.post("http://127.0.0.1:8000/predict", json={"features": row}).json()',
+          'print(answer)   # ' + (inference.task === 'MLRegression' ? '{"prediction": 123.4}' : '{"prediction": ..., "confidence": 0.93}'),
+        ].join('\n') },
+        { id: 'powershell', label: 'PowerShell', code: 'Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/predict -ContentType "application/json" -Body \'' + oneLine + '\'' },
+        { id: 'curl', label: 'curl', code: 'curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d \'' + oneLine + '\'' },
+        { id: 'docker', label: 'Docker', code: 'docker build -t my-model-api .\ndocker run -p 8000:8000 my-model-api' },
+      ];
+    });
+    async function downloadExport() {
+      await exportModel();
+    }
+
     function onBatch(event) { inference.batchFile = event.target.files[0] || null; }
     function onImage(event) { setImage(event.target.files[0]); }
 
     return {
       inference, isTabular, isText, isImage, codeTabs, columnChoices, predict, predictBatch, explain, exportModel,
+      exportOpen, apiTabs, downloadExport,
       onBatch, onImage, featureAvailable, modelLabel, taskLabel, navigate, formatPrediction, formatPercent, formatScore,
     };
   },
@@ -115,9 +158,9 @@ export default {
                 <button v-else class="btn btn-primary" @click="predictBatch" :disabled="inference.predicting || !inference.batchFile">
                   <Spinner v-if="inference.predicting" /><Icon v-else name="download" />Predict and download
                 </button>
-                <button v-if="isTabular" class="btn btn-secondary" @click="exportModel" :disabled="inference.exporting"
-                        title="Download a FastAPI service with Dockerfile for this model">
-                  <Spinner v-if="inference.exporting" /><Icon v-else name="deployed_code" />Export as API
+                <button v-if="isTabular" class="btn btn-secondary" @click="exportOpen = true"
+                        title="Turn this model into a web service that other programs can call">
+                  <Icon name="deployed_code" />Export as API
                 </button>
               </div>
             </div>
@@ -152,5 +195,33 @@ export default {
           </div>
         </aside>
       </div>
+
+      <ModalDialog :open="exportOpen" title="Export as API" @close="exportOpen = false">
+        <div class="stack">
+          <p class="muted text-sm">Downloads <strong>{{ modelLabel(inference.modelName) }}</strong> as a small web service (a .zip).
+            It runs on its own, without Easy-ML Studio, on any computer or server with Python or Docker.
+            Other programs send it a row of data and get the prediction back.</p>
+          <div class="stack-xs">
+            <div class="field-label">In the zip</div>
+            <ul class="hint-list text-sm muted">
+              <li>the trained model and its preprocessing</li>
+              <li><code>main.py</code>: the web service (FastAPI)</li>
+              <li><code>requirements.txt</code> with the exact library versions, and a <code>Dockerfile</code></li>
+              <li><code>README.md</code> with these steps and an example for this model</li>
+            </ul>
+          </div>
+          <div class="stack-xs">
+            <div class="field-label">How to use it</div>
+            <CodeTabs :key="'api' + inference.runId + inference.modelName" :tabs="apiTabs" />
+            <p class="subtle text-xs">The example uses {{ inference.columns.length }} input column{{ inference.columns.length === 1 ? '' : 's' }}
+              from this run, with the values in the form, or a row of your training data. Missing columns count as missing values.</p>
+          </div>
+        </div>
+        <template #footer>
+          <button class="btn btn-secondary" @click="exportOpen = false">Close</button>
+          <button class="btn btn-primary" @click="downloadExport" :disabled="inference.exporting">
+            <Spinner v-if="inference.exporting" /><Icon v-else name="download" />Download .zip</button>
+        </template>
+      </ModalDialog>
     </div>`,
 };
