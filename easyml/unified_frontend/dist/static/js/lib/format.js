@@ -113,6 +113,18 @@ export function relativeTime(ts) {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+// A future moment, for "next run": "in 5 min", "in 3 hours", or the date and time.
+export function untilTime(ts) {
+  const date = parseTimestamp(ts);
+  if (!date) return ts || '—';
+  const minutes = Math.round((date.getTime() - Date.now()) / 60000);
+  if (minutes < 1) return 'due now';
+  if (minutes < 60) return 'in ' + minutes + ' min';
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return 'in ' + hours + (hours === 1 ? ' hour' : ' hours');
+  return date.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 export function absoluteTime(ts) {
   const date = parseTimestamp(ts);
   return date ? date.toLocaleString() : (ts || '');

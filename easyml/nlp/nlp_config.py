@@ -245,6 +245,8 @@ class NLP_RequestBody(BaseModel):
     target_dtype: Optional[str] = None
     parent_run_id: Optional[int] = None
     recipe: Optional[dict] = None  # the data-prep recipe that produced the training data, if any
+    source_rows: Optional[Any] = None  # data.csv row of each kept row (holdout.json)
+    test_rows: Optional[Any] = None    # positions of the test texts in the training frame
     # Kept in memory for the result charts (evaluation.json); never serialized.
     vectorizer: Optional[Any] = None
     charts: dict = Field(default_factory=dict)

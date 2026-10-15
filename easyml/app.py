@@ -10,6 +10,7 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml export 5             save run #5 as a .zip; `easy-ml import file.zip` loads it elsewhere
     easy-ml serve 5              serve run #5 as a REST API on http://127.0.0.1:8000
     easy-ml prep apply customers new.csv -o clean.csv    re-apply a saved data-prep recipe
+    easy-ml schedule worker      run scheduled retraining without the studio (see `easy-ml schedule --help`)
 """
 
 import argparse
@@ -37,6 +38,8 @@ def _build_parser():
     parser.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically.")
     parser.add_argument("--no-console", action="store_true", help="Do not print application logs to the console.")
     parser.add_argument("--debug", action="store_true", help="Run Flask in debug mode (development only).")
+    parser.add_argument("--no-scheduler", action="store_true",
+                        help="Do not run scheduled retraining while the studio is open (or set EASYML_SCHEDULER=0).")
 
     subcommands = parser.add_subparsers(dest="command")
     subcommands.add_parser("download-models", help="Download the spaCy English model used for NLP lemmatization.")
@@ -74,7 +77,9 @@ def _build_parser():
     import_.add_argument("--yes", action="store_true", help="Do not ask for confirmation (only for trusted files).")
 
     serve = subcommands.add_parser("serve", help="Serve a run as a REST API that other programs can call.")
-    serve.add_argument("run_id", type=int, help="Run to serve (see `easy-ml runs`).")
+    serve.add_argument("run_id", type=int, nargs="?", help="Run to serve (see `easy-ml runs`).")
+    serve.add_argument("--schedule", metavar="NAME",
+                       help="Serve the model a retraining schedule currently uses, switching when it promotes a new one.")
     serve.add_argument("--model", help="Model class name (default: the run's best model).")
     serve.add_argument("--host", dest="serve_host", default="127.0.0.1", metavar="HOST",
                        help="Interface to listen on (default 127.0.0.1: this computer only; 0.0.0.0: your network).")
@@ -95,6 +100,39 @@ def _build_parser():
     apply_.add_argument("recipe", help="Recipe name, id, or a recipe .json file.")
     apply_.add_argument("input", help="CSV or Excel file to clean.")
     apply_.add_argument("-o", "--output", help="Write the cleaned CSV here (default: print it).")
+
+    schedule = subcommands.add_parser("schedule", help="Scheduled retraining: list, create, run, worker, ...")
+    schedule_commands = schedule.add_subparsers(dest="schedule_command")
+    listing = schedule_commands.add_parser("list", help="List schedules.")
+    listing.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    create = schedule_commands.add_parser("create", help="Retrain a run automatically on new data.")
+    create.add_argument("run_id", type=int, help="Run to keep fresh (see `easy-ml runs`).")
+    create.add_argument("source", help="Data file to watch, a folder (its newest matching file is used), or for "
+                                       "image runs a folder of class folders.")
+    create.add_argument("--name", required=True, help="Name of the schedule.")
+    when = create.add_mutually_exclusive_group(required=True)
+    when.add_argument("--every", metavar="INTERVAL", help="Retrain every INTERVAL, e.g. 30m, 6h, 1d.")
+    when.add_argument("--daily", metavar="HH:MM", help="Retrain every day at this time.")
+    when.add_argument("--weekly", nargs=2, metavar=("DAY", "HH:MM"), help="Retrain every week, e.g. --weekly mon 02:00.")
+    when.add_argument("--on-new-data", action="store_true", help="Retrain whenever the data changes or a new file appears.")
+    create.add_argument("--pattern", help="File names to use in a folder (default: *.csv;*.xlsx;*.xls).")
+    create.add_argument("--recipe", help="Data-prep recipe to clean the data with ('none': as it is). "
+                                         "Default: the recipe the run was trained with, if any.")
+    create.add_argument("--min-improvement", type=float, default=0.0,
+                        help="Use the new model only if it scores at least this much better (0.01 = 1 point).")
+    create.add_argument("--disabled", action="store_true", help="Create it switched off.")
+    for command, text in (("run", "Retrain now on the current data."), ("enable", "Switch a schedule on."),
+                          ("disable", "Switch a schedule off."), ("delete", "Delete a schedule (its runs are kept).")):
+        sub = schedule_commands.add_parser(command, help=text)
+        sub.add_argument("schedule", help="Schedule name or id.")
+    events = schedule_commands.add_parser("events", help="What a schedule did: promoted, kept, failed.")
+    events.add_argument("schedule", help="Schedule name or id.")
+    events.add_argument("--limit", type=int, default=20, help="Number of events (default 20).")
+    events.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    worker = schedule_commands.add_parser("worker", help="Run schedules until stopped, without the studio.")
+    worker.add_argument("--poll", type=int, default=30, help="Seconds between checks (default 30).")
+    schedule_commands.add_parser("run-due", help="Run the schedules that are due now once, then exit (for cron or "
+                                                 "Windows Task Scheduler).")
     return parser
 
 
@@ -114,7 +152,7 @@ def _port_in_use(host, port):
         return sock.connect_ex(("127.0.0.1" if host in ("0.0.0.0", "") else host, port)) == 0
 
 
-def run_server(host=DEFAULT_HOST, port=DEFAULT_PORT, open_browser=True, console_logs=True, debug=False):
+def run_server(host=DEFAULT_HOST, port=DEFAULT_PORT, open_browser=True, console_logs=True, debug=False, scheduler=True):
     # Must be decided before the logger creates its handlers.
     if console_logs:
         os.environ.setdefault("EASYML_CONSOLE_LOG_LEVEL", "INFO")
@@ -143,6 +181,10 @@ def run_server(host=DEFAULT_HOST, port=DEFAULT_PORT, open_browser=True, console_
 
     if open_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
+    if scheduler:  # scheduled retraining runs while the studio is open (not in tests or create_app users)
+        from easyml.scheduling.host import start_studio_scheduler
+
+        start_studio_scheduler(socketio)
 
     socketio.run(app, host=host, port=port, debug=debug, use_reloader=False, allow_unsafe_werkzeug=True)
     return 0
@@ -176,13 +218,17 @@ def main(argv=None):
         from easyml.cli import serve
         return serve(args.run_id, model=args.model, host=args.serve_host, port=args.serve_port, threads=args.threads,
                      api_key=args.api_key, cors_origins=args.cors_origin, max_mb=args.max_mb,
-                     access_log=args.access_log)
+                     access_log=args.access_log, schedule=args.schedule)
+    if args.command == "schedule":
+        from easyml.cli import schedule
+        return schedule(args)
     return run_server(
         host=args.host,
         port=args.port,
         open_browser=not args.no_browser,
         console_logs=not args.no_console,
         debug=args.debug,
+        scheduler=not args.no_scheduler,
     )
 
 

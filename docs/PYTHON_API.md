@@ -12,6 +12,7 @@ pip install "easy-ml-studio[all]"     # + XGBoost/LightGBM/CatBoost, embeddings,
 - [Use a trained model](#use-a-trained-model)
 - [Clean data with recipes](#clean-data-with-recipes)
 - [Retrain on new data](#retrain-on-new-data)
+- [Retrain on a schedule](#retrain-on-a-schedule)
 - [Move runs between computers](#move-runs-between-computers)
 - [Serve a model as a REST API](#serve-a-model-as-a-rest-api)
 - [Command line](#command-line)
@@ -214,6 +215,57 @@ result.load_model().predict("new_customers.csv")
   easyml.retrain(5, "october_clean.csv", recipe=False)
   ```
 
+## Retrain on a schedule
+
+A schedule keeps a model fresh: it retrains a run when new data arrives (or at set times) and uses the
+new model only if it is better.
+
+```python
+from easyml import schedules
+
+schedules.create(5, "C:/exports/customers/", name="churn-nightly", daily="02:00")
+schedules.create(5, "C:/exports/customers.csv", name="churn-live", on_new_data=True, min_improvement=0.01)
+
+schedules.list()                              # each schedule with the model it uses now ("champion")
+event = schedules.run_now("churn-nightly")    # retrain now, whatever the time
+print(event["decision"], event["message"])    # "promoted", "kept champion" or "failed"
+schedules.events("churn-nightly")             # what it did, newest first
+schedules.disable("churn-nightly")            # enable(), delete() work the same way
+```
+
+| Argument | Meaning |
+|---|---|
+| `source` | A file (retrained on when it changes), a folder (its newest file matching `pattern` is used), or for image runs a folder of class folders |
+| `every` / `daily` / `weekly` / `on_new_data` | When to retrain (exactly one): `every="6h"` (or `"30m"`, `"1d"`), `daily="02:00"`, `weekly="monday 02:00"`, `on_new_data=True` |
+| `pattern` | File names to use in a folder, e.g. `"orders_*.csv"` (default: CSV and Excel files) |
+| `recipe` | Data-prep recipe that cleans each new file; `"none"` uses it as it is; by default the run's own recipe, if any |
+| `min_improvement` | How much better the new model must be: `0.01` = one accuracy point (R² for regression); `0` switches on a tie |
+
+How a schedule decides:
+
+1. It retrains the model currently in use, with the same settings, on the new data. Unchanged data is
+   skipped ("no new data"); a file counts only once it has not changed for 10 seconds, so a file that is
+   still being copied is never used.
+2. Both models predict the new run's test rows (data neither trained on) and are scored with the run's
+   metric. When the old model cannot score them (for example the columns changed, or image runs), their
+   own test scores are compared and the event says so (`compared_on`).
+3. A better model becomes the one in use. A worse one is still saved in Run History (marked "Not
+   promoted"), so nothing is lost.
+
+Schedules run while the studio is open, or without it:
+
+```bash
+easy-ml schedule worker          # keeps running and checks every 30 s (Ctrl+C stops it)
+easy-ml schedule run-due         # runs what is due once and exits
+```
+
+`run-due` suits Windows Task Scheduler (action: `easy-ml`, arguments: `schedule run-due`, repeat every
+15 minutes) or cron (`*/15 * * * * easy-ml schedule run-due`). The studio, workers and `run-due` can run
+at the same time: each schedule is claimed in the database, so it never runs twice at once.
+
+`easy-ml serve --schedule churn-nightly` serves the schedule's current model and switches to each new
+one it promotes, without a restart (see below).
+
 ## Move runs between computers
 
 Save a run as a single `.zip` file and load it somewhere else:
@@ -280,6 +332,10 @@ call it from a browser; repeatable, `*` for any), `--max-mb` (largest request, d
 `--access-log`. The model is loaded once at start, so every request is fast; the service runs on the
 waitress web server.
 
+`easy-ml serve --schedule NAME` (or `easyml.serve(schedule="NAME")`) serves the model a retraining
+schedule uses now and checks every 15 seconds for a newer one. A new model is loaded in the background
+and then swapped in, so requests never wait or fail; `/info` shows the schedule and the current run.
+
 By default the service only accepts requests from this computer. With `--host 0.0.0.0` anyone who can
 reach the computer can use it, so add `--api-key` on shared networks.
 
@@ -306,13 +362,21 @@ easy-ml prep show customers                         # a recipe's steps as JSON
 easy-ml prep apply customers october.csv -o clean.csv   # clean a file (without -o: print the CSV)
 
 easy-ml serve 5 --port 8000                         # REST API for run #5 (Ctrl+C stops it)
+easy-ml serve --schedule churn-nightly              # always the schedule's current model
+
+easy-ml schedule create 5 C:/exports/customers/ --name churn-nightly --daily 02:00
+easy-ml schedule create 5 customers.csv --name churn-live --on-new-data --min-improvement 0.01
+easy-ml schedule list                               # schedules, the model each uses, last result
+easy-ml schedule run churn-nightly                  # retrain now
+easy-ml schedule events churn-nightly               # promoted / kept champion / failed, with scores
+easy-ml schedule worker                             # run schedules without the studio
 
 easy-ml export 5 -o churn.zip                       # save run #5 as a .zip (add --no-data to leave out data.csv)
 easy-ml import churn.zip                            # asks for confirmation; --yes skips the question
 ```
 
 Without `-o`, the predictions are written to the terminal as CSV, so you can pipe them to another command.
-`easy-ml predict`, `retrain`, `prep`, `export` and `import` exit with code 1 when something is wrong
+`easy-ml predict`, `retrain`, `prep`, `schedule`, `export` and `import` exit with code 1 when something is wrong
 (unknown run, missing columns, damaged archive, ...) and print the reason.
 
 ## Where runs are stored

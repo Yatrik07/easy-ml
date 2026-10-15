@@ -51,7 +51,7 @@ export const ConfirmDialog = {
 };
 
 export const ModalDialog = {
-  props: { open: Boolean, title: String },
+  props: { open: Boolean, title: String, wide: Boolean },
   emits: ['close'],
   setup(props, { emit }) {
     useEscape(() => { if (props.open) emit('close'); });
@@ -60,7 +60,7 @@ export const ModalDialog = {
   template: /* html */ `
     <transition name="fade">
       <div v-if="open" class="backdrop" @click.self="$emit('close')">
-        <div class="modal" role="dialog" aria-modal="true" :aria-label="title">
+        <div class="modal" :class="{ 'modal-wide': wide }" role="dialog" aria-modal="true" :aria-label="title">
           <div class="modal-header">
             <h3>{{ title }}</h3>
             <button class="btn btn-ghost btn-icon" @click="$emit('close')" aria-label="Close"><Icon name="close" /></button>

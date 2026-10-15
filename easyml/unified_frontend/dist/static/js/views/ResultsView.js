@@ -11,9 +11,11 @@ export default {
     const performance = computed(() => result.value.performance || {});
     const best = computed(() => rankPerformance(training.task, performance.value, modelLabel)[0]);
     const metric = computed(() => metricFor(training.task));
-    const eyebrow = computed(() => (training.kind === 'retrain'
-      ? 'Retrained from run #' + training.parentRunId + ' · ' + taskLabel(training.task)
-      : 'Step 5 · ' + taskLabel(training.task)));
+    const eyebrow = computed(() => {
+      if (training.kind === 'retrain') return 'Retrained from run #' + training.parentRunId + ' · ' + taskLabel(training.task);
+      if (training.kind === 'schedule') return 'Schedule ' + training.label + ' · ' + taskLabel(training.task);
+      return 'Step 5 · ' + taskLabel(training.task);
+    });
     return { training, result, performance, best, metric, navigate, openInference, eyebrow };
   },
   template: /* html */ `

@@ -13,6 +13,8 @@ import { ImportRunDialog, LineageBadge, RetrainDialog } from './components/runs.
 import {
   AddStepDialog, MappingField, PreviewTable, ProfileTable, RecipesDialog, SaveRecipeDialog, StepForm, StepList, TrainDialog,
 } from './components/prep.js';
+import { ScheduleBadges, ScheduleDialog, ScheduleEventsDialog } from './components/schedules.js';
+import { listenForScheduleEvents } from './store/schedules.js';
 import { ImportanceChart, ModelCharts, PrChart, ResidualChart, RocChart, ScatterChart, TopTerms } from './components/charts.js';
 
 const app = createApp(App);
@@ -26,6 +28,7 @@ const components = {
   FolderPicker, CnnBuilder,
   RetrainDialog, ImportRunDialog, LineageBadge,
   AddStepDialog, MappingField, PreviewTable, ProfileTable, RecipesDialog, SaveRecipeDialog, StepForm, StepList, TrainDialog,
+  ScheduleDialog, ScheduleEventsDialog, ScheduleBadges,
   ModelCharts, RocChart, PrChart, ScatterChart, ResidualChart, ImportanceChart, TopTerms,
 };
 for (const [name, component] of Object.entries(components)) app.component(name, component);
@@ -35,5 +38,6 @@ app.config.errorHandler = (err, instance, info) => {
 };
 
 loadSession();
+listenForScheduleEvents();
 app.mount('#app');
 window.__easymlBooted = true;

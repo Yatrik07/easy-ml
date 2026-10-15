@@ -12,6 +12,7 @@ import SettingsView from './views/SettingsView.js';
 import AboutView from './views/AboutView.js';
 import CompareView from './views/CompareView.js';
 import PrepView from './views/PrepView.js';
+import SchedulesView from './views/SchedulesView.js';
 
 const VIEWS = {
   home: HomeView,
@@ -26,6 +27,7 @@ const VIEWS = {
   about: AboutView,
   compare: CompareView,
   prep: PrepView,
+  schedules: SchedulesView,
 };
 
 export default {

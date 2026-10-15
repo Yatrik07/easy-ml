@@ -316,6 +316,7 @@ class ML_RequestBody(BaseModel):
     target_dtype: Optional[str] = None
     parent_run_id: Optional[int] = None
     recipe: Optional[dict] = None  # the data-prep recipe that produced the training data, if any
+    source_rows: Any = None  # data.csv row of each training-frame row when rows were dropped (holdout.json)
     requested_categorical_columns: Optional[List[str]] = Field(default_factory=list)
     # Kept in memory for the result charts (evaluation.json); never serialized.
     pipeline: Any = None

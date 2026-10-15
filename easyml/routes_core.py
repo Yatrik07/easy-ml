@@ -174,7 +174,17 @@ def manage_runs():
         if result.get("status_code", 200) != 200:
             return jsonify(result), result["status_code"]
         rows = sorted(result.get("data", []), key=lambda r: r.get("id") or 0, reverse=True)
-        return jsonify({"status_code": 200, "data": [summarize_run(row) for row in rows]}), 200
+        summaries = [summarize_run(row) for row in rows]
+        try:  # which runs a retraining schedule uses, and what happened to scheduled runs
+            from easyml.scheduling.store import run_badges
+
+            champions, decisions = run_badges()
+        except Exception:
+            champions, decisions = {}, {}
+        for summary in summaries:
+            summary["schedule_champion_of"] = champions.get(summary["id"], [])
+            summary["schedule_decision"] = decisions.get(summary["id"])
+        return jsonify({"status_code": 200, "data": summaries}), 200
 
     data = request.get_json(silent=True) or {}
     run_id = data.get("run_id")

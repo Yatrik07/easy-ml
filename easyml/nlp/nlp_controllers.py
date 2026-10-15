@@ -21,6 +21,7 @@ from easyml.nlp.nlp_model_builder import nlp_model_builder_controller
 from easyml.utils.data_loader import load_data_from_path, encode_categorical_list
 from easyml.utils.cancellation import is_cancelled
 from easyml.utils.database_operations import create_database_table, enter_record_to_table
+from easyml.utils.holdout import kept_rows
 from easyml.utils.logger import write_log
 from easyml.utils.socket_emitter import emit_progress
 from easyml.utils.utils import NumpyEncoder
@@ -70,6 +71,7 @@ def nlp_data_loader(request_body: NLP_RequestBody):
 
         # Drop nulls in text and target columns
         request_body.df = request_body.df.dropna(subset=[request_body.text_column, request_body.target_column])
+        request_body.source_rows = kept_rows(None, request_body.df.index)
         request_body.df.reset_index(drop=True, inplace=True)
 
         # (imputation=False would drop rows with missing text or target, which the step above already did)

@@ -85,6 +85,7 @@ def vectorizer_controller(request_body: NLP_RequestBody):
         )
 
         # Preserve text copies for reference
+        request_body.test_rows = text_test.index.to_numpy()
         request_body.X_text_train = text_train.reset_index(drop=True)
         request_body.X_text_test = text_test.reset_index(drop=True)
 
@@ -176,6 +177,7 @@ def embedding_controller(request_body: NLP_RequestBody):
             stratify=_safe_stratify(request_body.y)
         )
 
+        request_body.test_rows = text_test.index.to_numpy()
         request_body.X_text_train = text_train.reset_index(drop=True)
         request_body.X_text_test = text_test.reset_index(drop=True)
 

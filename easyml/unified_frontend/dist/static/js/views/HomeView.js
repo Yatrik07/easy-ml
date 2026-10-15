@@ -17,7 +17,6 @@ const TASKS = [
 
 const UPCOMING = [
   { icon: 'timeline', title: 'Time-series forecasting', text: 'Forecast future values from dated data.', badge: 'Planned' },
-  { icon: 'autorenew', title: 'Scheduled retraining', text: 'Retrain a run automatically on a schedule or when new data arrives. Manual retraining is already in Run history.', badge: 'Planned' },
   { icon: 'psychology', title: 'LLM fine-tuning', text: 'Fine-tune small language models on your own text.', badge: 'Exploring' },
 ];
 
@@ -27,6 +26,7 @@ const SDK_POINTS = [
   'Batch predictions from the terminal, no code needed',
   'Retrain a run on new data, and move runs between computers',
   'Serve any model as a REST API with one command',
+  'Retrain on a schedule and keep serving whichever model is best',
 ];
 
 // Code lines with their comments lined up in one column.
@@ -150,8 +150,8 @@ export default {
 
       <section class="stack">
         <div class="section-title">
-          <h2>Prepare data</h2>
-          <p>Clean a table before training, and save the steps to reuse on new files.</p>
+          <h2>Prepare data, keep models fresh</h2>
+          <p>Clean a table before training, and retrain models automatically when new data arrives.</p>
         </div>
         <div class="grid-4">
           <button class="task-card" @click="navigate('prep')">
@@ -159,6 +159,12 @@ export default {
             <h3>Data prep</h3>
             <p>Remove columns, fix types, fill gaps, filter rows and more, with a live preview of the result.</p>
             <div class="task-meta"><span class="badge">No code</span><span class="badge">Reusable recipes</span></div>
+          </button>
+          <button class="task-card" @click="navigate('schedules')">
+            <span class="task-icon"><Icon name="event_available" /></span>
+            <h3>Schedules</h3>
+            <p>Retrain a run when new files arrive or at set times, and switch to the new model only when it scores better.</p>
+            <div class="task-meta"><span class="badge">Automatic</span><span class="badge">Keeps the best model</span></div>
           </button>
         </div>
       </section>

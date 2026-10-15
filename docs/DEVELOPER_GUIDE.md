@@ -45,6 +45,8 @@ The top-level package intentionally exports a small API (documented for users in
 - `easyml.retrain(run_id, dataset_path, name=None, models=None, recipe=None)`: a run's settings on new data, optionally cleaned with a data-prep recipe first (`easyml/retraining.py`)
 - `easyml.export_run(...)` / `easyml.import_run(..., trusted=True)`: run archives (`easyml/run_archive.py`)
 - `easyml.serve(run_id, ...)`: a run as a REST API (`easyml/serving/`)
+- `easyml.schedules`: scheduled retraining (`create`, `list`, `get`, `run_now`, `enable`, `disable`, `delete`,
+  `events`, `run_due`, `worker`; `easyml/schedules.py` over `easyml/scheduling/`)
 - `easyml.prep`: data-prep recipes (`Recipe`, `apply`, `profile`, `steps`, `list_recipes`, `delete_recipe`;
   `easyml/prep.py` over `easyml/dataprep/`)
 
@@ -65,11 +67,21 @@ easyml/
   routes_nlp.py
   routes_prep.py
   routes_runs.py
+  routes_schedules.py
   routes_settings.py
   trainer.py
   predictor.py
   retraining.py
   prep.py
+  schedules.py
+  scheduling/
+    compare.py
+    engine.py
+    host.py
+    service.py
+    sources.py
+    store.py
+    timing.py
   dataprep/
     engine.py
     profile.py
@@ -208,6 +220,10 @@ classification `target_labels` (labels in code order, with their JSON type) plus
 Decode predicted class codes only through `utils/labels.decoder_from_config`; it falls back to the
 string keys of `target_encodings` for older runs, converting them to numbers only when that is exact.
 Image runs save every training setting (epochs, batch size, splits, learning rate, ...).
+Tabular and text runs from 0.9.0 also write `holdout.json`: the `data.csv` row positions of their test
+set (`utils/holdout.py`; rows dropped before the split, such as a missing target, are mapped back). It is
+only metadata for scheduled retraining and is never required.
+
 A run trained on data cleaned in Data prep (or retrained with a recipe) also records `recipe`
 (`{name, steps}`); the key is absent otherwise, so other runs' configs are unchanged.
 
@@ -334,6 +350,49 @@ Endpoints:
 Training routes accept an optional `recipe` (`{name, steps}`), which `route_helpers.recipe_summary`
 validates and the controllers store in `config_json.json`. `run_summary` hides `clean_<hex>.csv`
 upload names like the other internal names.
+
+### `easyml/routes_schedules.py` and `easyml/scheduling/` (scheduled retraining)
+
+Tables (one SQLite file each, like `runs`): `schedules` (trigger, source, recipe, margin, `champion_run_id`,
+`next_run_at`, `last_signature` of the data last used, and the claim columns `running_since`/`runner`/`job_id`)
+and `schedule_events` (one row per attempt that trained or failed, with both scores and the decision).
+
+- `timing.py`: `next_run` for `interval`, `daily`, `weekly` (local time) and `new_data` (no fixed time).
+- `sources.py`: `find_data` returns the file a schedule would use and a signature (path, size, mtime;
+  image folders: file count, total size, newest mtime). Files modified in the last `SETTLE_SECONDS` are
+  ignored. `snapshot` copies the file into `uploads/sched_<hex>` before training.
+- `store.py`: quiet reads/writes (`database_operations.fetch_rows`, no per-call logging, because it runs
+  every 30 s). `claim` is an atomic `UPDATE ... WHERE running_since IS NULL OR running_since < stale`
+  (`claim_record`), so the studio, workers and `run-due` never run a schedule twice; claims expire after
+  6 hours.
+- `compare.py`: both runs' best models predict the challenger's `holdout.json` rows through `Predictor`;
+  accuracy or R². Falls back to stored test scores (`compared_on = "own test sets"`) for image runs,
+  runs without holdout rows, or when the champion cannot predict the new data. Ties promote.
+- `engine.py`: `prepare` (claim, find data, skip unchanged data for timed runs, snapshot, `plan_retrain`
+  from the champion with the schedule's recipe; failures are recorded as events) and `execute`
+  (`retraining.execute_plan`, set the run's `origin = "schedule"`, compare, record the event, move the
+  champion, compute `next_run_at`, release the claim, delete the snapshot). A failed "new data" attempt
+  stores the data signature so the same bad file is not retried on every pass. `run_due` runs the due
+  schedules one after another.
+- `host.py`: the studio thread (`start_studio_scheduler`, started by `app.run_server`, never by
+  `create_app`; skips a pass while a studio job is running; emits `schedule_event` on Socket.IO) and the
+  `worker` loop. `EASYML_SCHEDULER=0` or `--no-scheduler` turns the studio thread off.
+- `service.py`: validation and summaries shared by the routes, the CLI and `easyml.schedules`. A new
+  schedule stores the current data signature, so only later data triggers it.
+
+Endpoints:
+
+- `GET|POST /schedules` (the list includes `scheduler.studio`), `GET|PUT|DELETE /schedules/<id>`
+- `POST /schedules/<id>/toggle`, `GET /schedules/<id>/events`
+- `POST /schedules/<id>/run`: `202` with `job_id` (the studio follows it like a retrain); `409` while the
+  schedule runs elsewhere
+- `POST /schedules/check-source` with `{run_id, source_path, file_pattern}`: the file that would be used
+  and the run's columns it lacks
+
+Unlike training uploads, a schedule's source may be outside the data folder (the user types it); it is
+copied into `uploads/` before use. `/runs` summaries carry `schedule_champion_of` and
+`schedule_decision` for the Run history badges. `serving/runner.follow_schedule` polls the champion
+every 15 s and swaps a warmed-up `Predictor` into `ServeState`.
 
 ### `easyml/routes_settings.py`
 

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from easyml.config.constants import error_code_mappings
+from easyml.utils.holdout import kept_rows
 from easyml.utils.logger import write_log
 from easyml.utils.utils import NumpyEncoder
 
@@ -142,6 +143,7 @@ def data_loader(request_body):
         # Drop rows where y is null (skipped when there are none: it would only copy the data)
         if request_body.df[request_body.target_column].isna().any():
             request_body.df = request_body.df.dropna(subset=[request_body.target_column])
+            request_body.source_rows = kept_rows(request_body.source_rows, request_body.df.index)
             request_body.df.reset_index(drop=True, inplace=True)
         
         # If user explicitly disabled imputation, drop all rows with any NaN
@@ -150,6 +152,7 @@ def data_loader(request_body):
             used_columns = [c for c in request_body.df.columns if c not in request_body.ignore_columns]
             if request_body.df[used_columns].isna().any().any():
                 request_body.df = request_body.df.dropna(subset=used_columns)
+                request_body.source_rows = kept_rows(request_body.source_rows, request_body.df.index)
                 request_body.df.reset_index(drop=True, inplace=True)
             
         drop_columns = [request_body.target_column] + request_body.ignore_columns

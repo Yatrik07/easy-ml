@@ -233,16 +233,22 @@ def import_run(path, name=None, assume_yes=False, out=None):
 
 
 def serve(run_id, model=None, host="127.0.0.1", port=8000, threads=4, api_key=None, cors_origins=None, max_mb=20,
-          access_log=False):
+          access_log=False, schedule=None):
     _quiet_logs()
     from easyml.serving.runner import serve as run_service
     from easyml.utils.database_operations import RunNotFoundError
 
+    if run_id is not None and schedule is not None:
+        print("Give either a run id or --schedule, not both.", file=sys.stderr)
+        return 1
     try:
         run_service(run_id, model_name=model, host=host, port=port, threads=threads, api_key=api_key,
-                    cors_origins=cors_origins, max_mb=max_mb, access_log=access_log)
+                    cors_origins=cors_origins, max_mb=max_mb, access_log=access_log, schedule=schedule)
     except RunNotFoundError:
         print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except LookupError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
     except (ValueError, OSError, ImportError) as exc:
         print(f"Could not start the service: {exc}", file=sys.stderr)
@@ -289,4 +295,105 @@ def prep(command, recipe=None, source=None, output=None, out=None):
         print(f"Data prep failed: {exc}", file=sys.stderr)
         return 1
     print("Use: easy-ml prep list | show RECIPE | apply RECIPE INPUT [-o OUTPUT]", file=sys.stderr)
+    return 1
+
+
+def _when_text(value):
+    return (value or "").replace("T", " ")[:16] or "-"
+
+
+def _score_text(value):
+    return "n/a" if value is None else f"{value:.4f}"
+
+
+def schedule(args, out=None):
+    """``easy-ml schedule ...``: see ``easy-ml schedule --help``."""
+    _quiet_logs()
+    from easyml import schedules
+    from easyml.scheduling.engine import ScheduleBusy
+    from easyml.utils.socket_emitter import progress_listener
+
+    out = out or sys.stdout
+    command = args.schedule_command
+    try:
+        if command in (None, "list"):
+            rows = schedules.list_schedules()
+            if getattr(args, "json", False):
+                json.dump(rows, out, indent=2, default=str)
+                out.write("\n")
+                return 0
+            if not rows:
+                print("No schedules yet. Create one with `easy-ml schedule create RUN_ID SOURCE --name NAME --daily 02:00`.",
+                      file=out)
+                return 0
+            print(f"{'ID':<4}  {'NAME':<24}  {'IN USE':<7}  {'WHEN':<26}  {'NEXT RUN':<16}  LAST RESULT", file=out)
+            for r in rows:
+                state = "off" if not r["enabled"] else "running" if r["running"] else (r["last_status"] or "-")
+                print(f"{r['id']:<4}  {r['name'][:24]:<24}  {'#' + str(r['champion']['id']):<7}  {r['when'][:26]:<26}  "
+                      f"{_when_text(r['next_run_at']):<16}  {state}", file=out)
+            return 0
+        if command == "create":
+            trigger = {"every": args.every, "daily": args.daily, "on_new_data": args.on_new_data,
+                       "weekly": " ".join(args.weekly) if args.weekly else None}
+            row = schedules.create(args.run_id, args.source, args.name, pattern=args.pattern, recipe=args.recipe,
+                                   min_improvement=args.min_improvement, enabled=not args.disabled, **trigger)
+            print(f"Created schedule '{row['name']}' (#{row['id']}): retrain run #{args.run_id}, {row['when'].lower()}.",
+                  file=out)
+            if row["next_run_at"]:
+                print(f"Next run: {_when_text(row['next_run_at'])}.", file=out)
+            print("Schedules run while Easy-ML Studio is open, or with `easy-ml schedule worker`.", file=out)
+            return 0
+        if command == "run":
+            def show(entry):
+                pct = entry.get("pct")
+                prefix = f"[{pct:>3}%] " if isinstance(pct, int) else ""
+                print(prefix + _console_text(entry.get("message", ""), sys.stderr), file=sys.stderr)
+
+            with progress_listener(show):
+                event = schedules.run_now(args.schedule)
+            print(f"{event['decision']}: {event['message']}", file=out)
+            return 0
+        if command in ("enable", "disable"):
+            row = schedules.enable(args.schedule) if command == "enable" else schedules.disable(args.schedule)
+            print(f"Schedule '{row['name']}' is {'on' if row['enabled'] else 'off'}.", file=out)
+            return 0
+        if command == "delete":
+            schedules.delete(args.schedule)
+            print("Deleted. The runs it trained stay in Run History.", file=out)
+            return 0
+        if command == "events":
+            rows = schedules.events(args.schedule, limit=args.limit)
+            if args.json:
+                json.dump(rows, out, indent=2, default=str)
+                out.write("\n")
+                return 0
+            if not rows:
+                print("Nothing has happened yet.", file=out)
+                return 0
+            for e in rows:
+                new = f"#{e['challenger_run_id']}" if e["challenger_run_id"] else "-"
+                print(f"{_when_text(e['started_at'])}  {e['decision']:<13}  new {new:<6}  "
+                      f"{e['metric'] or ''} {_score_text(e['challenger_score'])} vs {_score_text(e['champion_score'])}  "
+                      f"{e['data_file'] or ''}", file=out)
+                if e["decision"] == "failed" and e["message"]:
+                    print(f"    {e['message']}", file=out)
+            return 0
+        if command == "worker":
+            return schedules.worker(poll_seconds=max(5, args.poll))
+        if command == "run-due":
+            events = schedules.run_due()
+            print(f"Ran {len(events)} schedule(s)." if events else "Nothing was due.", file=out)
+            for e in events:
+                print(f"  {e['decision']}: {e['message']}", file=out)
+            return 0
+    except ScheduleBusy as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except (LookupError, ValueError, OSError, ImportError) as exc:
+        print(f"Schedule {command} failed: {exc}", file=sys.stderr)
+        return 1
+    except InterruptedError:
+        return 1
+    print("Use: easy-ml schedule list | create | run | enable | disable | delete | events | worker | run-due",
+          file=sys.stderr)
     return 1

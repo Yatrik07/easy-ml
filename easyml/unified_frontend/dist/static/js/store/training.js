@@ -16,8 +16,9 @@ export const training = reactive({
   result: null,
   task: '',
   stopping: false,
-  kind: 'wizard', // wizard | retrain
+  kind: 'wizard', // wizard | retrain | schedule
   parentRunId: null, // the run being retrained
+  label: '', // the schedule's name (kind 'schedule')
   lastRequest: null, // { endpoint, payload, task, kind, parentRunId } for "Try again"
 });
 
@@ -58,6 +59,14 @@ export function startRetrain(runId, body, task) {
   return runJob({ endpoint: '/runs/' + runId + '/retrain', payload: body, task, kind: 'retrain', parentRunId: runId });
 }
 
+// Run a retraining schedule now (POST /schedules/<id>/run); the schedule then keeps or replaces its model.
+export function startScheduleRun(schedule) {
+  return runJob({
+    endpoint: '/schedules/' + schedule.id + '/run', payload: {}, task: schedule.task, kind: 'schedule',
+    parentRunId: schedule.champion.id, label: schedule.name,
+  });
+}
+
 export function retryTraining() {
   return training.lastRequest ? runJob(training.lastRequest) : startTraining();
 }
@@ -68,6 +77,7 @@ async function runJob(request) {
   Object.assign(training, {
     status: 'running', jobId: null, logs: [], progress: 0, epochs: [], result: null,
     task: request.task, stopping: false, kind: request.kind, parentRunId: request.parentRunId, lastRequest: request,
+    label: request.label || '',
   });
   navigate('training');
 

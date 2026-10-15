@@ -15,7 +15,7 @@ export const LineageBadge = {
   template: /* html */ `
     <button v-if="run && run.parent_run_id" class="badge badge-accent lineage" @click.stop="openRunDetail(run.parent_run_id)"
             :disabled="!parentExists" :title="parentExists ? 'Open run #' + run.parent_run_id : 'Run #' + run.parent_run_id + ' was deleted'">
-      <Icon name="autorenew" />Retrained from #{{ run.parent_run_id }}<span v-if="!parentExists">&nbsp;(deleted)</span>
+      <Icon :name="run.origin === 'schedule' ? 'event_available' : 'autorenew'" />{{ run.origin === 'schedule' ? 'Scheduled retrain of' : 'Retrained from' }} #{{ run.parent_run_id }}<span v-if="!parentExists">&nbsp;(deleted)</span>
     </button>
     <span v-else-if="run && run.origin === 'import'" class="badge lineage" title="Imported from a run archive"><Icon name="move_to_inbox" />Imported</span>`,
 };

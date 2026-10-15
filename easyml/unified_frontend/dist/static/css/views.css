@@ -203,3 +203,17 @@ button.lineage:disabled { cursor: default; opacity: 0.7; }
 @media (max-width: 960px) {
   .hero, .sdk-glimpse, .compare-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---------- Schedules ---------- */
+.schedule-list { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+.schedule-card { display: flex; flex-direction: column; min-width: 0; }
+.schedule-card .card-body { flex: 1; }
+.schedule-card.off .card-body { opacity: 0.65; }
+.schedule-card .kv dd { min-width: 0; }
+.schedule-card .kv dd.schedule-fact { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-2); }
+.schedule-card code { font-size: var(--text-xs); }
+.schedule-run { padding-left: 0; padding-right: 0; height: auto; font-weight: 600; white-space: normal; text-align: left; overflow-wrap: anywhere; }
+.schedule-message { margin: 0; overflow-wrap: anywhere; }
+.input-number { width: 110px; }
+.event-file { display: inline-block; max-width: 220px; vertical-align: bottom; }
+.event-message td { padding-top: 0; border-top: 0; }

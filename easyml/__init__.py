@@ -1,6 +1,6 @@
 """Easy-ML Studio: a no-code machine learning studio with a browser UI."""
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 from easyml.trainer import MLTrainer  # noqa: E402
 
@@ -47,17 +47,31 @@ def import_run(path, name=None, trusted=False):
     return _import_run(path, name=name, trusted=trusted)
 
 
-def serve(run_id, model_name=None, host="127.0.0.1", port=8000, threads=4, api_key=None, cors_origins=None,
-          max_mb=20, access_log=False):
+def serve(run_id=None, model_name=None, host="127.0.0.1", port=8000, threads=4, api_key=None, cors_origins=None,
+          max_mb=20, access_log=False, schedule=None):
     """
     Serve a trained run as a REST API (blocks until stopped). See :func:`easyml.serving.runner.serve`.
 
-        easyml.serve(5)   # http://127.0.0.1:8000/predict
+        easyml.serve(5)                          # http://127.0.0.1:8000/predict
+        easyml.serve(schedule="churn-nightly")   # the schedule's current model, switching when it improves
     """
     from easyml.serving.runner import serve as _serve
 
     return _serve(run_id, model_name=model_name, host=host, port=port, threads=threads, api_key=api_key,
-                  cors_origins=cors_origins, max_mb=max_mb, access_log=access_log)
+                  cors_origins=cors_origins, max_mb=max_mb, access_log=access_log, schedule=schedule)
 
 
-__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "serve", "__version__"]
+_LAZY_MODULES = ("prep", "schedules")
+
+
+def __getattr__(name):
+    """``easyml.prep`` and ``easyml.schedules`` load on first use, so ``import easyml`` stays fast."""
+    if name in _LAZY_MODULES:
+        import importlib
+
+        return importlib.import_module(f"easyml.{name}")
+    raise AttributeError(f"module 'easyml' has no attribute {name!r}")
+
+
+__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "serve", "prep", "schedules",
+           "__version__"]

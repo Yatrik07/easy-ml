@@ -3,14 +3,24 @@ import shutil
 import sqlite3
 from contextlib import closing
 
-from easyml.config.constants import db_recipes_columns_config, db_runs_columns_config
+from easyml.config.constants import (
+    db_recipes_columns_config,
+    db_runs_columns_config,
+    db_schedule_events_columns_config,
+    db_schedules_columns_config,
+)
 from easyml.config.paths import DB_DIR
 from easyml.utils.logger import write_log
 
 # Use centralized database directory
 db_dir = DB_DIR
 
-_TABLE_COLUMNS = {"runs": db_runs_columns_config, "recipes": db_recipes_columns_config}
+_TABLE_COLUMNS = {
+    "runs": db_runs_columns_config,
+    "recipes": db_recipes_columns_config,
+    "schedules": db_schedules_columns_config,
+    "schedule_events": db_schedule_events_columns_config,
+}
 
 
 def _column_names(table_name):
@@ -28,6 +38,22 @@ def update_record(table_name, record_id, **values):
     with closing(_connect(table_name)) as conn:
         conn.execute(f"UPDATE {table_name} SET {assignments} WHERE id = ?", (*values.values(), record_id))
         conn.commit()
+
+
+def claim_record(table_name, record_id, condition, params=(), **values):
+    """
+    Set ``values`` on one row only if ``condition`` (internal SQL, never user input) holds, atomically.
+    Returns True when this caller changed the row, so two processes can never both claim it.
+    """
+    unknown = set(values) - _column_names(table_name)
+    if unknown or not values:
+        raise ValueError(f"Cannot update column(s) {', '.join(sorted(unknown))}")
+    assignments = ", ".join(f"{name} = ?" for name in values)
+    with closing(_connect(table_name)) as conn:
+        cursor = conn.execute(f"UPDATE {table_name} SET {assignments} WHERE id = ? AND ({condition})",
+                              (*values.values(), record_id, *params))
+        conn.commit()
+        return cursor.rowcount == 1
 
 
 def delete_record(table_name, record_id):
@@ -64,6 +90,32 @@ def create_database_table(table_name):
         conn.commit()
 
     write_log(f"Created / Connected {table_name} table successfully!", "info", os.path.basename(__file__))
+
+
+_ENSURED = set()
+
+
+def ensure_table(table_name):
+    """Create the table if needed, without logging (for code that runs every few seconds, like the scheduler)."""
+    columns_definition = ', '.join(_TABLE_COLUMNS[table_name])
+    with closing(_connect(table_name)) as conn:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name}({columns_definition})")
+        if table_name not in _ENSURED:  # migrate older databases once per process
+            _add_missing_columns(conn, table_name)
+            _ENSURED.add(table_name)
+        conn.commit()
+
+
+def fetch_rows(table_name, where="", params=(), order="id", limit=None):
+    """Rows as dicts. ``where`` and ``order`` are internal SQL fragments, never user input; values go in ``params``."""
+    ensure_table(table_name)
+    query = f"SELECT * FROM {table_name}" + (f" WHERE {where}" if where else "") + f" ORDER BY {order}"
+    if limit:
+        query += f" LIMIT {int(limit)}"
+    with closing(_connect(table_name)) as conn:
+        cursor = conn.execute(query, tuple(params))
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
 def _add_missing_columns(conn, table_name):

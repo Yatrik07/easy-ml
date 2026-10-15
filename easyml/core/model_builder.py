@@ -28,6 +28,7 @@ from easyml.core.evaluator import get_train_test_metrics
 from easyml.core.cancellable_search import CancellableGridSearchCV
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
 from easyml.utils.cancellation import is_cancelled
+from easyml.utils.holdout import write_holdout
 from easyml.utils.logger import write_log
 from easyml.utils.socket_emitter import emit_progress
 from easyml.utils.labels import labels_in_code_order
@@ -225,6 +226,8 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
             json.dump(request_body.jsonify(), handle, cls=NumpyEncoder)
         with open(column_data_path, "w", encoding="utf-8") as handle:
             json.dump(column_data, handle, cls=NumpyEncoder)
+        if request_body.X_test_raw is not None:
+            write_holdout(request_body.path_to_save, request_body.X_test_raw.index, request_body.source_rows)
 
     except InterruptedError:
         raise

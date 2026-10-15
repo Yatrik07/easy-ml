@@ -44,6 +44,52 @@ db_recipes_columns_config = [
     "updated_at TEXT",
 ]
 
+# Scheduled retraining (0.9.0): one row per schedule, and one per attempt that trained a model or failed.
+db_schedules_columns_config = [
+    "id INTEGER PRIMARY KEY AUTOINCREMENT",
+    "name TEXT",
+    "base_run_id INTEGER",       # the run the schedule was created from
+    "champion_run_id INTEGER",   # the run currently in use (starts as the base run)
+    "task TEXT",
+    "trigger TEXT",              # "interval" | "daily" | "weekly" | "new_data"
+    "interval_minutes INTEGER",
+    "at_time TEXT",              # "HH:MM", local time (daily / weekly)
+    "weekday INTEGER",           # 0 = Monday (weekly)
+    "source_path TEXT",          # a file, or a folder (newest matching file; image runs: the image folder)
+    "file_pattern TEXT",
+    "recipe TEXT",               # "" = the run's own recipe, "none", or a recipe id
+    "min_improvement REAL",
+    "enabled INTEGER",
+    "next_run_at TEXT",
+    "last_run_at TEXT",
+    "last_status TEXT",
+    "last_message TEXT",
+    "last_signature TEXT",       # the data the last attempt used, so unchanged data is not retrained
+    "running_since TEXT",        # claim: set while a scheduler works on it
+    "runner TEXT",
+    "job_id TEXT",
+    "created_at TEXT",
+    "updated_at TEXT",
+]
+
+db_schedule_events_columns_config = [
+    "id INTEGER PRIMARY KEY AUTOINCREMENT",
+    "schedule_id INTEGER",
+    "trigger TEXT",              # "time" | "new data" | "manual"
+    "data_file TEXT",
+    "started_at TEXT",
+    "finished_at TEXT",
+    "challenger_run_id INTEGER",
+    "champion_before INTEGER",
+    "champion_after INTEGER",
+    "metric TEXT",
+    "champion_score REAL",
+    "challenger_score REAL",
+    "compared_on TEXT",          # "same new data" | "own test sets"
+    "decision TEXT",             # "promoted" | "kept champion" | "failed"
+    "message TEXT",
+]
+
 # Bumped when config_json.json gains keys that later code relies on (retrain, export).
 CONFIG_VERSION = 2
 

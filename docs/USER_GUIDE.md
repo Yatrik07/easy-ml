@@ -387,6 +387,35 @@ Run history helps you:
   computer with **Import run**. Only import files from people you trust.
 - delete runs you no longer need
 
+## Scheduled Retraining
+
+A schedule keeps a model up to date without you retraining it by hand. Create one with **Schedule
+retraining** on a run in Run history (the calendar button) or **New schedule** on the **Schedules** page:
+
+1. **Where the new data comes from**: a file you replace with newer data, or a folder where new files
+   appear (the newest file matching the pattern is used). For image runs, a folder with one sub-folder
+   per class. The dialog checks the source right away and tells you if a column the run needs is missing.
+2. **When to retrain**: every few hours, daily or weekly at a set time, or as soon as new data arrives.
+   Timed runs are skipped when the data has not changed. A file counts only once it has stopped
+   changing for 10 seconds, so a file that is still being copied is never used.
+3. **Clean the new data first** (optional): a data-prep recipe applied to every new file. By default a
+   run trained on cleaned data uses its own recipe.
+4. **Use the new model only if it is better by at least**: 0 switches whenever the new model scores at
+   least as well; a few points avoids switching for tiny differences.
+
+Each time, the schedule retrains the model in use with the same settings, then lets both models predict
+the new data's test rows (rows neither has trained on). The better one stays in use. Every attempt is
+listed under **History** with both scores, and every new run is kept in Run history: "In use by NAME"
+marks the model a schedule uses now, "Not promoted" a newer run that was not better.
+
+Schedules run while Easy-ML Studio is open. To run them when the studio is closed, keep
+`easy-ml schedule worker` running, or run `easy-ml schedule run-due` regularly from Windows Task
+Scheduler or cron. They never run the same schedule twice at once. **Run now** retrains immediately and
+shows the progress like any training run.
+
+To serve a schedule's model to other programs and switch automatically when it improves, run
+`easy-ml serve --schedule NAME`.
+
 ## Result Charts
 
 Runs trained with Easy-ML 0.6.0 or later save charts for every model. Expand a model in the

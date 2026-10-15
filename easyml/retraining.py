@@ -401,7 +401,11 @@ def retrain(run_id, dataset_path, name=None, models=None, recipe=None):
         RunResult
     """
     dataset_path = str(dataset_path)
-    plan = plan_retrain(run_id, dataset_path, name=name, models=models, recipe=recipe)
+    return execute_plan(plan_retrain(run_id, dataset_path, name=name, models=models, recipe=recipe))
+
+
+def execute_plan(plan):
+    """Train the run a :class:`RetrainPlan` describes (in this thread) and return its :class:`RunResult`."""
     if plan.task == IMAGE_TASK:
         from easyml.cv.cv_controllers import CVController
 

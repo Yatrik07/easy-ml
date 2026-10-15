@@ -34,6 +34,7 @@ export const AppSidebar = {
       { view: 'home', label: 'Home', icon: 'home' },
       { view: 'history', label: 'Run history', icon: 'history' },
       { view: 'prep', label: 'Data prep', icon: 'cleaning_services' },
+      { view: 'schedules', label: 'Schedules', icon: 'event_available' },
     ];
     const footer = [
       { view: 'settings', label: 'Settings', icon: 'settings' },

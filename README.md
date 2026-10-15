@@ -60,6 +60,7 @@ python -m easyml             # same as easy-ml
 - Retrain any run on new data with the same settings, and compare two runs side by side
 - Move a run to another computer as a single .zip (download and import)
 - Serve any trained model as a REST API with one command (`easy-ml serve`)
+- Scheduled retraining: retrain on new data automatically and switch to the new model only when it scores better
 - Single-record and batch (CSV) predictions
 - SHAP waterfall explanations for tabular predictions
 - One-click export of a tabular model as a FastAPI app with Dockerfile
@@ -93,6 +94,7 @@ easy-ml export 5 -o churn.zip                       # move run #5 to another com
 easy-ml import churn.zip                            # ...and load it there
 easy-ml serve 5                                     # REST API for run #5 on http://127.0.0.1:8000
 easy-ml prep apply customers october.csv -o clean.csv   # clean a file with a saved data-prep recipe
+easy-ml schedule create 5 exports/ --name nightly --daily 02:00   # retrain run #5 on new files every night
 ```
 
 Pick a specific model with `model_name=` / `--model` (for example `RandomForestClassifier`). The studio's prediction page shows these snippets pre-filled for each run.

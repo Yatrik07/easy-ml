@@ -6,6 +6,7 @@ import {
 import { openCompare } from '../store/compare.js';
 import { openInference } from '../store/inference.js';
 import { openRetrain } from '../store/retrain.js';
+import { openScheduleDialog } from '../store/schedules.js';
 import { confirmAction, navigate } from '../store/ui.js';
 import { taskLabel } from '../store/session.js';
 
@@ -66,7 +67,7 @@ export default {
 
     return {
       FILTERS, query, filter, runs, filtered, remove, detail, detailTitle, openRunDetail, closeRunDetail,
-      openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel, openRetrain, importOpen,
+      openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel, openRetrain, importOpen, openScheduleDialog,
       canSelect, toggleSelected, clearSelected, compareSelected, selectTitle, parentInList, compareWithParent,
     };
   },
@@ -128,7 +129,7 @@ export default {
                 <div class="run-name">{{ run.run_name }}</div>
                 <div class="run-sub"><span>#{{ run.id }}</span><TaskBadge :task="run.task" />
                   <span v-if="run.dataset_name" class="truncate dataset-name" :title="run.dataset_name"><Icon name="description" size="sm" />{{ run.dataset_name }}</span>
-                  <LineageBadge :run="run" /></div>
+                  <LineageBadge :run="run" /><ScheduleBadges :run="run" /></div>
               </td>
               <td class="hide-md"><ModelChips :models="run.models" :max="1" /></td>
               <td>
@@ -145,6 +146,10 @@ export default {
                   </button>
                   <button class="btn btn-ghost btn-icon" @click="openRetrain(run.id)" aria-label="Retrain on new data" title="Retrain on new data">
                     <Icon name="autorenew" />
+                  </button>
+                  <button class="btn btn-ghost btn-icon" @click="openScheduleDialog(run.id)" aria-label="Schedule retraining"
+                          title="Retrain automatically on new data">
+                    <Icon name="event_available" />
                   </button>
                   <button class="btn btn-ghost btn-icon" @click="openRunDetail(run.id)" aria-label="Show details" title="Details">
                     <Icon name="insights" />
@@ -164,7 +169,7 @@ export default {
           <div v-if="detail && detail.task" class="run-sub">
             <span>#{{ detail.id }}</span><TaskBadge :task="detail.task" />
             <span>{{ detail.dataset_name }}</span><span>· {{ absoluteTime(detail.timestamp) }}</span>
-            <LineageBadge :run="detail" />
+            <LineageBadge :run="detail" /><ScheduleBadges :run="detail" />
           </div>
         </template>
         <div v-if="runs.detailLoading" class="row muted"><Spinner /> Loading run…</div>
@@ -174,6 +179,7 @@ export default {
               <a class="btn btn-ghost btn-sm" :href="'/runs/' + detail.id + '/export'" download title="Save this run as a .zip to use it on another computer">
                 <Icon name="download" /><span class="btn-label">Download run (.zip)</span></a>
               <button v-if="parentInList" class="btn btn-ghost btn-sm" @click="compareWithParent"><Icon name="compare_arrows" /><span class="btn-label">Compare with parent</span></button>
+              <button class="btn btn-ghost btn-sm" @click="openScheduleDialog(detail.id); closeRunDetail()"><Icon name="event_available" /><span class="btn-label">Schedule</span></button>
               <button class="btn btn-secondary btn-sm" @click="openRetrain(detail.id)"><Icon name="autorenew" />Retrain</button>
               <button class="btn btn-primary btn-sm" @click="openInference(detail.id); closeRunDetail()"><Icon name="bolt" />Predict</button>
             </div>
@@ -181,6 +187,7 @@ export default {
         </ResultsBoard>
       </SideDrawer>
       <RetrainDialog />
+      <ScheduleDialog />
       <ImportRunDialog :open="importOpen" @close="importOpen = false" />
     </div>`,
 };

@@ -24,6 +24,7 @@ from easyml.core.cancellable_search import CancellableGridSearchCV
 from easyml.core.evaluation_charts import build_model_charts, classification_parts, nlp_top_terms, write_evaluation
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
 from easyml.nlp.nlp_evaluator import get_nlp_train_test_metrics
+from easyml.utils.holdout import write_holdout
 from easyml.utils.logger import write_log
 from easyml.utils.labels import labels_in_code_order
 from easyml.utils.utils import NumpyEncoder
@@ -204,6 +205,8 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
         column_data_path = os.path.join(request_body.path_to_save, "column_data.json")
         with open(column_data_path, "w", encoding="utf-8") as handle:
             json.dump(column_data, handle, cls=NumpyEncoder)
+        if request_body.test_rows is not None:
+            write_holdout(request_body.path_to_save, request_body.test_rows, request_body.source_rows)
 
         write_log("nlp_model_builder_controller completed", "info", os.path.basename(__file__))
 

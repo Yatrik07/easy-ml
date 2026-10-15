@@ -97,15 +97,17 @@ export default {
       if (ok) stopTraining();
     }
 
-    const eyebrow = computed(() => (training.kind === 'retrain'
-      ? 'Retrain · from run #' + training.parentRunId
-      : 'Step 4 · ' + taskLabel(training.task)));
+    const eyebrow = computed(() => {
+      if (training.kind === 'retrain') return 'Retrain · from run #' + training.parentRunId;
+      if (training.kind === 'schedule') return 'Schedule · ' + training.label;
+      return 'Step 4 · ' + taskLabel(training.task);
+    });
 
     return { training, lines, logBox, status, stop, retryTraining, navigate, eyebrow };
   },
   template: /* html */ `
     <div class="page">
-      <PageHeader :eyebrow="eyebrow" :title="training.kind === 'retrain' ? 'Retraining' : 'Training'" />
+      <PageHeader :eyebrow="eyebrow" :title="training.kind === 'wizard' ? 'Training' : 'Retraining'" />
 
       <section class="card">
         <div class="card-body stack">
@@ -126,6 +128,7 @@ export default {
               </template>
               <template v-else-if="training.status === 'error' || training.status === 'cancelled'">
                 <button v-if="training.kind === 'retrain'" class="btn btn-secondary" @click="navigate('history')"><Icon name="arrow_back" />Run history</button>
+                <button v-else-if="training.kind === 'schedule'" class="btn btn-secondary" @click="navigate('schedules')"><Icon name="arrow_back" />Schedules</button>
                 <button v-else class="btn btn-secondary" @click="navigate('models')"><Icon name="arrow_back" />Back to models</button>
                 <button class="btn btn-primary" @click="retryTraining"><Icon name="replay" />Try again</button>
               </template>
