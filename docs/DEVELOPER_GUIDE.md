@@ -926,6 +926,30 @@ Rules that keep it working:
   prints template warnings in the browser console. `serve_index` also stamps `?v=<version>` on the entry
   module and stylesheets so upgrades are not served from a stale cache.
 
+## Performance Notes
+
+These keep the studio fast without changing any result (each is covered by a test that compares
+against the straightforward implementation):
+
+- **Startup:** plain constants live in `config/constants.py`, so `import easyml`, the CLI and the run
+  database never load scikit-learn or the boosting libraries (`easy-ml --version` ~0.3 s).
+- **Run History:** the run list is read with sqlite directly; each run's model ranking is cached by a
+  digest of its metrics JSON (`run_summary._ranked`), so listing runs does not re-parse every run.
+- **Predictions:** `core/model_cache.py` keeps recently used models, pipelines, vectorizers, CV networks
+  and the SHAP background in memory (8 objects / 1 GB by default; `EASYML_MODEL_CACHE=0` disables it).
+  Entries are keyed by file path, size and modification time; deleting a run or clearing data empties
+  them. Cached objects are shared between requests: only read them.
+- **Training:**
+  - `CancellableGridSearchCV` submits about three rounds of workers per batch (same candidate order,
+    same results).
+  - Classification labels are a numpy array (shared with workers instead of pickled per fit).
+  - RandomForest fits on all cores at 1000+ rows (`n_jobs` restored before predicting/saving).
+  - Text runs densify once for every dense-only model.
+  - Image runs cache decoded + resized images (`EASYML_IMAGE_CACHE_MB`, default 1024) and check
+    image files on a few threads; seeded runs give bit-identical weights.
+- **Requests:** the upload preview converts only the rows it shows; class balance reads only the
+  target column; storage size uses `os.scandir`; "Export as API" zips files directly.
+
 ## Optional Dependencies and Feature Gating
 
 The package is intentionally split into optional extras.

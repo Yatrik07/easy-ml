@@ -157,3 +157,18 @@ def test_image_cache_gives_the_same_tensors(tmp_path):
             assert all(torch.equal(a, b) for a, b in zip(plain, cached))
     assert len(cache.images) == 4
     assert ResizedImageCache([32, 48], max_bytes=0).load(samples[0][0]).size == (48, 32)
+
+
+def test_cli_and_package_start_without_ml_libraries(data_dir):
+    import subprocess
+    import sys
+
+    code = ("import sys, io, easyml, easyml.app; easyml.app._build_parser(); "
+            "from easyml.cli import list_runs; list_runs(out=io.StringIO()); "
+            "print(','.join(m for m in ('sklearn', 'xgboost', 'lightgbm', 'catboost', 'torch', 'pandas') "
+            "if m in sys.modules))")
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    result = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True,
+                            env={**os.environ, "EASYML_NO_CONSOLE_LOGS": "1", "EASYML_DATA_DIR": data_dir})
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ""
