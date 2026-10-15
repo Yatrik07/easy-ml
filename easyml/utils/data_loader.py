@@ -6,7 +6,7 @@ import traceback
 import numpy as np
 import pandas as pd
 
-from easyml.config.GLOBAL_VARS import error_code_mappings
+from easyml.config.constants import error_code_mappings
 from easyml.utils.logger import write_log
 from easyml.utils.utils import NumpyEncoder
 

@@ -10,6 +10,12 @@ from typing import Optional, List, Any
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from easyml.config.paths import PACKAGE_ROOT
+from easyml.config.constants import (  # noqa: F401 (re-exported for older imports)
+    CATBOOST_MODEL_NAMES,
+    CONFIG_VERSION,
+    db_runs_columns_config,
+    error_code_mappings,
+)
 
 # Gradient-boosting libraries ship in the optional [boost] extra.
 try:
@@ -231,8 +237,6 @@ ui2back_mappings_classification_models["ada_boost"] = AdaBoostClassifier()
 DEFAULT_ML_MODELS_FOR_REGRESSION = ["linear_regression", "random_forest", "light_gbm", "knn"]
 DEFAULT_ML_MODELS_FOR_CLASSIFICATION = ["logistic_regression", "random_forest", "light_gbm", "knn"]
 
-# Model classes saved with CatBoost's native format (.cbm) instead of joblib (.pkl)
-CATBOOST_MODEL_NAMES = {"CatBoostClassifier", "CatBoostRegressor"}
 
 
 def get_model_mappings(task: str):
@@ -260,36 +264,7 @@ def get_param_grid(task: str, level: int) -> dict:
     }
     return grids.get((task, int(level or 0)), {})
 
-error_code_mappings = {
-    "DataIngestionError": 5001,
-    "PreProcessingError": 5003,
-    "ModelTrainingError": 5004,
-    "DatabaseError": 5005,
-    "InferenceError": 5006,
-    "OtherError": 5007,
-    "NLPDataIngestionError": 6000,
-    "NLPPreProcessingError": 6001,
-    "NLPFeatureEngineeringError": 6002,
-    "NLPModelTrainingError": 6003,
-    "NLPInferenceError": 6004,
-}
-
-# ----------------------------------------Database --------------------------------------------------
-db_runs_columns_config = [
-    "id INTEGER PRIMARY KEY AUTOINCREMENT",
-    "run_name TEXT",
-    "folder_path TEXT",
-    "timestamp TEXT",
-    "task TEXT",
-    "dataset_name TEXT",
-    "metrics_json TEXT",
-    # Added in 0.6.0; older databases get them through the migration in create_database_table.
-    "parent_run_id INTEGER",  # the run this one was retrained from
-    "origin TEXT",            # NULL (trained here), "retrain" or "import"
-]
-
-# Bumped when config_json.json gains keys that later code relies on (retrain, export).
-CONFIG_VERSION = 2
+# error_code_mappings, db_runs_columns_config and CONFIG_VERSION live in config/constants.py.
 
 # ---------------------------------------- Request Body ----------------------------------------------
 

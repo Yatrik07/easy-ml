@@ -99,12 +99,12 @@ def run_server(host=DEFAULT_HOST, port=DEFAULT_PORT, open_browser=True, console_
     warnings.filterwarnings("ignore", category=UserWarning)
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
-    from easyml.app_factory import create_app
-    from easyml.utils.logger import write_log
-
     if _port_in_use(host, port):
         print(f"Port {port} is already in use. Is Easy-ML already running? Try: easy-ml --port {port + 1}")
         return 1
+
+    from easyml.app_factory import create_app
+    from easyml.utils.logger import write_log
 
     app = create_app()
     socketio = app.extensions["easyml_socketio"]

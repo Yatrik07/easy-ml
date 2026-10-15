@@ -6,8 +6,11 @@ and how to present a run in lists (Run History, ``easy-ml runs``) without leakin
 Pure Python: safe to import from the CLI and the predictor without pulling in heavy libraries.
 """
 
+import hashlib
 import json
 import re
+import threading
+from collections import OrderedDict
 from datetime import datetime
 
 TASK_LABELS = {
@@ -101,6 +104,32 @@ def rank_models(task, metrics):
     return ranked
 
 
+# Ranking a run means parsing its metrics JSON, which holds every model's confusion matrices and
+# reports and grows with classes² × models. Run History lists every run on each visit, so rankings
+# are cached by a digest of that text: identical text always gives the identical ranking, so the
+# cache never needs invalidating, and only the small ranking (not the JSON) is kept in memory.
+_RANK_CACHE = OrderedDict()
+_RANK_CACHE_SIZE = 4096
+_RANK_LOCK = threading.Lock()
+
+
+def _ranked(task, metrics_raw):
+    if not isinstance(metrics_raw, str) or not metrics_raw:
+        return rank_models(task, parse_metrics(metrics_raw))
+    key = (task, hashlib.blake2b(metrics_raw.encode("utf-8"), digest_size=16).digest())
+    with _RANK_LOCK:
+        cached = _RANK_CACHE.get(key)
+        if cached is not None:
+            _RANK_CACHE.move_to_end(key)
+    if cached is None:
+        cached = tuple(rank_models(task, parse_metrics(metrics_raw)))
+        with _RANK_LOCK:
+            _RANK_CACHE[key] = cached
+            while len(_RANK_CACHE) > _RANK_CACHE_SIZE:
+                _RANK_CACHE.popitem(last=False)
+    return [dict(m) for m in cached]  # copies: callers may modify their list
+
+
 def display_dataset_name(name):
     """Runs created before 0.5.0 stored the internal upload name; show something readable instead."""
     if not name:
@@ -133,7 +162,7 @@ def _strip_paths(metrics):
 def summarize_run(row):
     """A compact, path-free description of a run for lists."""
     task = row.get("task")
-    ranked = rank_models(task, parse_metrics(row.get("metrics_json")))
+    ranked = _ranked(task, row.get("metrics_json"))
     best = ranked[0] if ranked and ranked[0]["test_score"] is not None else None
     return {
         "id": row.get("id"),

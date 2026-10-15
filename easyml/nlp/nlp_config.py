@@ -253,7 +253,7 @@ class NLP_RequestBody(BaseModel):
     def jsonify(self):
         """Serialize key fields for config_json.json storage."""
         from easyml import __version__
-        from easyml.config.GLOBAL_VARS import CONFIG_VERSION
+        from easyml.config.constants import CONFIG_VERSION
         from easyml.utils.labels import labels_in_code_order
 
         return {

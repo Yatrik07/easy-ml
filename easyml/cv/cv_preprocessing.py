@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from easyml.config.GLOBAL_VARS import error_code_mappings
+from easyml.config.constants import error_code_mappings
 from easyml.cv.cv_config import CV_RequestBody
 from easyml.utils.logger import write_log
 

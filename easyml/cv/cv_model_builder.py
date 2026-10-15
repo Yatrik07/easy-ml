@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision.models as models
 from easyml.cv.cv_config import CV_RequestBody
-from easyml.config.GLOBAL_VARS import error_code_mappings
+from easyml.config.constants import error_code_mappings
 from easyml.utils.logger import write_log
 import os
 import traceback

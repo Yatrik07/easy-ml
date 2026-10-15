@@ -5,7 +5,7 @@ import json
 import shutil
 import torch
 from easyml.cv.cv_config import CV_RequestBody
-from easyml.config.GLOBAL_VARS import error_code_mappings
+from easyml.config.constants import error_code_mappings
 from easyml.utils.logger import write_log
 from easyml.utils.database_operations import create_database_table, enter_record_to_table
 from easyml.cv.cv_preprocessing import cv_preprocessing_controller
@@ -192,7 +192,7 @@ class CVController:
         
     def _save_config(self):
         from easyml import __version__
-        from easyml.config.GLOBAL_VARS import CONFIG_VERSION
+        from easyml.config.constants import CONFIG_VERSION
 
         body = self.request_body
         config_path = os.path.join(body.path_to_save, "config_json.json")

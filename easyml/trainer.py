@@ -5,7 +5,7 @@ import traceback
 import uuid
 from datetime import datetime
 
-from easyml.config.GLOBAL_VARS import error_code_mappings
+from easyml.config.constants import error_code_mappings
 from easyml.config.paths import RUNS_DIR
 from easyml.utils.logger import write_log
 

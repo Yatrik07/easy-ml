@@ -12,7 +12,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from easyml.config.GLOBAL_VARS import CATBOOST_MODEL_NAMES
+from easyml.config.constants import CATBOOST_MODEL_NAMES
 
 _MODEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -45,7 +45,16 @@ def model_file_path(folder_path, model_name):
 
 
 def load_tabular_model(folder_path, model_name, task):
+    """The saved model (shared, read-only: reused between calls while the file is unchanged)."""
+    from easyml.core.model_cache import cached_load
+
     path = model_file_path(folder_path, model_name)
+    is_regression = "regression" in (task or "").lower()
+    return cached_load("tabular_model", path, lambda: _load_tabular_model(path, model_name, task),
+                       extra=(is_regression,))
+
+
+def _load_tabular_model(path, model_name, task):
     if model_name in CATBOOST_MODEL_NAMES:
         if "regression" in task.lower():
             from catboost import CatBoostRegressor
@@ -59,7 +68,11 @@ def load_tabular_model(folder_path, model_name, task):
 
 
 def load_pipeline(folder_path):
-    return joblib.load(os.path.join(folder_path, "preprocessing_pipeline.pkl"))
+    """The fitted preprocessing pipeline (shared, read-only: reused while the file is unchanged)."""
+    from easyml.core.model_cache import cached_load
+
+    path = os.path.join(folder_path, "preprocessing_pipeline.pkl")
+    return cached_load("pipeline", path, lambda: joblib.load(path))
 
 
 def read_json(folder_path, filename):

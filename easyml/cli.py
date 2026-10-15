@@ -40,7 +40,8 @@ def list_runs(task=None, limit=20, as_json=False, out=None):
         print("Could not read the runs database.", file=sys.stderr)
         return 1
     rows = sorted(result["data"], key=lambda r: r["id"], reverse=True)
-    summaries = [summarize_run(r) for r in rows if not task or r["task"] == task][:limit]
+    chosen = [r for r in rows if not task or r["task"] == task][:limit]
+    summaries = [summarize_run(r) for r in chosen]
 
     if as_json:
         json.dump(summaries, out, indent=2, default=str)
