@@ -115,7 +115,9 @@ def train_cv_model(request_body: CV_RequestBody, model_name: str, train_loader, 
                     model.eval()
                     dataloader = val_loader
 
-                running_loss = 0.0
+                # Summed on the device in float64: the same arithmetic as adding up loss.item() values,
+                # without waiting for the GPU after every batch.
+                running_loss = torch.zeros((), dtype=torch.float64, device=device)
                 running_corrects = 0
 
                 for inputs, labels in dataloader:
@@ -134,10 +136,10 @@ def train_cv_model(request_body: CV_RequestBody, model_name: str, train_loader, 
                             loss.backward()
                             optimizer.step()
 
-                    running_loss += loss.item() * inputs.size(0)
+                    running_loss += loss.detach().double() * inputs.size(0)
                     running_corrects += torch.sum(preds == labels.data)
 
-                epoch_loss = running_loss / len(dataloader.dataset)
+                epoch_loss = running_loss.item() / len(dataloader.dataset)
                 epoch_acc = float(running_corrects.double() / len(dataloader.dataset))
 
                 if phase == 'train':

@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import traceback
+from contextlib import contextmanager
 
 import joblib
 import numpy as np
@@ -33,14 +34,40 @@ from easyml.utils.labels import labels_in_code_order
 from easyml.utils.utils import NumpyEncoder
 
 
-def _model_charts(model, request_body, task):
+# Models whose fit is the same (same seeding, same saved form) when it uses every core: the trees'
+# seeds are drawn before the parallel part, and n_jobs is restored before predicting and saving.
+_PARALLEL_FIT = {"RandomForestClassifier", "RandomForestRegressor"}
+# Below this many training rows, starting the worker threads costs more than it saves.
+_PARALLEL_FIT_MIN_ROWS = 1000
+
+
+@contextmanager
+def _all_cores(model, names, n_rows):
+    """Temporarily let ``model`` use every core; its saved parameters are unchanged afterwards."""
+    if type(model).__name__ not in names or not hasattr(model, "n_jobs") or n_rows < _PARALLEL_FIT_MIN_ROWS:
+        yield model
+        return
+    previous = model.n_jobs
+    model.n_jobs = -1
+    try:
+        yield model
+    finally:
+        model.n_jobs = previous
+
+
+def _final_step(estimator):
+    return estimator.steps[-1][1] if hasattr(estimator, "steps") else estimator
+
+
+def _model_charts(model, request_body, task, y_pred_test=None):
     """ROC/PR (classification) or scatter/residuals (regression), plus feature importance."""
     if task == "classification":
         labels = labels_in_code_order(request_body.target_encodings)
         parts = classification_parts(model, request_body.X_test, request_body.y_test, labels)
     else:
-        parts = {"regression": lambda: regression_points(
-            request_body.y_test, np.asarray(model.predict(request_body.X_test)).reshape(-1))}
+        if y_pred_test is None:
+            y_pred_test = np.asarray(model.predict(request_body.X_test)).reshape(-1)
+        parts = {"regression": lambda: regression_points(request_body.y_test, y_pred_test)}
     parts["importance"] = lambda: tabular_importance(model, request_body, task)
     return build_model_charts(parts)
 
@@ -119,18 +146,21 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                     fitted, best_params = search.best_estimator_, search.best_params_
                 else:
                     # No tuning requested: a single fit instead of a 4-fold search over an empty grid.
-                    fitted, best_params = estimator.fit(request_body.X_train, request_body.y_train), {}
+                    with _all_cores(_final_step(estimator), _PARALLEL_FIT, len(request_body.y_train)):
+                        fitted, best_params = estimator.fit(request_body.X_train, request_body.y_train), {}
                 # Save and evaluate the bare model: metrics below use the original (not resampled) data.
                 best_estimator, best_params = unwrap_model(fitted, best_params)
             finally:
                 if temp_dir:
                     shutil.rmtree(temp_dir, ignore_errors=True)
 
+            y_pred_train = best_estimator.predict(request_body.X_train).reshape(-1)
+            y_pred_test = best_estimator.predict(request_body.X_test).reshape(-1)
             metrics = get_train_test_metrics(
                 request_body,
                 task=task,
-                y_real_train=request_body.y_train, y_pred_train=best_estimator.predict(request_body.X_train).reshape(-1),
-                y_real_test=request_body.y_test, y_pred_test=best_estimator.predict(request_body.X_test).reshape(-1),
+                y_real_train=request_body.y_train, y_pred_train=y_pred_train,
+                y_real_test=request_body.y_test, y_pred_test=y_pred_test,
                 **({'labels' : list(request_body.target_encodings.keys())} if task == 'classification' else {})
             )
             if task == 'regression':
@@ -169,7 +199,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 "test_metrics" : metrics['test_metrics'],
             }
             emit_progress(f"📈 Preparing result charts for {model_name}...")
-            request_body.charts[model_name] = _model_charts(best_estimator, request_body, task)
+            request_body.charts[model_name] = _model_charts(best_estimator, request_body, task, y_pred_test)
             emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))
 
         labels = labels_in_code_order(request_body.target_encodings) if task == "classification" else None

@@ -139,16 +139,18 @@ def data_loader(request_body):
         if request_body.ignore_columns is None:
             request_body.ignore_columns = []
 
-        # Drop rows where y is null
-        request_body.df = request_body.df.dropna(subset=[request_body.target_column])
-        request_body.df.reset_index(drop=True, inplace=True)
+        # Drop rows where y is null (skipped when there are none: it would only copy the data)
+        if request_body.df[request_body.target_column].isna().any():
+            request_body.df = request_body.df.dropna(subset=[request_body.target_column])
+            request_body.df.reset_index(drop=True, inplace=True)
         
         # If user explicitly disabled imputation, drop all rows with any NaN
         if not getattr(request_body, 'imputation', True):
             write_log("dropping all rows with missing data (imputation=False)", "info", os.path.basename(__file__))
             used_columns = [c for c in request_body.df.columns if c not in request_body.ignore_columns]
-            request_body.df = request_body.df.dropna(subset=used_columns)
-            request_body.df.reset_index(drop=True, inplace=True)
+            if request_body.df[used_columns].isna().any().any():
+                request_body.df = request_body.df.dropna(subset=used_columns)
+                request_body.df.reset_index(drop=True, inplace=True)
             
         drop_columns = [request_body.target_column] + request_body.ignore_columns
         request_body.X = request_body.df.drop(columns=drop_columns, errors='ignore')
@@ -159,7 +161,9 @@ def data_loader(request_body):
         # Encode target if it's a classification task
         if "classification" in request_body.task.lower():
             request_body.target_dtype = str(request_body.y.dtype)
-            request_body.target_encodings, request_body.y = encode_categorical_list(request_body.y.tolist())
+            request_body.target_encodings, encoded = encode_categorical_list(request_body.y.tolist())
+            # An array (not a list) is shared with the grid-search workers instead of pickled for each fit.
+            request_body.y = np.asarray(encoded)
             write_log(f"classification task - encoded target variable : {json.dumps(request_body.target_encodings, cls=NumpyEncoder)}", "info",
                       os.path.basename(__file__))
 

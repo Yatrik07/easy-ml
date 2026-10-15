@@ -1,6 +1,8 @@
 import os
+import threading
 import traceback
-from collections import namedtuple
+from collections import Counter, namedtuple
+from concurrent.futures import ThreadPoolExecutor
 
 from PIL import Image
 from sklearn.model_selection import train_test_split
@@ -19,20 +21,64 @@ IMAGENET_STD = [0.229, 0.224, 0.225]
 SPLIT_SEED = 42
 
 
-class ImageSampleDataset(Dataset):
-    """A list of (image path, class index) pairs with its own transform."""
+class ResizedImageCache:
+    """
+    Images after the fixed first steps of every transform (decode, convert to RGB, resize), kept in
+    memory up to a byte budget so later epochs and evaluation passes skip decoding and resizing.
+    The random augmentation that follows still runs on every use, on exactly the same input.
 
-    def __init__(self, samples, transform=None):
+    ``EASYML_IMAGE_CACHE_MB`` sets the budget (default 1024; 0 turns the cache off).
+    """
+
+    def __init__(self, image_size, max_bytes=None):
+        self.resize = transforms.Resize(tuple(image_size))
+        if max_bytes is None:
+            try:
+                max_bytes = int(float(os.environ.get("EASYML_IMAGE_CACHE_MB", "1024")) * 1024 * 1024)
+            except ValueError:
+                max_bytes = 1024 * 1024 * 1024
+        self.max_bytes = max_bytes
+        self.used = 0
+        self.images = {}
+        self.lock = threading.Lock()
+
+    def load(self, path):
+        image = self.images.get(path)
+        if image is not None:
+            return image
+        with Image.open(path) as raw:
+            image = self.resize(raw.convert('RGB'))
+        size = image.width * image.height * len(image.getbands())
+        with self.lock:
+            if path not in self.images and self.used + size <= self.max_bytes:
+                self.images[path] = image
+                self.used += size
+        return image
+
+
+class ImageSampleDataset(Dataset):
+    """
+    A list of (image path, class index) pairs with its own transform.
+
+    With ``cache``, images come already resized from the cache and ``transform`` must be the steps
+    that follow the resize (see :func:`build_transforms`).
+    """
+
+    def __init__(self, samples, transform=None, cache=None):
         self.samples = samples
         self.transform = transform
+        self.cache = cache
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
         path, target = self.samples[idx]
-        with Image.open(path) as img:
-            sample = img.convert('RGB')
+        if self.cache is not None:
+            sample = self.cache.load(path)
+        else:
+            with Image.open(path) as img:
+                sample = img.convert('RGB')
         if self.transform is not None:
             sample = self.transform(sample)
         return sample, target
@@ -93,21 +139,28 @@ def collect_image_samples(dataset_path: str):
         class_folders = [(os.path.basename(os.path.normpath(p)), p) for p in paths]
 
     class_names, samples, skipped = [], [], []
-    for class_name, folder in class_folders:
-        if class_name not in class_names:
-            class_names.append(class_name)
-        class_idx = class_names.index(class_name)
-        for file_path in _image_files(folder):
-            if _is_readable_image(file_path):
-                samples.append((file_path, class_idx))
-            else:
-                skipped.append(file_path)
+    # Checking files is mostly waiting on the disk, so it runs on a few threads (results keep their order).
+    with ThreadPoolExecutor(max_workers=min(8, os.cpu_count() or 1)) as pool:
+        for class_name, folder in class_folders:
+            if class_name not in class_names:
+                class_names.append(class_name)
+            class_idx = class_names.index(class_name)
+            files = list(_image_files(folder))
+            for file_path, readable in zip(files, pool.map(_is_readable_image, files)):
+                if readable:
+                    samples.append((file_path, class_idx))
+                else:
+                    skipped.append(file_path)
 
     return samples, class_names, skipped
 
 
-def build_transforms(image_size, augment):
-    base = [transforms.Resize(tuple(image_size))]
+def build_transforms(image_size, augment, include_resize=True):
+    """
+    (train, eval) transforms. ``include_resize=False`` leaves out the first step (resize), for images
+    that come already resized from a :class:`ResizedImageCache`.
+    """
+    base = [transforms.Resize(tuple(image_size))] if include_resize else []
     augmentation = [transforms.RandomHorizontalFlip(), transforms.RandomRotation(15)] if augment else []
     tail = [transforms.ToTensor(), transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)]
     return transforms.Compose(base + augmentation + tail), transforms.Compose(base + tail)
@@ -116,7 +169,7 @@ def build_transforms(image_size, augment):
 def _split(samples, fraction):
     """Stratified split of (path, label) pairs, falling back to a random split for tiny classes."""
     labels = [label for _, label in samples]
-    counts = {label: labels.count(label) for label in set(labels)}
+    counts = Counter(labels)
     n_held_out = max(1, int(round(len(samples) * fraction)))
     if len(samples) - n_held_out < 1:
         raise ValueError(f"Not enough images ({len(samples)}) to make training, validation and test splits.")
@@ -163,11 +216,15 @@ def cv_preprocessing_controller(request_body: CV_RequestBody) -> "CVDataLoaders"
         train_val_samples, test_samples = _split(samples, test_fraction)
         train_samples, val_samples = _split(train_val_samples, val_fraction)
 
-        train_transform, eval_transform = build_transforms(request_body.image_size, request_body.augment)
+        # One cache for every loader (train, validation, evaluation) and every model of the run.
+        cache = ResizedImageCache(request_body.image_size)
+        use_cache = cache.max_bytes > 0
+        train_transform, eval_transform = build_transforms(request_body.image_size, request_body.augment,
+                                                           include_resize=not use_cache)
 
         def loader(subset, transform, shuffle=False):
-            return DataLoader(ImageSampleDataset(subset, transform=transform), batch_size=request_body.batch_size,
-                              shuffle=shuffle, num_workers=0)
+            dataset = ImageSampleDataset(subset, transform=transform, cache=cache if use_cache else None)
+            return DataLoader(dataset, batch_size=request_body.batch_size, shuffle=shuffle, num_workers=0)
 
         loaders = CVDataLoaders(
             train=loader(train_samples, train_transform, shuffle=True),

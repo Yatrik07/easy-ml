@@ -97,3 +97,63 @@ def test_export_archive_contents(client, classification_csv):
     with open(os.path.join(folder, "config_json.json"), "rb") as handle:
         assert archive.read("config.json") == handle.read()
     assert json.loads(archive.read("labels.json")) == ["high", "low", "mid"]
+
+
+def test_batched_grid_search_matches_plain_grid_search():
+    from sklearn.datasets import make_classification
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import GridSearchCV
+
+    from easyml.core.cancellable_search import CancellableGridSearchCV
+
+    X, y = make_classification(n_samples=300, n_features=8, random_state=0)
+    grid = {"C": [0.01, 0.1, 1, 10, 100], "fit_intercept": [True, False], "tol": [1e-4, 1e-3]}
+    plain = GridSearchCV(LogisticRegression(max_iter=500), grid, cv=4, n_jobs=2).fit(X, y)
+    batched = CancellableGridSearchCV(LogisticRegression(max_iter=500), grid, cv=4, n_jobs=2).fit(X, y)
+    assert batched.best_params_ == plain.best_params_
+    assert list(batched.cv_results_["params"]) == list(plain.cv_results_["params"])
+    assert np.array_equal(batched.cv_results_["mean_test_score"], plain.cv_results_["mean_test_score"])
+    assert np.array_equal(batched.best_estimator_.coef_, plain.best_estimator_.coef_)
+
+
+def test_all_cores_restores_the_saved_parameters():
+    from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+
+    from easyml.core.model_builder import _PARALLEL_FIT, _all_cores
+
+    forest = RandomForestClassifier()
+    with _all_cores(forest, _PARALLEL_FIT, 5000):
+        assert forest.n_jobs == -1
+    assert forest.n_jobs is None
+    with _all_cores(forest, _PARALLEL_FIT, 100):  # small data: not worth the threads
+        assert forest.n_jobs is None
+    linear = LogisticRegression()
+    with _all_cores(linear, _PARALLEL_FIT, 5000):
+        assert linear.n_jobs is None
+
+
+def test_image_cache_gives_the_same_tensors(tmp_path):
+    torch = pytest.importorskip("torch")
+    from PIL import Image
+
+    from easyml.cv.cv_preprocessing import ImageSampleDataset, ResizedImageCache, build_transforms
+
+    rng = np.random.default_rng(0)
+    samples = []
+    for i in range(4):
+        path = tmp_path / f"{i}.jpg"
+        Image.fromarray((rng.random((90, 130, 3)) * 255).astype("uint8")).save(path)
+        samples.append((str(path), i % 2))
+    full_train, full_eval = build_transforms([32, 48], augment=True)
+    post_train, post_eval = build_transforms([32, 48], augment=True, include_resize=False)
+    cache = ResizedImageCache([32, 48])
+    for full, post in ((full_train, post_train), (full_eval, post_eval)):
+        for epoch in range(2):  # the second pass reads from the cache
+            torch.manual_seed(epoch)
+            plain = [ImageSampleDataset(samples, full)[i][0] for i in range(4)]
+            torch.manual_seed(epoch)
+            cached = [ImageSampleDataset(samples, post, cache=cache)[i][0] for i in range(4)]
+            assert all(torch.equal(a, b) for a, b in zip(plain, cached))
+    assert len(cache.images) == 4
+    assert ResizedImageCache([32, 48], max_bytes=0).load(samples[0][0]).size == (48, 32)

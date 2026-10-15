@@ -80,7 +80,7 @@ def class_scores(model, X, n_classes):
 
 def classification_curves(y_codes, scores, labels, source):
     """ROC and precision-recall curves (one-vs-rest beyond two classes) plus AUC / average precision."""
-    from sklearn.metrics import auc, average_precision_score, precision_recall_curve, roc_curve
+    from sklearn.metrics import auc, precision_recall_curve, roc_curve
 
     y = np.asarray(y_codes, dtype=int)
     present = sorted(set(y.tolist()))
@@ -107,7 +107,9 @@ def classification_curves(y_codes, scores, labels, source):
         rx, ry = _thin(recall[::-1], precision[::-1])
         label = str(labels[code])
         roc_curves.append({"label": label, "auc": _r(area), "fpr": fx, "tpr": fy})
-        pr_curves.append({"label": label, "ap": _r(average_precision_score(truth, scores[:, code])),
+        # scikit-learn's average_precision_score, computed from the curve above instead of rebuilding it
+        average_precision = max(0.0, -np.sum(np.diff(recall) * np.array(precision)[:-1]))
+        pr_curves.append({"label": label, "ap": _r(average_precision),
                           "prevalence": _r(truth.mean()), "recall": rx, "precision": ry})
 
     roc = {"score_source": source, "curves": roc_curves, "macro_auc": _r(np.mean(all_aucs))}

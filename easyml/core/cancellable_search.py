@@ -3,8 +3,10 @@ Grid search that a training job can stop part-way through.
 
 ``GridSearchCV`` dispatches every candidate x fold fit to its worker processes in one go, so a stop
 request would only be noticed once the whole search had finished. The worker processes cannot see
-the job's cancel event, so this search hands the candidates to scikit-learn in batches of about one
-round of workers and checks for cancellation in the calling (job) thread between batches.
+the job's cancel event, so this search hands the candidates to scikit-learn in batches and checks for
+cancellation in the calling (job) thread between batches. A batch holds about three rounds of
+workers: one round per batch left cores idle while the slowest fit of each batch finished, and three
+rounds keep them busy while a stop request still takes effect within a few fits.
 
 scikit-learn accumulates the results of every batch, so ``cv_results_``, ``best_params_`` and the
 refit on the full training data are the same as a plain ``GridSearchCV``.
@@ -15,6 +17,8 @@ from sklearn.model_selection import GridSearchCV, ParameterGrid, check_cv
 
 from easyml.utils.cancellation import check_cancelled
 
+BATCH_ROUNDS = 3
+
 
 class CancellableGridSearchCV(GridSearchCV):
     """``GridSearchCV`` that raises ``InterruptedError`` between batches once its job is cancelled."""
@@ -24,7 +28,7 @@ class CancellableGridSearchCV(GridSearchCV):
             n_splits = check_cv(self.cv).get_n_splits()
         except (TypeError, ValueError):
             n_splits = 1
-        return max(1, effective_n_jobs(self.n_jobs) // max(1, n_splits))
+        return max(1, BATCH_ROUNDS * effective_n_jobs(self.n_jobs) // max(1, n_splits))
 
     def _run_search(self, evaluate_candidates):
         candidates = list(ParameterGrid(self.param_grid))

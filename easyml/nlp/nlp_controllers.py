@@ -72,13 +72,9 @@ def nlp_data_loader(request_body: NLP_RequestBody):
         request_body.df = request_body.df.dropna(subset=[request_body.text_column, request_body.target_column])
         request_body.df.reset_index(drop=True, inplace=True)
 
-        # If user explicitly disabled imputation, drop all rows with any NaN
-        if not getattr(request_body, 'imputation', True):
-            write_log("dropping all rows with missing data (imputation=False)", "info", os.path.basename(__file__))
-            request_body.df = request_body.df.dropna(subset=[request_body.text_column, request_body.target_column])
-            request_body.df.reset_index(drop=True, inplace=True)
+        # (imputation=False would drop rows with missing text or target, which the step above already did)
 
-        # Ensure text column is string
+# Ensure text column is string
         request_body.df[request_body.text_column] = request_body.df[request_body.text_column].astype(str)
 
         # Separate X (text) and y (target)

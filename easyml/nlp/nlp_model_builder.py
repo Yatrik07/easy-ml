@@ -67,6 +67,7 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
 
         # Determine if input is sparse
         is_sparse = scipy.sparse.issparse(request_body.X_train)
+        dense = None  # (X_train, X_test) as dense arrays, made at most once
 
         # Resampling (SMOTE/Tomek) is part of each model's pipeline, so it only ever sees training folds.
         imbalance_method = request_body.imbalance_handling or "none"
@@ -102,9 +103,11 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
             X_test = request_body.X_test
 
             if is_sparse and model_name in DENSE_ONLY_MODELS:
-                write_log(f"converting sparse to dense for {model_name}", "info", os.path.basename(__file__))
-                X_train = X_train.toarray() if scipy.sparse.issparse(X_train) else X_train
-                X_test = X_test.toarray() if scipy.sparse.issparse(X_test) else X_test
+                if dense is None:  # converted once and shared by every model that needs dense input
+                    write_log(f"converting sparse to dense for {model_name}", "info", os.path.basename(__file__))
+                    dense = (X_train.toarray() if scipy.sparse.issparse(X_train) else X_train,
+                             X_test.toarray() if scipy.sparse.issparse(X_test) else X_test)
+                X_train, X_test = dense
 
             # Get param grid for this model
             param_grid = grid.get(class_name, {})
