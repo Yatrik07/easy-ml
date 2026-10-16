@@ -2,6 +2,8 @@ import json
 import os
 import traceback
 
+from easyml.core.seeding import validate_cv_folds, validate_seed
+from easyml.utils.run_meta import clean_tags, tags_json
 from easyml.config.GLOBAL_VARS import ML_RequestBody, error_code_mappings
 from easyml.core.model_builder import ml_model_builder_trainer_controller
 from easyml.core.pre_processing import preprocessing_controller
@@ -25,7 +27,7 @@ class _TabularController:
     def __init__(self, name, dataset_path, target_column, timestamp, preprocessing=True, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, categorical_columns=None, path_to_save=None,
                  reduce_features=False, ignore_columns=None, task=None, imbalance_handling="none",
-                 original_dataset_name=None, parent_run_id=None, recipe=None, **kwargs):
+                 original_dataset_name=None, parent_run_id=None, recipe=None, random_seed=42, cv_folds=0, tags=None, **kwargs):
         """
         Args:
             name (str): Name of the run.
@@ -67,6 +69,9 @@ class _TabularController:
             original_dataset_name=original_dataset_name,
             parent_run_id=parent_run_id,
             recipe=recipe or None,
+            random_seed=validate_seed(random_seed),
+            cv_folds=validate_cv_folds(cv_folds),
+            tags=clean_tags(tags) or None,
         )
 
     supports_imbalance_handling = False
@@ -98,6 +103,7 @@ class _TabularController:
                 metrics_json=json.dumps(self.request_body.performance, cls=NumpyEncoder),
                 parent_run_id=self.request_body.parent_run_id,
                 origin="retrain" if self.request_body.parent_run_id else None,
+                tags=tags_json(self.request_body.tags),
             )
             emit_progress("💾 Results saved to database", step=4, total_steps=5)
 

@@ -23,6 +23,8 @@ export default {
       <PageHeader :eyebrow="eyebrow" title="Results"
                   :subtitle="best ? 'Best model: ' + best.label + '. Every model is saved in run #' + result.run_id + '.' : ''">
         <button class="btn btn-secondary" @click="navigate('home')"><Icon name="add" />New run</button>
+        <a v-if="result.run_id > 0" class="btn btn-secondary" :href="'/runs/' + result.run_id + '/report'" download
+           title="One HTML file with the scores, charts and settings, to send to anyone"><Icon name="description" />Download report</a>
         <button v-if="result.run_id > 0" class="btn btn-primary" @click="openInference(result.run_id)"><Icon name="bolt" />Make predictions</button>
       </PageHeader>
 

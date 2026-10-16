@@ -158,6 +158,8 @@ def ml_predict():
             imbalance_handling=data.get("imbalance_handling", "none"),
             original_dataset_name=clean_display_filename(data.get("original_filename")),
             recipe=recipe_summary(data.get("recipe")),
+            random_seed=data.get("random_seed", 42),
+            cv_folds=data.get("cv_folds", 0),
         )
     except Exception as exc:
         remove_orphan_run_folder(path_to_save)

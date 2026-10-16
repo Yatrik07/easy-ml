@@ -13,6 +13,7 @@ pip install "easy-ml-studio[all]"     # + XGBoost/LightGBM/CatBoost, embeddings,
 - [Clean data with recipes](#clean-data-with-recipes)
 - [Retrain on new data](#retrain-on-new-data)
 - [Retrain on a schedule](#retrain-on-a-schedule)
+- [Organise and share runs](#organise-and-share-runs)
 - [Move runs between computers](#move-runs-between-computers)
 - [Serve a model as a REST API](#serve-a-model-as-a-rest-api)
 - [Command line](#command-line)
@@ -47,6 +48,8 @@ print(run.performance)   # test/validation scores per model
 | `target_column` | The column to predict |
 | `models` | Model keys to train and compare (see below) |
 | `hyper_parameter_tuning` | Grid-search level: `0` none (default), `1` small, `2` larger |
+| `random_seed` | Seed for the split, resampling, cross-validation and every model with randomness (default `42`): the same data, settings and seed always give the same models and scores |
+| `cv_folds` | k-fold cross-validation of every model on the training data, e.g. `5` (default `0`: off). Scores land in `run.performance[model]["cv"]` (`mean`, `std`, `scores`); the test set still ranks the models |
 
 ### Tabular options
 
@@ -266,6 +269,23 @@ at the same time: each schedule is claimed in the database, so it never runs twi
 `easy-ml serve --schedule churn-nightly` serves the schedule's current model and switches to each new
 one it promotes, without a restart (see below).
 
+## Organise and share runs
+
+```python
+easyml.report(5)                          # easyml-run-5-<name>.html: scores, charts and settings in one file
+easyml.report(5, "churn-for-the-team.html")
+```
+
+The report is a single HTML file without scripts or external links: open it in any browser, attach it to
+an email, or print it to PDF. Runs can also be renamed, tagged and given notes in Run history; tags
+are passed on to retrained and scheduled runs and kept in run archives.
+
+```bash
+easy-ml tag 5 churn production            # add tags (easy-ml tag 5 production --remove removes one)
+easy-ml runs --tag churn                  # only runs with this tag
+easy-ml report 5 -o churn.html
+```
+
 ## Move runs between computers
 
 Save a run as a single `.zip` file and load it somewhere else:
@@ -345,6 +365,9 @@ reach the computer can use it, so add `--api-key` on shared networks.
 easy-ml runs                                        # list runs with their best model and score
 easy-ml runs --task MLRegression --limit 5
 easy-ml runs --json                                 # machine-readable
+easy-ml runs --tag churn                            # only runs with this tag
+easy-ml tag 5 churn production                      # add tags (--remove to take them off)
+easy-ml report 5 -o churn.html                      # the run as one HTML file to share
 
 easy-ml predict 5 new_customers.csv -o out.csv      # adds Prediction (and Confidence) columns
 easy-ml predict 5 new_customers.csv --model RandomForestClassifier

@@ -33,6 +33,34 @@ def run_config(run_id):
         return error_response(exc)
 
 
+@runs_bp.route("/runs/<int:run_id>/report", methods=["GET"])
+def run_report(run_id):
+    """The run as one self-contained HTML file (download)."""
+    from flask import Response
+
+    from easyml.reporting.report import build_report
+
+    try:
+        html, name = build_report(run_id)
+    except Exception as exc:
+        return error_response(exc)
+    disposition = "inline" if request.args.get("view") in ("1", "true") else "attachment"
+    return Response(html, mimetype="text/html", headers={"Content-Disposition": f'{disposition}; filename="{name}"'})
+
+
+@runs_bp.route("/runs/<int:run_id>/meta", methods=["PUT"])
+def run_meta(run_id):
+    """Change a run's name, notes and/or tags: ``{run_name?, notes?, tags?}``."""
+    from easyml.utils.run_meta import update_run_meta
+
+    data = request.get_json(silent=True) or {}
+    try:
+        return jsonify(update_run_meta(run_id, run_name=data.get("run_name"), notes=data.get("notes"),
+                                       tags=data.get("tags")))
+    except Exception as exc:
+        return error_response(exc)
+
+
 @runs_bp.route("/runs/<int:run_id>/sample", methods=["GET"])
 def run_sample(run_id):
     """A random real row of the run's data (preferably its test set) to try the model with."""

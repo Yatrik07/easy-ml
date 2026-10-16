@@ -17,6 +17,7 @@ import os
 from dataclasses import dataclass, field
 
 from easyml.utils.database_operations import get_record_by_id
+from easyml.utils.run_meta import parse_tags
 from easyml.utils.run_summary import (
     display_dataset_name,
     model_label,
@@ -309,6 +310,10 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
             "original_dataset_name": original_dataset_name or os.path.basename(dataset_path),
             "parent_run_id": run_id,
             "recipe": recipe_info,
+            # Same seed and validation as the original (runs before 0.10.0: the old fixed split, no CV).
+            "random_seed": config.get("random_seed", 42),
+            "cv_folds": config.get("cv_folds", 0),
+            "tags": parse_tags(record.get("tags")) or None,
         }
 
     elif task == TEXT_TASK:
@@ -335,6 +340,9 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
             "original_dataset_name": original_dataset_name or os.path.basename(dataset_path),
             "parent_run_id": run_id,
             "recipe": recipe_info,
+            "random_seed": config.get("random_seed", 42),
+            "cv_folds": config.get("cv_folds", 0),
+            "tags": parse_tags(record.get("tags")) or None,
         })
 
     elif task == IMAGE_TASK:
@@ -375,6 +383,8 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
             "image_size": tuple(config.get("image_size") or defaults["image_size"].default),
             "custom_layers": config.get("custom_layers"),
             "parent_run_id": run_id,
+            "random_seed": config.get("random_seed", 42),
+            "tags": parse_tags(record.get("tags")) or None,
         })
     else:
         raise ValueError(f"Runs of task {task!r} cannot be retrained.")

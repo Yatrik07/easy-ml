@@ -22,18 +22,31 @@ export default {
   setup() {
     const query = ref('');
     const filter = ref('all');
+    const tagFilter = ref('');
     const importOpen = ref(false);
     onMounted(loadRuns);
 
     const filtered = computed(() => {
       const q = query.value.trim().toLowerCase();
+      const tag = tagFilter.value.toLowerCase();
       return runs.list.filter(run => {
         if (filter.value !== 'all' && run.task !== filter.value) return false;
+        if (tag && !(run.tags || []).some(t => t.toLowerCase() === tag)) return false;
         if (!q) return true;
-        return [run.run_name, run.dataset_name, run.best_model_label, String(run.id)]
+        return [run.run_name, run.dataset_name, run.best_model_label, String(run.id), run.notes, ...(run.tags || [])]
           .some(v => String(v || '').toLowerCase().includes(q));
       });
     });
+    // Every tag in use, most used first, for the filter row.
+    const allTags = computed(() => {
+      const counts = {};
+      for (const run of runs.list) for (const t of run.tags || []) counts[t.toLowerCase()] = counts[t.toLowerCase()] || { name: t, count: 0 };
+      for (const run of runs.list) for (const t of run.tags || []) counts[t.toLowerCase()].count += 1;
+      return Object.values(counts).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    });
+    function toggleTag(tag) {
+      tagFilter.value = tagFilter.value.toLowerCase() === tag.toLowerCase() ? '' : tag;
+    }
 
     async function remove(run) {
       const ok = await confirmAction({
@@ -66,7 +79,7 @@ export default {
     const detailTitle = computed(() => (detail.value && detail.value.run_name) || (detail.value ? 'Run #' + detail.value.id : ''));
 
     return {
-      FILTERS, query, filter, runs, filtered, remove, detail, detailTitle, openRunDetail, closeRunDetail,
+      FILTERS, query, filter, tagFilter, allTags, toggleTag, runs, filtered, remove, detail, detailTitle, openRunDetail, closeRunDetail,
       openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel, openRetrain, importOpen, openScheduleDialog,
       canSelect, toggleSelected, clearSelected, compareSelected, selectTitle, parentInList, compareWithParent,
     };
@@ -94,6 +107,11 @@ export default {
         </template>
         <span v-else class="subtle text-sm">{{ filtered.length }} of {{ runs.list.length }} runs · tick two to compare</span>
       </div>
+      <div v-if="allTags.length" class="chip-list tag-filter" role="group" aria-label="Filter by tag">
+        <span class="subtle text-sm">Tags</span>
+        <button v-for="t in allTags" :key="t.name" class="chip" :class="{ selected: tagFilter.toLowerCase() === t.name.toLowerCase() }"
+                @click="toggleTag(t.name)" :aria-pressed="tagFilter.toLowerCase() === t.name.toLowerCase()">{{ t.name }} <span class="subtle">{{ t.count }}</span></button>
+      </div>
 
       <div v-if="runs.loading && !runs.loaded" class="card card-body row muted"><Spinner /> Loading runs…</div>
 
@@ -104,7 +122,7 @@ export default {
       </div>
 
       <div v-else-if="!filtered.length" class="card">
-        <EmptyState icon="search_off" title="No matching runs" text="Try a different search or task filter." />
+        <EmptyState icon="search_off" title="No matching runs" text="Try a different search, task or tag filter." />
       </div>
 
       <div v-else class="table-wrap">
@@ -126,10 +144,12 @@ export default {
                        @change="toggleSelected(run)" :aria-label="'Select run #' + run.id + ' to compare'" :title="selectTitle(run)" />
               </td>
               <td>
-                <div class="run-name">{{ run.run_name }}</div>
+                <div class="run-name">{{ run.run_name }}
+                  <Icon v-if="run.notes" name="sticky_note_2" size="sm" class="subtle note-icon" :title="run.notes" /></div>
                 <div class="run-sub"><span>#{{ run.id }}</span><TaskBadge :task="run.task" />
                   <span v-if="run.dataset_name" class="truncate dataset-name" :title="run.dataset_name"><Icon name="description" size="sm" />{{ run.dataset_name }}</span>
-                  <LineageBadge :run="run" /><ScheduleBadges :run="run" /></div>
+                  <LineageBadge :run="run" /><ScheduleBadges :run="run" />
+                  <button v-for="t in run.tags" :key="t" class="chip tag-chip" @click.stop="toggleTag(t)" :title="'Show runs tagged ' + t">{{ t }}</button></div>
               </td>
               <td class="hide-md"><ModelChips :models="run.models" :max="1" /></td>
               <td>
@@ -173,9 +193,14 @@ export default {
           </div>
         </template>
         <div v-if="runs.detailLoading" class="row muted"><Spinner /> Loading run…</div>
-        <ResultsBoard v-else-if="detail && detail.metrics" :task="detail.task" :performance="detail.metrics" :run-id="detail.id">
+        <div v-else-if="detail && detail.metrics" class="stack">
+        <RunMetaEditor :run="detail" />
+        <ResultsBoard :task="detail.task" :performance="detail.metrics" :run-id="detail.id">
           <template #actions>
             <div class="row">
+              <a class="btn btn-ghost btn-sm" :href="'/runs/' + detail.id + '/report'" download
+                 title="One HTML file with this run's scores, charts and settings, to send to anyone">
+                <Icon name="description" /><span class="btn-label">Report</span></a>
               <a class="btn btn-ghost btn-sm" :href="'/runs/' + detail.id + '/export'" download title="Save this run as a .zip to use it on another computer">
                 <Icon name="download" /><span class="btn-label">Download run (.zip)</span></a>
               <button v-if="parentInList" class="btn btn-ghost btn-sm" @click="compareWithParent"><Icon name="compare_arrows" /><span class="btn-label">Compare with parent</span></button>
@@ -185,6 +210,7 @@ export default {
             </div>
           </template>
         </ResultsBoard>
+        </div>
       </SideDrawer>
       <RetrainDialog />
       <ScheduleDialog />

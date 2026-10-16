@@ -32,6 +32,9 @@ db_runs_columns_config = [
     # Added in 0.6.0; older databases get them through the migration in create_database_table.
     "parent_run_id INTEGER",  # the run this one was retrained from
     "origin TEXT",            # NULL (trained here), "retrain" or "import"
+    # Added in 0.10.0: what people write about a run (utils/run_meta.py)
+    "notes TEXT",
+    "tags TEXT",              # a JSON list of strings
 ]
 
 # Data-prep recipes (0.8.0)

@@ -247,6 +247,9 @@ class NLP_RequestBody(BaseModel):
     recipe: Optional[dict] = None  # the data-prep recipe that produced the training data, if any
     source_rows: Optional[Any] = None  # data.csv row of each kept row (holdout.json)
     test_rows: Optional[Any] = None    # positions of the test texts in the training frame
+    random_seed: int = 42              # split, resampling, CV folds and models with a seed
+    tags: Optional[List[str]] = None   # the new run's tags (a retrain inherits its parent's)
+    cv_folds: int = 0                  # k-fold cross-validation on the training texts (0 = off)
     # Kept in memory for the result charts (evaluation.json); never serialized.
     vectorizer: Optional[Any] = None
     charts: dict = Field(default_factory=dict)
@@ -292,6 +295,8 @@ class NLP_RequestBody(BaseModel):
             "models": self.models,
             "hyper_parameter_tuning": self.hyper_parameter_tuning,
             "imbalance_handling": self.imbalance_handling,
+            "random_seed": self.random_seed,
+            "cv_folds": self.cv_folds,
             "performance": self.performance,
             "status_code": self.status_code,
             "run_id": getattr(self, "run_id", None)

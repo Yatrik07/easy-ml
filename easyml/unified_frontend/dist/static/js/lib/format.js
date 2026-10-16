@@ -71,7 +71,9 @@ export function rankPerformance(task, performance, labelFn) {
     if (a.test === null && b.test !== null) return 1;
     if (b.test === null && a.test !== null) return -1;
     if ((b.test || 0) !== (a.test || 0)) return (b.test || 0) - (a.test || 0);
-    return (b.f1 || 0) - (a.f1 || 0);
+    if ((b.f1 || 0) !== (a.f1 || 0)) return (b.f1 || 0) - (a.f1 || 0);
+    // Then the cross-validation mean, then training order (the sort is stable), like the server.
+    return ((b.entry && b.entry.cv && b.entry.cv.mean) || 0) - ((a.entry && a.entry.cv && a.entry.cv.mean) || 0);
   });
   return rows;
 }

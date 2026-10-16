@@ -54,6 +54,10 @@ class NumpyJSONProvider(DefaultJSONProvider):
     Falls back to Flask's default handling (dates, UUIDs, dataclasses, ...).
     """
 
+    # Keep keys in the order they were written (e.g. models in training order), as the live training
+    # results do; sorting them made the order of equally scored models differ between pages.
+    sort_keys = False
+
     @staticmethod
     def default(obj):
         try:

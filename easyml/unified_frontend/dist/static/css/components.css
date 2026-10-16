@@ -126,7 +126,7 @@ button.chip:hover { border-color: var(--border-strong); color: var(--text); }
 .segmented-block button small { font-weight: 500; color: var(--text-subtle); font-size: var(--text-xs); }
 
 /* ---------- Tables ---------- */
-.table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.table-wrap { position: relative; width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 .table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .table th {
   text-align: left; font-weight: 700; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.04em;

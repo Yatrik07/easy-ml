@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import joblib
 import numpy as np
 
+from easyml.core.seeding import apply_seed
 from easyml.config.GLOBAL_VARS import (
     CATBOOST_MODEL_NAMES,
     ML_RequestBody,
@@ -72,6 +73,24 @@ def _model_charts(model, request_body, task, y_pred_test=None):
     parts["importance"] = lambda: tabular_importance(model, request_body, task)
     return build_model_charts(parts)
 
+def _cross_validate(request_body, template, model_name, task):
+    """k-fold scores of ``template`` (with its tuned settings) with the preprocessing refit in every fold."""
+    from sklearn.base import clone
+    from sklearn.pipeline import Pipeline
+
+    from easyml.core.cross_validation import cross_validate
+
+    folds = request_body.cv_folds
+    emit_progress(f"🔁 Cross-validating {model_name} on {folds} folds...")
+
+    def make():
+        return Pipeline([("prep", clone(request_body.pipeline)), ("model", clone(template))])
+
+    return cross_validate(make, request_body.X_train_raw, request_body.y_train, folds, request_body.random_seed,
+                          task == "classification",
+                          on_fold=lambda number, k: emit_progress(f"🔁 {model_name}: fold {number}/{k} done"))
+
+
 def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
     """
     Handles model training and evaluation for classification or regression tasks.
@@ -108,6 +127,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
             if request_body.models
             else get_default_ml_models(task)
         )
+        models_to_apply = [apply_seed(model, request_body.random_seed) for model in models_to_apply]
 
         # Resampling (SMOTE/Tomek) is part of each model's pipeline, so it only ever sees training folds.
         imbalance_method = request_body.imbalance_handling if task == "classification" else "none"
@@ -138,7 +158,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 temp_dir = tempfile.mkdtemp()
                 single_model.set_params(train_dir=temp_dir, thread_count=1, allow_writing_files=False)
 
-            estimator, search_grid = with_resampling(single_model, param_grid, imbalance_method)
+            estimator, search_grid = with_resampling(single_model, param_grid, imbalance_method, request_body.random_seed)
             try:
                 if search_grid:
                     search = CancellableGridSearchCV(estimator=estimator, param_grid=search_grid,
@@ -151,6 +171,8 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                         fitted, best_params = estimator.fit(request_body.X_train, request_body.y_train), {}
                 # Save and evaluate the bare model: metrics below use the original (not resampled) data.
                 best_estimator, best_params = unwrap_model(fitted, best_params)
+                cv_result = (_cross_validate(request_body, search.best_estimator_ if search_grid else estimator,
+                                             model_name, task) if request_body.cv_folds else None)
             finally:
                 if temp_dir:
                     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -199,6 +221,8 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 'train_metrics' : metrics['train_metrics'],
                 "test_metrics" : metrics['test_metrics'],
             }
+            if cv_result:
+                request_body.performance[model_name]["cv"] = cv_result
             emit_progress(f"📈 Preparing result charts for {model_name}...")
             request_body.charts[model_name] = _model_charts(best_estimator, request_body, task, y_pred_test)
             emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))

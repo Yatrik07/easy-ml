@@ -395,7 +395,25 @@ Run history helps you:
   on a retrained run. You see both runs' scores per model and their settings with the differences highlighted.
 - **download** a run as a .zip (**Download run (.zip)** in the details) and **import** it on another
   computer with **Import run**. Only import files from people you trust.
+- **organise** runs: in a run's details, rename it, add **tags** (press Enter after each) and **notes**
+  (saved when you click outside the box). Tags appear on the run and as a filter row above the list;
+  the search box also finds tags and notes. Retrained and scheduled runs keep their parent's tags.
+- **share** a run: **Report** in the details (or **Download report** on the Results page) saves one HTML
+  file with the run's scores, charts and settings that anyone can open or print, without Easy-ML.
 - delete runs you no longer need
+
+### Validation and reproducibility
+
+On the **Choose models** step:
+
+- **Cross-validation** (off, 3, 5 or 10 folds) trains every model again on parts of the training data
+  and shows the mean and spread of its score ("97.9% ± 3.1") next to the test score. A model with a
+  high test score but a large spread got lucky with the test split. It takes longer: each model trains
+  once more per fold. Image runs don't offer it.
+- **Random seed** (default 42) fixes every random choice: the train/test split, resampling and the
+  models' own randomness. The same data, settings and seed always give the same models and scores;
+  another seed shows how much the results depend on chance. When models tie on the test score, the
+  one with the better cross-validation score is ranked first.
 
 ## Scheduled Retraining
 

@@ -71,7 +71,7 @@ def preprocessing_controller(request_body: ML_RequestBody):
             counts = pd.Series(request_body.y).value_counts()
             stratify = request_body.y if counts.min() >= 2 else None
         request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
-            train_test_split(request_body.X, request_body.y, test_size=0.2, random_state=42,
+            train_test_split(request_body.X, request_body.y, test_size=0.2, random_state=request_body.random_seed,
                              stratify=stratify)
 
         emit_progress("🔢 Setting up numerical transformations...", pct=26)
@@ -90,6 +90,7 @@ def preprocessing_controller(request_body: ML_RequestBody):
         # Transform train and test data using the final pipeline
         write_log("transforming the data using the final pipeline", "info", os.path.basename(__file__))
         request_body.X_test_raw = request_body.X_test  # for permutation importance (transform never modifies it)
+        request_body.X_train_raw = request_body.X_train  # for cross-validation, which refits preprocessing per fold
         request_body.X_train = final_pipeline.fit_transform(request_body.X_train)
         request_body.X_test = final_pipeline.transform(request_body.X_test)
         request_body.pipeline = final_pipeline

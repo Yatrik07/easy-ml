@@ -15,6 +15,13 @@ const MODEL_HINTS = {
   MobileNetV2: 'Pretrained, light and fast (downloads weights once)', CustomCNN: 'Design your own layers',
 };
 
+const CV_FOLDS = [
+  { id: 0, label: 'Off', hint: 'Test set only, fastest' },
+  { id: 3, label: '3 folds', hint: 'Each model trains 3 more times' },
+  { id: 5, label: '5 folds', hint: 'The usual choice' },
+  { id: 10, label: '10 folds', hint: 'Most reliable, slowest' },
+];
+
 const TUNING = [
   { id: 0, label: 'None', hint: 'Default settings, fastest' },
   { id: 1, label: 'Light', hint: 'Small grid search' },
@@ -31,7 +38,7 @@ export default {
     }
     const missingExtra = computed(() => (isImage.value && !featureAvailable('cv')) || !models.value.length);
     return {
-      wizard, models, allSelected, toggleAll, missingExtra, MODEL_HINTS, TUNING, isImage, isTabular, isText,
+      wizard, models, allSelected, toggleAll, missingExtra, MODEL_HINTS, TUNING, CV_FOLDS, isImage, isTabular, isText,
       featureAvailable, installHint, modelLabel, taskLabel, navigate, startTraining,
     };
   },
@@ -96,6 +103,27 @@ export default {
       </section>
 
       <CnnBuilder v-if="isImage && wizard.config.models.includes('CustomCNN')" />
+
+      <section v-if="!missingExtra" class="card">
+        <div class="card-header"><div><h3>Validation and reproducibility</h3>
+          <div class="card-hint">The test set ranks the models. Cross-validation also shows how much a score changes
+            on different parts of the training data.</div></div></div>
+        <div class="card-body stack">
+          <div v-if="!isImage" class="field">
+            <span class="field-label">Cross-validation</span>
+            <div class="segmented segmented-block" role="group" aria-label="Cross-validation folds">
+              <button v-for="f in CV_FOLDS" :key="f.id" :class="{ active: wizard.config.cv_folds === f.id }"
+                      @click="wizard.config.cv_folds = f.id">{{ f.label }}<small>{{ f.hint }}</small></button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="random-seed">Random seed</label>
+            <input id="random-seed" class="input input-number" type="number" min="0" step="1" v-model.number="wizard.config.random_seed" />
+            <span class="field-hint">The same data, settings and seed always give the same models and scores.
+              Try another seed to see how much the results depend on chance.</span>
+          </div>
+        </div>
+      </section>
 
       <div class="row-between">
         <button class="btn btn-ghost" @click="navigate('config')"><Icon name="arrow_back" />Back</button>

@@ -44,6 +44,8 @@ class CV_RequestBody(BaseModel):
     custom_layers: Optional[List[Dict[str, Any]]] = None  # For CustomCNN layer spec
     use_gpu: bool = False  # GPU toggle
     parent_run_id: Optional[int] = None  # the run this one retrains, if any
+    random_seed: int = 42  # the train/validation/test split and PyTorch's weight initialisation and shuffling
+    tags: Optional[List[str]] = None  # the new run's tags (a retrain inherits its parent's)
     model_config = ConfigDict(arbitrary_types_allowed=True)
     
 class CV_InferenceBody(BaseModel):

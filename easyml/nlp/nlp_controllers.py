@@ -14,6 +14,8 @@ import shutil
 import pandas as pd
 import json 
 
+from easyml.core.seeding import validate_cv_folds, validate_seed
+from easyml.utils.run_meta import clean_tags, tags_json
 from easyml.nlp.nlp_config import NLP_RequestBody, NLP_ERROR_CODES
 from easyml.nlp.nlp_preprocessing import nlp_preprocessing_controller
 from easyml.nlp.nlp_feature_engineering import vectorizer_controller, embedding_controller
@@ -129,7 +131,8 @@ class NLPTextClassificationController:
                  embedding_model="all-MiniLM-L6-v2", embedding_batch_size=32,
                  embedding_max_length=256,
                  models=None, hyper_parameter_tuning=0, imputation=True,
-                 path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, parent_run_id=None, recipe=None, **kwargs):
+                 path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, parent_run_id=None, recipe=None,
+                 random_seed=42, cv_folds=0, tags=None, **kwargs):
         """
         Initialize the NLP text classification controller.
 
@@ -193,6 +196,9 @@ class NLPTextClassificationController:
             original_dataset_name=original_dataset_name,
             parent_run_id=parent_run_id,
             recipe=recipe or None,
+            random_seed=validate_seed(random_seed),
+            cv_folds=validate_cv_folds(cv_folds),
+            tags=clean_tags(tags) or None,
         )
 
     @staticmethod
@@ -236,6 +242,7 @@ class NLPTextClassificationController:
                 metrics_json=json.dumps(self.request_body.performance, cls=NumpyEncoder),
                 parent_run_id=self.request_body.parent_run_id,
                 origin="retrain" if self.request_body.parent_run_id else None,
+                tags=tags_json(self.request_body.tags),
             )
             emit_progress("💾 Results saved to database", pct=95)
 

@@ -1,6 +1,6 @@
 // Saved runs (Run History, Home "recent runs", the history detail drawer).
 import { reactive } from '../lib/vue.js';
-import { deleteJSON, getJSON } from '../lib/api.js';
+import { deleteJSON, getJSON, putJSON } from '../lib/api.js';
 import { toastError, toastSuccess } from './ui.js';
 
 export const runs = reactive({
@@ -56,6 +56,21 @@ export async function openRunDetail(id) {
 
 export function closeRunDetail() {
   runs.detail = null;
+}
+
+// Change a run's name, notes or tags; the list and the open drawer show the result at once.
+export async function saveRunMeta(id, patch) {
+  try {
+    const saved = await putJSON('/runs/' + id + '/meta', patch, 'Could not save the run');
+    const fields = { run_name: saved.run_name, tags: saved.tags, notes: saved.notes };
+    const row = runs.list.find(r => r.id === id);
+    if (row) Object.assign(row, fields);
+    if (runs.detail && runs.detail.id === id) Object.assign(runs.detail, fields);
+    return true;
+  } catch (e) {
+    toastError(e.message);
+    return false;
+  }
 }
 
 export async function deleteRun(id) {

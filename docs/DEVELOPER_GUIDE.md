@@ -45,6 +45,7 @@ The top-level package intentionally exports a small API (documented for users in
 - `easyml.retrain(run_id, dataset_path, name=None, models=None, recipe=None)`: a run's settings on new data, optionally cleaned with a data-prep recipe first (`easyml/retraining.py`)
 - `easyml.export_run(...)` / `easyml.import_run(..., trusted=True)`: run archives (`easyml/run_archive.py`)
 - `easyml.serve(run_id, ...)`: a run as a REST API (`easyml/serving/`)
+- `easyml.report(run_id, path=None)`: the run as one HTML file (`easyml/reporting/`)
 - `easyml.schedules`: scheduled retraining (`create`, `list`, `get`, `run_now`, `enable`, `disable`, `delete`,
   `events`, `run_due`, `worker`; `easyml/schedules.py` over `easyml/scheduling/`)
 - `easyml.prep`: data-prep recipes (`Recipe`, `apply`, `profile`, `steps`, `list_recipes`, `delete_recipe`;
@@ -74,6 +75,9 @@ easyml/
   retraining.py
   prep.py
   schedules.py
+  reporting/
+    report.py
+    svg.py
   scheduling/
     compare.py
     engine.py
@@ -295,6 +299,11 @@ Endpoints that act on one saved run (logic lives in `retraining.py`, `run_archiv
   that has a `recipe` in its config re-applies it, falling back to the file as it is when the steps do
   not fit (an already-cleaned file). The config route's `retrain.recipe` tells the UI about that recipe.
 - `GET /runs/<id>/charts`: `evaluation.json`, or `{available: false, reason}` for older runs
+- `PUT /runs/<id>/meta` with `{run_name?, notes?, tags?}` (`utils/run_meta.py`: ≤10 tags of ≤30 characters,
+  de-duplicated case-insensitively; notes ≤5000 characters). Stored in the `notes` / `tags` (JSON list)
+  columns; `summarize_run` returns `tags` and `notes`; retrains inherit tags; archives carry both
+- `GET /runs/<id>/report` (`?view=1` to open instead of download): `reporting/report.build_report`, one
+  HTML file with inline CSS and SVG charts (`reporting/svg.py`), every user string escaped, no scripts or links
 - `GET /runs/<id>/sample`: a random real row to try the model with (`core/artifacts.sample_row`):
   `{values | text, actual, row, source}`, from the `holdout.json` test rows when present (`source: "test"`),
   else any row (`"training"`); `400` for image runs, which keep no copy of their images
@@ -396,6 +405,21 @@ Unlike training uploads, a schedule's source may be outside the data folder (the
 copied into `uploads/` before use. `/runs` summaries carry `schedule_champion_of` and
 `schedule_decision` for the Run history badges. `serving/runner.follow_schedule` polls the champion
 every 15 s and swaps a warmed-up `Predictor` into `ServeState`.
+
+### Reproducibility and cross-validation (0.10.0)
+
+- `core/seeding.py`: `random_seed` (default 42) on every request body. `apply_seed` sets `random_state` on
+  each model that has one (CatBoost: `random_seed`); the splits, SMOTE (`imbalance_handler.make_resampler`)
+  and PyTorch (`torch.manual_seed` before each image model) use it too. With 42 the splits are the same as
+  before 0.10.0; random forests, AdaBoost and MLP became repeatable.
+- `core/cross_validation.cross_validate`: `cv_folds` > 0 scores a fresh copy of each fitted model's
+  configuration (tuned params and resampling included) on k folds of the training data, with the
+  preprocessing pipeline (`clone(request_body.pipeline)` on `X_train_raw`) or the text vectorizer refit
+  inside each fold. Folds run in our own loop (`check_cancelled()` between them); a failure is recorded as
+  `{"error"}` and never fails the run. Stored as `performance[model]["cv"]`; ranking ties go to the higher
+  CV mean (`run_summary.rank_models`, `lib/format.rankPerformance`).
+- `NumpyJSONProvider.sort_keys = False`: responses keep keys in written order (models in training order),
+  so pages and the server agree on the order of tied models.
 
 ### `easyml/routes_settings.py`
 

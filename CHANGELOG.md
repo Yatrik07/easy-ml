@@ -3,6 +3,25 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.10.0 (2026-10-15)
+
+Share and organise runs, and trust the scores.
+
+- **Random seed** (Choose models step, `random_seed=`, default 42): the same data, settings and seed always
+  give the same models and scores. Random forests, AdaBoost and the MLP used to vary slightly between
+  trainings; they are now repeatable, so their scores can differ slightly from earlier versions. The
+  train/test split is unchanged with the default seed.
+- **Cross-validation** (off / 3 / 5 / 10 folds, `cv_folds=`): every model is also scored on folds of the
+  training data, shown as "97.9% ± 3.1" in the leaderboard, the report and the API. Preprocessing and
+  resampling are refit inside each fold. When models tie on the test score, the better cross-validation
+  score ranks first.
+- **Notes, tags and renaming** in a run's details; tags show on runs and as a filter in Run history, and
+  the search finds them. Retrained and scheduled runs keep their parent's tags; archives keep both.
+  CLI: `easy-ml tag`, `easy-ml runs --tag`.
+- **Run report**: one HTML file with a run's scores, charts, settings, notes and tags to send to anyone
+  (Report in the run details, Download report on the Results page, `easy-ml report`, `easyml.report`).
+- API responses keep the training order of models instead of sorting them A to Z.
+
 ## 0.9.2 (2026-10-15)
 
 Housekeeping and fixes.

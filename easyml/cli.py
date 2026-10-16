@@ -30,7 +30,7 @@ def _format_score(value, metric):
     return f"{value:.4f}" if metric["kind"] == "decimal" else f"{value * 100:.1f}%"
 
 
-def list_runs(task=None, limit=20, as_json=False, out=None):
+def list_runs(task=None, limit=20, as_json=False, out=None, tag=None):
     _quiet_logs()
     from easyml.utils.database_operations import create_database_table, get_data_from_database
     from easyml.utils.run_summary import summarize_run
@@ -42,27 +42,75 @@ def list_runs(task=None, limit=20, as_json=False, out=None):
         print("Could not read the runs database.", file=sys.stderr)
         return 1
     rows = sorted(result["data"], key=lambda r: r["id"], reverse=True)
-    chosen = [r for r in rows if not task or r["task"] == task][:limit]
-    summaries = [summarize_run(r) for r in chosen]
+    summaries = [summarize_run(r) for r in rows if not task or r["task"] == task]
+    if tag:
+        wanted = tag.strip().lower()
+        summaries = [s for s in summaries if any(t.lower() == wanted for t in s["tags"])]
+    summaries = summaries[:limit]
 
     if as_json:
         json.dump(summaries, out, indent=2, default=str)
         out.write("\n")
         return 0
     if not summaries:
-        print("No runs yet. Train a model with `easy-ml` first.", file=out)
+        print(f"No runs tagged {tag!r}." if tag else "No runs yet. Train a model with `easy-ml` first.", file=out)
         return 0
 
-    table = [("ID", "NAME", "TASK", "DATASET", "BEST MODEL", "SCORE", "CREATED")]
+    with_tags = any(s["tags"] for s in summaries)
+    table = [("ID", "NAME", "TASK", "DATASET", "BEST MODEL", "SCORE", "CREATED") + (("TAGS",) if with_tags else ())]
     for s in summaries:
         table.append((
             str(s["id"]), s["run_name"] or "", s["task_label"], s["dataset_name"] or "",
             s["best_model"] or "-", _format_score(s["best_score"], s["metric"]),
             (s["timestamp"] or "").replace("T", " "),
-        ))
+        ) + ((", ".join(s["tags"]),) if with_tags else ()))
     widths = [min(max(len(row[i]) for row in table), 32) for i in range(len(table[0]))]
     for row in table:
         print("  ".join(cell[:widths[i]].ljust(widths[i]) for i, cell in enumerate(row)).rstrip(), file=out)
+    return 0
+
+
+def report(run_id, output=None, out=None):
+    """``easy-ml report RUN_ID [-o file.html]``: the run as one HTML file to share."""
+    _quiet_logs()
+    from easyml.reporting.report import write_report
+    from easyml.utils.database_operations import RunNotFoundError
+
+    out = out or sys.stdout
+    try:
+        path = write_report(run_id, output)
+    except RunNotFoundError:
+        print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Could not write the report: {exc}", file=sys.stderr)
+        return 1
+    print(f"Wrote {path}", file=out)
+    return 0
+
+
+def tag(run_id, tags, remove=False, out=None):
+    """``easy-ml tag RUN_ID TAG...``: add tags to a run (or remove them with ``--remove``)."""
+    _quiet_logs()
+    from easyml.utils.database_operations import RunNotFoundError, get_record_by_id
+    from easyml.utils.run_meta import parse_tags, update_run_meta
+
+    out = out or sys.stdout
+    try:
+        current = parse_tags(get_record_by_id(int(run_id)).get("tags"))
+        if remove:
+            drop = {t.strip().lower() for t in tags}
+            new = [t for t in current if t.lower() not in drop]
+        else:
+            new = current + list(tags)
+        run = update_run_meta(run_id, tags=new)
+    except RunNotFoundError:
+        print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(f"Run #{run['id']} tags: {', '.join(run['tags']) or '(none)'}", file=out)
     return 0
 
 

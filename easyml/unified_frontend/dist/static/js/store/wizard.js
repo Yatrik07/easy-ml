@@ -13,6 +13,8 @@ function defaultConfig(task = '') {
     original_filename: '',
     recipe: null, // data-prep steps that produced the dataset (recorded with the run)
     hyper_parameter_tuning: 0,
+    cv_folds: 0, // k-fold cross-validation on the training data (0 = off)
+    random_seed: 42, // same data + settings + seed = same models and scores
     models: [],
     imputation_strategy: 'impute',
     imbalance_handling: 'none',

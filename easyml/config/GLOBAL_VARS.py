@@ -317,6 +317,10 @@ class ML_RequestBody(BaseModel):
     parent_run_id: Optional[int] = None
     recipe: Optional[dict] = None  # the data-prep recipe that produced the training data, if any
     source_rows: Any = None  # data.csv row of each training-frame row when rows were dropped (holdout.json)
+    random_seed: int = 42  # split, resampling, CV folds and every model with a seed (core/seeding.py)
+    tags: Optional[List[str]] = None  # the new run's tags (a retrain inherits its parent's)
+    cv_folds: int = 0      # k-fold cross-validation of each model on the training data (0 = off)
+    X_train_raw: Optional[pd.DataFrame] = None  # the training rows before preprocessing, for cross-validation
     requested_categorical_columns: Optional[List[str]] = Field(default_factory=list)
     # Kept in memory for the result charts (evaluation.json); never serialized.
     pipeline: Any = None
@@ -357,6 +361,8 @@ class ML_RequestBody(BaseModel):
         to_dump["target_labels"] = labels_in_code_order(self.target_encodings)
         to_dump["target_dtype"] = self.target_dtype
         to_dump["run_id"] = getattr(self, "run_id", None)
+        to_dump["random_seed"] = self.random_seed
+        to_dump["cv_folds"] = self.cv_folds
         if self.recipe:
             to_dump["recipe"] = self.recipe
         return to_dump

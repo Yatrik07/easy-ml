@@ -70,6 +70,8 @@ def train_cv_model(request_body: CV_RequestBody, model_name: str, train_loader, 
     
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     write_log(f"Training on device: {device}", "info", os.path.basename(__file__))
+    # Same seed, same starting weights and batch order: each model is reproducible on its own.
+    torch.manual_seed(getattr(request_body, "random_seed", 42))
     
     # Initialize Model, Loss function, Optimizer
     model = get_cv_model(model_name, request_body.num_classes,

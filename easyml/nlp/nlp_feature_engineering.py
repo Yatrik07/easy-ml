@@ -80,7 +80,7 @@ def vectorizer_controller(request_body: NLP_RequestBody):
         # Split text before vectorizing to prevent data leakage
         text_train, text_test, y_train, y_test = train_test_split(
             request_body.X, request_body.y,
-            test_size=0.2, random_state=42,
+            test_size=0.2, random_state=request_body.random_seed,
             stratify=_safe_stratify(request_body.y)
         )
 
@@ -169,7 +169,7 @@ def embedding_controller(request_body: NLP_RequestBody):
         # Split text before embedding
         text_train, text_test, y_train, y_test = train_test_split(
             request_body.X, request_body.y,
-            test_size=0.2, random_state=42,
+            test_size=0.2, random_state=request_body.random_seed,
             stratify=_safe_stratify(request_body.y)
         )
 

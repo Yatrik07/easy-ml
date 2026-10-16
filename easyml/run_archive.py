@@ -25,6 +25,7 @@ import warnings
 import zipfile
 from datetime import datetime
 
+from easyml.utils.run_meta import MAX_NOTES, clean_tags, parse_tags, tags_json
 from easyml.utils.database_operations import create_database_table, enter_record_to_table, get_record_by_id
 from easyml.utils.logger import write_log
 from easyml.utils.run_summary import TASK_LABELS, display_dataset_name, normalize_timestamp, parse_metrics
@@ -85,6 +86,13 @@ def _libraries(task, metrics, config):
 
 # --------------------------------------------------------------------------- export
 
+def _safe_tags(tags):
+    try:
+        return clean_tags(tags if isinstance(tags, list) else [])
+    except ValueError:  # an archive from elsewhere with odd tags: keep the run, drop the tags
+        return []
+
+
 def export_run(run_id, output_path=None, include_data=True):
     """
     Write run ``run_id`` to a .zip archive and return its path.
@@ -142,6 +150,8 @@ def export_run(run_id, output_path=None, include_data=True):
             "timestamp": normalize_timestamp(record.get("timestamp")),
             "parent_run_id": record.get("parent_run_id"),
             "origin": record.get("origin"),
+            "notes": record.get("notes") or "",
+            "tags": parse_tags(record.get("tags")),
         },
         "metrics": metrics,
         "includes_data": has_data,
@@ -357,6 +367,8 @@ def import_archive(path, name=None):
             metrics_json=json.dumps(_strip_model_paths(metrics)),
             parent_run_id=None,
             origin="import",
+            notes=(str(run.get("notes") or "")[:MAX_NOTES] or None),
+            tags=tags_json(_safe_tags(run.get("tags"))),
         )
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)

@@ -11,6 +11,7 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml serve 5              serve run #5 as a REST API on http://127.0.0.1:8000
     easy-ml prep apply customers new.csv -o clean.csv    re-apply a saved data-prep recipe
     easy-ml schedule worker      run scheduled retraining without the studio (see `easy-ml schedule --help`)
+    easy-ml report 5             save run #5 as one HTML file to share
 """
 
 import argparse
@@ -49,6 +50,16 @@ def _build_parser():
                       help="Only show runs of this task.")
     runs.add_argument("--limit", type=int, default=20, help="Maximum number of runs to show (default: 20).")
     runs.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
+    runs.add_argument("--tag", help="Only runs with this tag.")
+
+    report = subcommands.add_parser("report", help="Save a run as one HTML file to share (metrics, charts, settings).")
+    report.add_argument("run_id", type=int, help="Run to report on (see `easy-ml runs`).")
+    report.add_argument("-o", "--output", help="File to write (default: easyml-run-<id>-<name>.html here).")
+
+    tag = subcommands.add_parser("tag", help="Add tags to a run (or remove them with --remove).")
+    tag.add_argument("run_id", type=int, help="Run to tag (see `easy-ml runs`).")
+    tag.add_argument("tags", nargs="+", help="One or more tags, e.g. churn production.")
+    tag.add_argument("--remove", action="store_true", help="Remove these tags instead of adding them.")
 
     predict = subcommands.add_parser("predict", help="Make predictions with a trained run.")
     predict.add_argument("run_id", type=int, help="Run number (see `easy-ml runs`).")
@@ -207,7 +218,13 @@ def main(argv=None):
         return download_models()
     if args.command == "runs":
         from easyml.cli import list_runs
-        return list_runs(task=args.task, limit=args.limit, as_json=args.json)
+        return list_runs(task=args.task, limit=args.limit, as_json=args.json, tag=args.tag)
+    if args.command == "report":
+        from easyml.cli import report
+        return report(args.run_id, output=args.output)
+    if args.command == "tag":
+        from easyml.cli import tag
+        return tag(args.run_id, args.tags, remove=args.remove)
     if args.command == "predict":
         from easyml.cli import predict
         return predict(args.run_id, args.input, model=args.model, output=args.output, text_column=args.text_column)

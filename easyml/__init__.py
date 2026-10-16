@@ -1,6 +1,6 @@
 """Easy-ML Studio: a no-code machine learning studio with a browser UI."""
 
-__version__ = "0.9.2"
+__version__ = "0.10.0"
 
 from easyml.trainer import MLTrainer  # noqa: E402
 
@@ -61,6 +61,18 @@ def serve(run_id=None, model_name=None, host="127.0.0.1", port=8000, threads=4, 
                   cors_origins=cors_origins, max_mb=max_mb, access_log=access_log, schedule=schedule)
 
 
+def report(run_id, path=None):
+    """
+    Save a run as one self-contained HTML file (metrics, charts, settings) and return its path.
+
+        easyml.report(5)                    # easyml-run-5-<name>.html in the current folder
+        easyml.report(5, "churn.html")
+    """
+    from easyml.reporting.report import write_report
+
+    return write_report(run_id, path)
+
+
 _LAZY_MODULES = ("prep", "schedules")
 
 
@@ -73,5 +85,5 @@ def __getattr__(name):
     raise AttributeError(f"module 'easyml' has no attribute {name!r}")
 
 
-__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "serve", "prep", "schedules",
-           "__version__"]
+__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "serve", "report", "prep",
+           "schedules", "__version__"]

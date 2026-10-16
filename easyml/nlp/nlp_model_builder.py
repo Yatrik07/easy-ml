@@ -14,6 +14,7 @@ import joblib
 import scipy.sparse
 
 
+from easyml.core.seeding import apply_seed
 from easyml.nlp.nlp_config import (
     NLP_RequestBody, NLP_ERROR_CODES,
     get_nlp_model_instance, DEFAULT_NLP_MODELS,
@@ -33,6 +34,39 @@ from easyml.utils.cancellation import is_cancelled
 
 # Naive Bayes needs non-negative features (counts / tf-idf), which embeddings are not.
 NON_NEGATIVE_ONLY_MODELS = {"naive_bayes", "complement_nb"}
+
+
+def _to_dense(matrix):
+    return matrix.toarray() if scipy.sparse.issparse(matrix) else matrix
+
+
+def _cross_validate(request_body, template, class_name, dense=False):
+    """
+    k-fold scores of ``template``: with a fresh vectorizer per fold on the training texts, or on the
+    training embeddings (fixed per text, so nothing leaks between folds).
+    """
+    from sklearn.base import clone
+    from sklearn.pipeline import Pipeline
+    from sklearn.preprocessing import FunctionTransformer
+
+    from easyml.core.cross_validation import cross_validate
+
+    folds = request_body.cv_folds
+    emit_progress(f"🔁 Cross-validating {class_name} on {folds} folds...")
+    use_texts = request_body.feature_mode != "embedding" and request_body.vectorizer is not None \
+        and request_body.X_text_train is not None
+
+    def make():
+        if not use_texts:
+            return clone(template)
+        steps = [("vectorize", clone(request_body.vectorizer))]
+        if dense:
+            steps.append(("dense", FunctionTransformer(_to_dense, accept_sparse=True)))
+        return Pipeline(steps + [("model", clone(template))])
+
+    data = request_body.X_text_train if use_texts else request_body.X_train
+    return cross_validate(make, data, request_body.y_train, folds, request_body.random_seed, True,
+                          on_fold=lambda number, k: emit_progress(f"🔁 {class_name}: fold {number}/{k} done"))
 
 
 def nlp_model_builder_controller(request_body: NLP_RequestBody):
@@ -92,7 +126,7 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
             emit_progress(f"🤖 Training NLP model {idx+1}/{total_models}: {model_name}...", pct=model_base_pct)
 
             try:
-                model = get_nlp_model_instance(model_name)
+                model = apply_seed(get_nlp_model_instance(model_name), request_body.random_seed)
             except ValueError as e:
                 write_log(f"skipping unknown model: {model_name} - {e}", "error", os.path.basename(__file__))
                 continue
@@ -115,7 +149,7 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
 
             write_log(f"GridSearchCV for {class_name} with params: {param_grid}", "info", os.path.basename(__file__))
 
-            estimator, search_grid = with_resampling(model, param_grid, imbalance_method)
+            estimator, search_grid = with_resampling(model, param_grid, imbalance_method, request_body.random_seed)
             best_params = {}
             if search_grid:
                 grid_search = CancellableGridSearchCV(
@@ -133,6 +167,10 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
                 fitted = estimator.fit(X_train, request_body.y_train)
             # Save and evaluate the bare model: metrics below use the original (not resampled) data.
             best_estimator, best_params = unwrap_model(fitted, best_params)
+            cv_result = None
+            if request_body.cv_folds:
+                cv_result = _cross_validate(request_body, grid_search.best_estimator_ if search_grid else estimator,
+                                            class_name, dense=is_sparse and model_name in DENSE_ONLY_MODELS)
 
             # Predict
             y_pred_train = best_estimator.predict(X_train)
@@ -180,6 +218,8 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
                 "test_metrics": metrics['test_metrics'],
                 "best_params": best_params,
             }
+            if cv_result:
+                request_body.performance[class_name]["cv"] = cv_result
 
             class_labels = labels_in_code_order(request_body.target_encodings)
             parts = classification_parts(best_estimator, X_test, request_body.y_test, class_labels)

@@ -1,8 +1,8 @@
 // Run History extras: retrain dialog, run import dialog and the "retrained from" badge.
-import { computed, ref } from '../lib/vue.js';
+import { computed, ref, watch } from '../lib/vue.js';
 import { postForm } from '../lib/api.js';
 import { cleaningRecipe, closeRetrain, columnCheck, retrain, submitRetrain, uploadRetrainFile } from '../store/retrain.js';
-import { loadRuns, openRunDetail, runs } from '../store/runs.js';
+import { loadRuns, openRunDetail, runs, saveRunMeta } from '../store/runs.js';
 import { training } from '../store/training.js';
 import { toast, toastError, toastSuccess } from '../store/ui.js';
 
@@ -18,6 +18,77 @@ export const LineageBadge = {
       <Icon :name="run.origin === 'schedule' ? 'event_available' : 'autorenew'" />{{ run.origin === 'schedule' ? 'Scheduled retrain of' : 'Retrained from' }} #{{ run.parent_run_id }}<span v-if="!parentExists">&nbsp;(deleted)</span>
     </button>
     <span v-else-if="run && run.origin === 'import'" class="badge lineage" title="Imported from a run archive"><Icon name="move_to_inbox" />Imported</span>`,
+};
+
+// Name, tags and notes of a run, edited in place in the run drawer (saved when a field is left).
+export const RunMetaEditor = {
+  props: { run: Object },
+  setup(props) {
+    const name = ref('');
+    const notes = ref('');
+    const tagInput = ref('');
+    const notesState = ref(''); // '' | 'saving' | 'saved'
+    watch(() => props.run && props.run.id, () => {
+      name.value = (props.run && props.run.run_name) || '';
+      notes.value = (props.run && props.run.notes) || '';
+      tagInput.value = '';
+      notesState.value = '';
+    }, { immediate: true });
+
+    async function saveName() {
+      const value = name.value.trim();
+      if (!value || value === props.run.run_name) {
+        name.value = props.run.run_name || '';
+        return;
+      }
+      if (!(await saveRunMeta(props.run.id, { run_name: value }))) name.value = props.run.run_name || '';
+    }
+    async function saveNotes() {
+      if (notes.value.trim() === (props.run.notes || '')) return;
+      notesState.value = 'saving';
+      notesState.value = (await saveRunMeta(props.run.id, { notes: notes.value })) ? 'saved' : '';
+    }
+    async function addTags() {
+      const parts = tagInput.value.split(',').map(t => t.trim()).filter(Boolean);
+      if (!parts.length) return;
+      if (await saveRunMeta(props.run.id, { tags: (props.run.tags || []).concat(parts) })) tagInput.value = '';
+    }
+    function removeTag(tag) {
+      saveRunMeta(props.run.id, { tags: (props.run.tags || []).filter(t => t !== tag) });
+    }
+    function onTagKey(event) {
+      if (event.key === 'Enter' || event.key === ',') {
+        event.preventDefault();
+        addTags();
+      } else if (event.key === 'Backspace' && !tagInput.value && (props.run.tags || []).length) {
+        removeTag(props.run.tags[props.run.tags.length - 1]);
+      }
+    }
+    return { name, notes, tagInput, notesState, saveName, saveNotes, addTags, removeTag, onTagKey };
+  },
+  template: /* html */ `
+    <section class="card run-meta">
+      <div class="card-body form-grid">
+        <div class="field">
+          <label for="run-name-edit">Name</label>
+          <input id="run-name-edit" class="input" v-model="name" maxlength="80" @blur="saveName" @keydown.enter="$event.target.blur()" />
+        </div>
+        <div class="field">
+          <span class="field-label" id="run-tags-label">Tags</span>
+          <div class="tag-editor" role="group" aria-labelledby="run-tags-label">
+            <span v-for="t in run.tags" :key="t" class="chip tag-chip">{{ t }}
+              <button class="chip-remove" @click="removeTag(t)" :aria-label="'Remove tag ' + t"><Icon name="close" size="sm" /></button></span>
+            <input class="tag-input" v-model="tagInput" maxlength="30" :placeholder="(run.tags || []).length ? 'Add' : 'Add a tag, press Enter'"
+                   @keydown="onTagKey" @blur="addTags" aria-label="Add a tag" />
+          </div>
+        </div>
+        <div class="field run-notes">
+          <label for="run-notes">Notes <span v-if="notesState === 'saved'" class="subtle text-xs">· saved</span></label>
+          <textarea id="run-notes" class="textarea" v-model="notes" rows="3" maxlength="5000" @blur="saveNotes" @input="notesState = ''"
+                    placeholder="What is special about this run? Saved when you click outside the box."></textarea>
+        </div>
+      </div>
+    </section>`,
 };
 
 export const RetrainDialog = {

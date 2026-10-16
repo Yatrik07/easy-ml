@@ -61,6 +61,8 @@ python -m easyml             # same as easy-ml
 - Move a run to another computer as a single .zip (download and import)
 - Serve any trained model as a REST API with one command (`easy-ml serve`)
 - Scheduled retraining: retrain on new data automatically and switch to the new model only when it scores better
+- Reproducible training (random seed) and optional k-fold cross-validation
+- Tag, annotate and rename runs; share any run as one HTML report
 - Single-record and batch (CSV) predictions
 - SHAP waterfall explanations for tabular predictions
 - One-click export of a tabular model as a FastAPI app with Dockerfile

@@ -148,12 +148,28 @@ export const ResultsBoard = {
     const rows = computed(() => rankPerformance(props.task, props.performance, modelLabel));
     const isRegression = computed(() => props.task === 'MLRegression');
     const showF1 = computed(() => !isRegression.value && rows.value.some(r => r.f1 !== null));
+    // k-fold cross-validation on the training data (runs trained with cross-validation on).
+    const showCv = computed(() => rows.value.some(r => r.entry && r.entry.cv));
+    function cvText(row) {
+      const cv = row.entry && row.entry.cv;
+      if (!cv || cv.mean === undefined || cv.mean === null) return '—';
+      const spread = metric.value.kind === 'percent' ? formatNumber(cv.std * 100, 1) : formatNumber(cv.std, 3);
+      return formatScore(cv.mean, metric.value) + ' ± ' + spread;
+    }
+    function cvTitle(row) {
+      const cv = row.entry && row.entry.cv;
+      if (!cv) return '';
+      if (cv.error) return cv.error;
+      return cv.folds + '-fold cross-validation on the training data: ' + cv.scores.map(s => formatScore(s, metric.value)).join(', ');
+    }
     const expanded = ref(null);
     function toggle(key) { expanded.value = expanded.value === key ? null : key; }
     const hints = computed(() => rows.value
       .filter(r => overfitHint(r, metric.value))
       .map(r => ({ key: r.key, label: r.label, train: formatScore(r.train, metric.value), test: formatScore(r.test, metric.value) })));
-    return { metric, rows, isRegression, showF1, expanded, toggle, hints, formatScore, formatNumber, formatMape, formatPercent };
+    return {
+      metric, rows, isRegression, showF1, showCv, cvText, cvTitle, expanded, toggle, hints, formatScore, formatNumber, formatMape, formatPercent,
+    };
   },
   template: /* html */ `
     <div class="stack">
@@ -174,6 +190,7 @@ export const ResultsBoard = {
                 <th>#</th><th>Model</th>
                 <th class="right">Test {{ metric.name }}</th>
                 <th class="right">Train {{ metric.name }}</th>
+                <th v-if="showCv" class="right" title="Mean ± spread over the cross-validation folds">CV {{ metric.name }}</th>
                 <th v-if="showF1" class="right">Test F1</th>
                 <th v-if="isRegression" class="right">MAE</th>
                 <th v-if="isRegression" class="right">MAPE</th>
@@ -189,13 +206,14 @@ export const ResultsBoard = {
                     <span v-if="index === 0 && row.test !== null" class="badge badge-accent"><Icon name="emoji_events" />Best</span></div></td>
                   <td class="right num strong">{{ formatScore(row.test, metric) }}</td>
                   <td class="right num muted">{{ formatScore(row.train, metric) }}</td>
+                  <td v-if="showCv" class="right num nowrap" :title="cvTitle(row)">{{ cvText(row) }}</td>
                   <td v-if="showF1" class="right num">{{ row.f1 === null ? '—' : formatPercent(row.f1) }}</td>
                   <td v-if="isRegression" class="right num">{{ formatNumber(row.mae, 2) }}</td>
                   <td v-if="isRegression" class="right num">{{ formatMape(row.mape) }}</td>
                   <td class="right"><Icon :name="expanded === row.key ? 'expand_less' : 'expand_more'" /></td>
                 </tr>
                 <tr v-if="expanded === row.key" class="detail-row">
-                  <td :colspan="5 + (showF1 ? 1 : 0) + (isRegression ? 2 : 0)">
+                  <td :colspan="5 + (showF1 ? 1 : 0) + (showCv ? 1 : 0) + (isRegression ? 2 : 0)">
                     <ModelDetail :entry="row.entry" :task="task" :run-id="runId" :model-key="row.key" />
                   </td>
                 </tr>

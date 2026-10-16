@@ -166,7 +166,7 @@ def build_transforms(image_size, augment, include_resize=True):
     return transforms.Compose(base + augmentation + tail), transforms.Compose(base + tail)
 
 
-def _split(samples, fraction):
+def _split(samples, fraction, seed=SPLIT_SEED):
     """Stratified split of (path, label) pairs, falling back to a random split for tiny classes."""
     labels = [label for _, label in samples]
     counts = Counter(labels)
@@ -174,7 +174,7 @@ def _split(samples, fraction):
     if len(samples) - n_held_out < 1:
         raise ValueError(f"Not enough images ({len(samples)}) to make training, validation and test splits.")
     stratify = labels if min(counts.values()) >= 2 and len(counts) <= n_held_out <= len(samples) - len(counts) else None
-    return train_test_split(samples, test_size=n_held_out, random_state=SPLIT_SEED, stratify=stratify)
+    return train_test_split(samples, test_size=n_held_out, random_state=seed, stratify=stratify)
 
 
 def cv_preprocessing_controller(request_body: CV_RequestBody) -> "CVDataLoaders":
@@ -213,8 +213,8 @@ def cv_preprocessing_controller(request_body: CV_RequestBody) -> "CVDataLoaders"
         val_fraction = min(max(request_body.validation_split, 0.05), 0.5)
         # The held-out test split is never used for early stopping or picking the best epoch,
         # so its metrics are an honest estimate (validation accuracy is optimistically biased).
-        train_val_samples, test_samples = _split(samples, test_fraction)
-        train_samples, val_samples = _split(train_val_samples, val_fraction)
+        train_val_samples, test_samples = _split(samples, test_fraction, request_body.random_seed)
+        train_samples, val_samples = _split(train_val_samples, val_fraction, request_body.random_seed)
 
         # One cache for every loader (train, validation, evaluation) and every model of the run.
         cache = ResizedImageCache(request_body.image_size)

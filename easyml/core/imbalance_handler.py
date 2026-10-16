@@ -16,7 +16,7 @@ RESAMPLING_METHODS = ("smote", "tomek", "smotetomek")
 MODEL_STEP = "model"
 
 
-def _resample(X, y, method):
+def _resample(X, y, method, seed=42):
     """Resample one training set; falls back to the original data when a class is too small."""
     from imblearn.combine import SMOTETomek
     from imblearn.over_sampling import SMOTE
@@ -32,8 +32,8 @@ def _resample(X, y, method):
             write_log(f"{method}: smallest class has {smallest} sample(s); training on the original data",
                       "warning", os.path.basename(__file__))
             return X, y
-        smote = SMOTE(random_state=42, k_neighbors=min(5, smallest - 1))
-        sampler = smote if method == "smote" else SMOTETomek(random_state=42, smote=smote)
+        smote = SMOTE(random_state=seed, k_neighbors=min(5, smallest - 1))
+        sampler = smote if method == "smote" else SMOTETomek(random_state=seed, smote=smote)
 
     try:
         return sampler.fit_resample(X, y)
@@ -42,7 +42,7 @@ def _resample(X, y, method):
         return X, y
 
 
-def make_resampler(method):
+def make_resampler(method, seed=42):
     """Return an imblearn sampler for ``method``, or None when no resampling is requested."""
     method = (method or "none").lower()
     if method == "none":
@@ -54,17 +54,17 @@ def make_resampler(method):
     except ImportError:
         write_log("imbalanced-learn is not installed; skipping imbalance handling.", "error", os.path.basename(__file__))
         return None
-    return FunctionSampler(func=_resample, validate=False, kw_args={"method": method})
+    return FunctionSampler(func=_resample, validate=False, kw_args={"method": method, "seed": seed})
 
 
-def with_resampling(estimator, param_grid, method):
+def with_resampling(estimator, param_grid, method, seed=42):
     """
     Wrap ``estimator`` so it resamples its training data before fitting.
 
     Returns ``(estimator, param_grid)``: unchanged when no resampling is requested, otherwise an
     imblearn ``Pipeline`` and the grid re-keyed to the pipeline's model step.
     """
-    resampler = make_resampler(method)
+    resampler = make_resampler(method, seed)
     if resampler is None:
         return estimator, param_grid
     from imblearn.pipeline import Pipeline

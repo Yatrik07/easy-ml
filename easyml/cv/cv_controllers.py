@@ -4,6 +4,7 @@ import traceback
 import json
 import shutil
 import torch
+from easyml.utils.run_meta import tags_json
 from easyml.cv.cv_config import CV_RequestBody
 from easyml.config.constants import error_code_mappings
 from easyml.utils.logger import write_log
@@ -19,6 +20,12 @@ class CVController:
     Orchestrates the Computer Vision training pipeline for image classification tasks.
     """
     def __init__(self, kwargs: dict):
+        from easyml.core.seeding import validate_seed
+        from easyml.utils.run_meta import clean_tags
+
+        kwargs = dict(kwargs)
+        kwargs["random_seed"] = validate_seed(kwargs.get("random_seed"))
+        kwargs["tags"] = clean_tags(kwargs.get("tags")) or None
         self.request_body = CV_RequestBody(**kwargs)
         self._charts = {}
         # Only a folder created here is removed again when the run fails; a caller's path_to_save is left alone.
@@ -76,6 +83,7 @@ class CVController:
                 metrics_json=json.dumps(performance_dict, cls=NumpyEncoder),
                 parent_run_id=self.request_body.parent_run_id,
                 origin="retrain" if self.request_body.parent_run_id else None,
+                tags=tags_json(self.request_body.tags),
             )
 
             pipeline_summary = {
@@ -219,6 +227,7 @@ class CVController:
             "reduce_lr_factor": body.reduce_lr_factor,
             "use_gpu": body.use_gpu,
             "parent_run_id": body.parent_run_id,
+            "random_seed": body.random_seed,
         }
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(conf, f, indent=4)

@@ -85,7 +85,10 @@ def _as_int(value):
 
 
 def rank_models(task, metrics):
-    """Models sorted best first by test score (ties broken by test F1); models without a score go last."""
+    """
+    Models sorted best first by test score; ties go to the higher test F1, then the higher cross-validation
+    mean, then training order. Models without a score go last.
+    """
     ranked = []
     for key, values in (metrics or {}).items():
         values = values if isinstance(values, dict) else {}
@@ -95,11 +98,13 @@ def rank_models(task, metrics):
             "test_score": _as_float(values.get("accuracy_test")),
             "train_score": _as_float(values.get("accuracy_train")),
             "f1_test": _as_float(values.get("f1_test")),
+            "cv_mean": _as_float((values.get("cv") or {}).get("mean")) if isinstance(values.get("cv"), dict) else None,
         })
     ranked.sort(key=lambda m: (
         m["test_score"] is None,
         -(m["test_score"] or 0.0),
         -(m["f1_test"] or 0.0),
+        -(m["cv_mean"] or 0.0),
     ))
     return ranked
 
@@ -159,6 +164,12 @@ def _strip_paths(metrics):
     return clean
 
 
+def parse_tags(raw):
+    from easyml.utils.run_meta import parse_tags as _parse
+
+    return _parse(raw)
+
+
 def summarize_run(row):
     """A compact, path-free description of a run for lists."""
     task = row.get("task")
@@ -178,6 +189,8 @@ def summarize_run(row):
         "metric": primary_metric(task),
         "parent_run_id": _as_int(row.get("parent_run_id")),
         "origin": row.get("origin") or None,
+        "tags": parse_tags(row.get("tags")),
+        "notes": row.get("notes") or "",
     }
 
 
@@ -208,6 +221,8 @@ _COMMON_SETTINGS = [
     ("models", "Models", "Models", lambda v: _list([model_label(m) for m in (v or [])])),
     ("hyper_parameter_tuning", "Hyperparameter tuning", "Models", lambda v: TUNING_LABELS.get(v, str(v))),
     ("imbalance_handling", "Class imbalance", "Models", lambda v: IMBALANCE_LABELS.get(v or "none", v)),
+    ("cv_folds", "Cross-validation", "Models", lambda v: f"{int(v)} folds" if v else "Off"),
+    ("random_seed", "Random seed", "Models", str),
 ]
 _SETTINGS = {
     "tabular": [
