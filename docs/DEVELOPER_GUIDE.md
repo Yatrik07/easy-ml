@@ -434,7 +434,9 @@ Endpoints:
   removes uploads older than 30 days at start-up
 - `DELETE /settings/clear-data`
 - `GET /settings/device`
-- `GET /settings/credits`
+- `GET /settings/credits` (About page facts from `project_info.py`; `REPO_PUBLIC` shows the GitHub links,
+  and "Report a bug" opens the bug form pre-filled with version, OS, Python and optional libraries from
+  `capabilities.installed_optional_libraries()`: never paths or data)
 - `POST /exit`
 
 ### `easyml/routes_frontend.py`

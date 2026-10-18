@@ -3,6 +3,18 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.10.1 (2026-10-18)
+
+Easy-ML Studio is open source: the code is on [GitHub](https://github.com/Yatrik07/easy-ml).
+
+- The About page links to GitHub, the documentation and the issue tracker; the "Python guide" links on
+  Home and About open the full guide.
+- **Report a bug** opens GitHub's bug form with your version, operating system, Python and installed
+  optional libraries already filled in (no file paths or data). New bug and feature-idea forms, and a
+  [contributing guide](https://github.com/Yatrik07/easy-ml/blob/main/CONTRIBUTING.md).
+- **Explain this prediction** no longer disappears when SHAP is not installed: the button is greyed out and
+  shows the install command, with a reminder to restart the studio afterwards.
+
 ## 0.10.0 (2026-10-15)
 
 Share and organise runs, and trust the scores.

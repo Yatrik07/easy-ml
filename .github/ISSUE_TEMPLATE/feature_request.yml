@@ -1,0 +1,20 @@
+name: Feature idea
+description: Suggest something that would make Easy-ML Studio more useful.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to do?
+      description: The task or problem in your own words, for example "predict sales for next month".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could the studio help?
+      description: What you would click, see or call from Python. Rough ideas are fine.
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you do today instead?

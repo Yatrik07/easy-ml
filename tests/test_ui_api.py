@@ -113,22 +113,30 @@ def test_summary_helpers_handle_odd_inputs():
     assert cv["best_model"] == "SimpleCNN" and cv["best_model_label"] == "Simple CNN"
 
 
-def test_credits_hide_repo_links_and_personal_emails(client, monkeypatch):
+def test_credits_show_repo_links_and_no_personal_emails(client, monkeypatch):
     body = client.get("/settings/credits").get_json()
     assert body["license"] == "Apache-2.0"
-    assert [link["id"] for link in body["links"]] == ["pypi"]
+    assert [link["id"] for link in body["links"]] == ["pypi", "github", "docs", "issues"]
     assert all("email" not in dev for dev in body["developers"])
-    assert body["python_guide"]["url"].startswith("https://pypi.org/")
+    assert body["python_guide"]["url"].endswith("/docs/PYTHON_API.md")
+    assert body["contributing_url"].endswith("/CONTRIBUTING.md")
+    # Report a bug opens the bug form with short environment facts filled in, never paths.
+    from easyml import __version__
+    bug = next(link["url"] for link in body["links"] if link["id"] == "issues")
+    assert bug.startswith("https://github.com/Yatrik07/easy-ml/issues/new?template=bug_report.yml")
+    assert f"version={__version__}" in bug and "python=" in bug and "extras=" in bug and "os=" in bug
+    assert "%5C" not in bug and "%2F" not in bug  # no backslashes or slashes: no file paths
     contact = body["contact"]
     assert contact["mailto"].startswith("mailto:" + contact["email"])
     assert contact["gmail"].startswith("https://mail.google.com/mail/?view=cm")
     assert "to=contact.easyml%40gmail.com" in contact["gmail"] and "su=Easy-ML%20Studio" in contact["gmail"]
 
+    # A private fork shows only the PyPI link and points the Python guide at PyPI.
     from easyml import project_info
-    monkeypatch.setattr(project_info, "REPO_PUBLIC", True)
+    monkeypatch.setattr(project_info, "REPO_PUBLIC", False)
     body = client.get("/settings/credits").get_json()
-    assert {"pypi", "github", "issues"} <= {link["id"] for link in body["links"]}
-    assert body["python_guide"]["url"].endswith("/docs/PYTHON_API.md")
+    assert [link["id"] for link in body["links"]] == ["pypi"]
+    assert body["python_guide"]["url"].startswith("https://pypi.org/") and body["contributing_url"] is None
 
 
 def test_device_endpoint_has_current_cuda_hint(client):

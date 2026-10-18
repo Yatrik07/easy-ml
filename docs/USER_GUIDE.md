@@ -476,6 +476,8 @@ much, one bar per input column with the value used, strongest first: red bars pu
 predicted class (or raise a number), blue bars push away from it. A sentence above the chart gives the
 model's average output and its output for this row. **Detailed SHAP plot** opens SHAP's own waterfall
 plot, by the columns the model sees after preprocessing, in a large window you can download.
+Without SHAP the button is greyed out and shows the install command; after installing it, restart
+the studio (it checks which optional libraries are installed when it starts).
 
 ### Batch tabular inference
 

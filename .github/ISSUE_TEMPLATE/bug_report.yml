@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in Easy-ML Studio does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please don't attach private data: a few made-up rows
+        that show the problem are enough. "Report a bug" on the studio's About page fills in the
+        version fields below for you.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Upload a CSV with ...
+        2. Choose ...
+        3. ...
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message or log
+      description: The message the studio showed, or the end of the log file (in the `logs` folder of the data directory shown in Settings).
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Easy-ML Studio version
+      description: Shown on the About page, or run `easy-ml --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11, macOS 15, Ubuntu 24.04, Docker ...
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+  - type: input
+    id: extras
+    attributes:
+      label: Optional libraries installed
+      description: For example xgboost, shap, torch, or "none" for the basic install.

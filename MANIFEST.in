@@ -1,4 +1,4 @@
-include LICENSE README.md CHANGELOG.md
+include LICENSE README.md CHANGELOG.md CONTRIBUTING.md
 recursive-include easyml/unified_frontend/dist *
 global-exclude __pycache__ *.py[cod]
 prune easyml/artifacts

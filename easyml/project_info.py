@@ -1,11 +1,12 @@
 """
 Project facts shown on the About page and returned by /settings/credits.
 
-Flip ``REPO_PUBLIC`` to True once the GitHub repository is public: the About page then shows the
-GitHub, documentation and "Report a bug" links as well.
+The GitHub repository is public, so ``REPO_PUBLIC`` is True: the About page shows the GitHub,
+documentation and "Report a bug" links, and the "Python guide" links open the guide on GitHub.
+Set it to False only for a private fork (only the PyPI link is shown then).
 """
 
-REPO_PUBLIC = False
+REPO_PUBLIC = True
 
 PROJECT_NAME = "Easy-ML Studio"
 SUMMARY = (
@@ -71,9 +72,28 @@ def python_guide():
     return {"label": "Python guide on PyPI", "url": PYPI_URL}
 
 
-def visible_links():
-    return [
-        {"id": link["id"], "label": link["label"], "url": link["url"]}
-        for link in LINKS
-        if link["public"] or REPO_PUBLIC
-    ]
+def contributing_url():
+    """The contributing guide on GitHub (None for a private fork)."""
+    return f"{REPO_URL}/blob/main/CONTRIBUTING.md" if REPO_PUBLIC else None
+
+
+def bug_report_url(environment=None):
+    """
+    A new-issue link that opens the bug form with ``environment`` (version, os, python, extras) filled in.
+    Only these short facts go into the link: never paths or data.
+    """
+    from urllib.parse import quote, urlencode
+
+    params = {"template": "bug_report.yml"}
+    params.update({key: str(value) for key, value in (environment or {}).items() if value})
+    return f"{REPO_URL}/issues/new?" + urlencode(params, quote_via=quote)
+
+
+def visible_links(environment=None):
+    """The About page links; with ``environment`` "Report a bug" opens a pre-filled bug form."""
+    links = []
+    for link in LINKS:
+        if link["public"] or REPO_PUBLIC:
+            url = bug_report_url(environment) if link["id"] == "issues" and environment else link["url"]
+            links.append({"id": link["id"], "label": link["label"], "url": url})
+    return links

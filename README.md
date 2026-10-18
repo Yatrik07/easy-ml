@@ -1,5 +1,10 @@
 # Easy-ML Studio
 
+[![PyPI](https://img.shields.io/pypi/v/easy-ml-studio)](https://pypi.org/project/easy-ml-studio/)
+[![Python](https://img.shields.io/pypi/pyversions/easy-ml-studio)](https://pypi.org/project/easy-ml-studio/)
+[![License](https://img.shields.io/pypi/l/easy-ml-studio)](https://github.com/Yatrik07/easy-ml/blob/main/LICENSE)
+[![CI](https://github.com/Yatrik07/easy-ml/actions/workflows/python-app.yml/badge.svg)](https://github.com/Yatrik07/easy-ml/actions/workflows/python-app.yml)
+
 Easy-ML Studio is a no-code machine learning studio that runs on your own machine. Upload a dataset in the browser, train several models side by side, compare their metrics, make predictions, explain them with SHAP, and export a trained model as a ready-to-run FastAPI service.
 
 It covers three workflows:
@@ -153,6 +158,7 @@ The image targets `base`, `ml`, `nlp`, `cv` and `full` (default) select which ex
 - [Python guide](https://github.com/Yatrik07/easy-ml/blob/main/docs/PYTHON_API.md): train and use models from code and the command line
 - [Developer guide](https://github.com/Yatrik07/easy-ml/blob/main/docs/DEVELOPER_GUIDE.md)
 - [Changelog](https://github.com/Yatrik07/easy-ml/blob/main/CHANGELOG.md): what changed in each version
+- [Contributing](https://github.com/Yatrik07/easy-ml/blob/main/CONTRIBUTING.md): report a bug, suggest an idea, or change the code
 
 ## Development
 
@@ -165,6 +171,8 @@ pip install -e ".[all,dev]"
 pytest
 easy-ml
 ```
+
+Bug reports, ideas and pull requests are welcome: see the [contributing guide](https://github.com/Yatrik07/easy-ml/blob/main/CONTRIBUTING.md).
 
 ## License
 

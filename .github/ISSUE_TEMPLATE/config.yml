@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: User guide
+    url: https://github.com/Yatrik07/easy-ml/blob/main/docs/USER_GUIDE.md
+    about: How to train, compare, explain and use models in the studio.
+  - name: Python guide
+    url: https://github.com/Yatrik07/easy-ml/blob/main/docs/PYTHON_API.md
+    about: Train and use models from Python and the command line.

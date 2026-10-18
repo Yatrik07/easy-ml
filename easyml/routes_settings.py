@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 import threading
 
 from flask import Blueprint, jsonify, request
@@ -130,6 +131,24 @@ def settings_device():
     )
 
 
+def _environment():
+    """Short facts for a bug report: version, operating system, Python and optional libraries (no paths)."""
+    import platform
+
+    from easyml.capabilities import installed_optional_libraries
+
+    extras = installed_optional_libraries()
+    system, release = platform.system(), platform.release()
+    if system == "Windows" and release == "10" and getattr(sys, "getwindowsversion", None)             and sys.getwindowsversion().build >= 22000:
+        release = "11"  # Python before 3.12 reports Windows 11 as "10"
+    return {
+        "version": __version__,
+        "os": f"{system} {release}".strip(),
+        "python": platform.python_version(),
+        "extras": ", ".join(extras) if extras else "none (basic install)",
+    }
+
+
 @settings_bp.route("/settings/credits", methods=["GET"])
 def settings_credits():
     return jsonify(
@@ -140,9 +159,10 @@ def settings_credits():
             "license": project_info.LICENSE,
             "contact_email": project_info.CONTACT_EMAIL,
             "contact": project_info.contact_links(),
-            "links": project_info.visible_links(),
+            "links": project_info.visible_links(_environment()),
             "python_guide": project_info.python_guide(),
             "show_repo_links": project_info.REPO_PUBLIC,
+            "contributing_url": project_info.contributing_url(),
             "developers": project_info.DEVELOPERS,
             "third_party": project_info.THIRD_PARTY,
         }

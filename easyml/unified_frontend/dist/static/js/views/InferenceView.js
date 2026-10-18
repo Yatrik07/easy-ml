@@ -1,6 +1,6 @@
 import { computed, nextTick, ref } from '../lib/vue.js';
 import { formatNumber, formatPercent, formatPrediction, formatScore } from '../lib/format.js';
-import { featureAvailable, modelLabel, taskLabel } from '../store/session.js';
+import { featureAvailable, installHint, modelLabel, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
 import {
   allInputsEmpty, columnChoices, explain, exportModel, inference, predict, predictBatch, sampleInForm, setImage, tryRealRow,
@@ -180,7 +180,7 @@ export default {
       inference, isTabular, isText, isImage, codeTabs, columnChoices, predict, predictBatch, explain, exportModel,
       exportOpen, apiTabs, downloadExport, allEmpty, canSample, tryRealRow, sample, verdict,
       explainCard, plotOpen, explainAndShow, predictedLabel, explanationSummary, axisTitle, explainHint, hasMissing,
-      onBatch, onImage, featureAvailable, modelLabel, taskLabel, navigate, formatPrediction, formatPercent, formatScore,
+      onBatch, onImage, featureAvailable, installHint, modelLabel, taskLabel, navigate, formatPrediction, formatPercent, formatScore,
     };
   },
   template: /* html */ `
@@ -277,9 +277,13 @@ export default {
                 <p class="subtle text-xs">Row {{ (sample.row + 1).toLocaleString() }} of the run's data,
                   {{ sample.source === 'test' ? 'from its test set: the model never trained on it.' : 'used for training.' }}</p>
               </div>
-              <button v-if="isTabular && featureAvailable('explain')" class="btn btn-secondary" @click="explainAndShow" :disabled="inference.explaining">
-                <Spinner v-if="inference.explaining" /><Icon v-else name="insights" />Explain this prediction
-              </button>
+              <template v-if="isTabular">
+                <button class="btn btn-secondary" @click="explainAndShow" :disabled="inference.explaining || !featureAvailable('explain')">
+                  <Spinner v-if="inference.explaining" /><Icon v-else name="insights" />Explain this prediction
+                </button>
+                <p v-if="!featureAvailable('explain')" class="field-hint">Explanations need SHAP: run <code>{{ installHint('explain') }}</code>,
+                  then restart the studio.</p>
+              </template>
             </template>
             <p v-else class="muted text-sm">{{ isImage ? 'Choose an image and press Predict.' : 'Fill in the inputs and press Predict, or try a real row from the data.' }}</p>
           </div>

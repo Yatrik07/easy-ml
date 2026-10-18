@@ -47,6 +47,20 @@ def optional_import(module, feature, extra):
         raise OptionalFeatureError(describe_import_failure(module, feature, extra, exc)) from exc
 
 
+# Optional libraries worth naming in a bug report: (module, package name).
+OPTIONAL_LIBRARIES = (
+    ("xgboost", "xgboost"), ("lightgbm", "lightgbm"), ("catboost", "catboost"),
+    ("sentence_transformers", "sentence-transformers"), ("spacy", "spacy"), ("torch", "torch"),
+    ("shap", "shap"), ("ydata_profiling", "ydata-profiling"),
+)
+
+
+def installed_optional_libraries():
+    """Names of the optional libraries installed right now (not cached, so it reflects new installs)."""
+    importlib.invalidate_caches()
+    return [package for module, package in OPTIONAL_LIBRARIES if has_module(module)]
+
+
 def has_module(name):
     try:
         return importlib.util.find_spec(name) is not None

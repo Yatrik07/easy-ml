@@ -78,8 +78,13 @@ export default {
         <div class="card">
           <div class="card-header"><h3>Contributing</h3></div>
           <div class="card-body muted text-sm">
-            <p v-if="credits.show_repo_links">Bug reports, ideas and pull requests are welcome on GitHub. Use the Report a bug link above to open an issue.</p>
-            <p v-else>The source repository will open to the public soon. Until then, reach the team through the contact link above.</p>
+            <template v-if="credits.show_repo_links">
+              <p>Easy-ML Studio is open source. Bug reports, ideas and pull requests are welcome on GitHub.
+                Report a bug opens GitHub's bug form with your version already filled in.</p>
+              <p v-if="credits.contributing_url"><a :href="credits.contributing_url" target="_blank" rel="noopener noreferrer">How to contribute</a>:
+                set up a development copy, run the tests and send a pull request.</p>
+            </template>
+            <p v-else>Reach the team through the contact link above.</p>
           </div>
         </div>
         <div class="card">
