@@ -13,7 +13,8 @@ import time
 
 from easyml.config.paths import UPLOADS_DIR
 
-INTERNAL_UPLOAD = re.compile(r"^(data|data_nlp|clean|sched)_[0-9a-f]{8}\.(csv|xlsx|xls)$")
+# Uploads, cleaned copies, schedule snapshots, and the side files of cleaned copies (frozen recipe, raw rows).
+INTERNAL_UPLOAD = re.compile(r"^(data|data_nlp|clean|sched)_[0-9a-f]{8}(\.(csv|xlsx|xls)|\.raw\.csv|\.prep\.json)$")
 DAY = 24 * 3600
 
 

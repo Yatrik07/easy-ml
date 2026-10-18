@@ -167,6 +167,11 @@ class NLPTextClassificationController:
         if feature_mode not in ("vectorizer", "embedding"):
             raise ValueError(f"Unknown feature_mode '{feature_mode}'. Use 'vectorizer' or 'embedding'.")
 
+        from easyml.utils.run_inputs import recipe_from_sidecars
+
+        # A file cleaned by Data prep carries its frozen recipe next to it (see easyml.dataprep.frozen).
+        self.source_path = dataset_path
+        recipe = recipe or recipe_from_sidecars(dataset_path)
         self.request_body = NLP_RequestBody(
             name=name,
             task=task or "NLPTextClassification",
@@ -231,6 +236,11 @@ class NLPTextClassificationController:
 
             emit_progress("🤖 Training NLP models...", pct=45)
             nlp_model_builder_controller(self.request_body)
+            from easyml.utils.run_inputs import record_inputs
+
+            body = self.request_body
+            record_inputs(body.path_to_save, self.source_path, body.df, [body.text_column], body.target_column,
+                          recipe=body.recipe, text_column=body.text_column)
 
             self.request_body.run_id = enter_record_to_table(
                 "runs",

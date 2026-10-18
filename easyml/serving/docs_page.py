@@ -40,6 +40,14 @@ def render_docs(info, base_url, needs_key=False):
                           for c, t in (inputs.get("columns") or {}).items())
         what = ('Send one row as <code>{"features": {...}}</code> or several as <code>{"rows": [...]}</code>. '
                 "Values can be numbers or text; a missing column counts as a missing value.")
+        cleaning = inputs.get("cleaning")
+        if cleaning:
+            steps = ", ".join(html.escape(str(s)) for s in cleaning.get("steps") or [])
+            what = ('Send one row as <code>{"features": {...}}</code> or several as <code>{"rows": [...]}</code>, '
+                    "with the original columns below. The model was trained on cleaned data, so the service "
+                    f"cleans each request the same way first (recipe <em>{html.escape(str(cleaning.get('recipe')))}</em>: "
+                    f"{steps}). Answers include <code>warnings</code> when a request does not look like the "
+                    "training data.")
         inputs_html = f"<p>{what}</p><ul class='cols'>{columns}</ul>"
     elif inputs.get("kind") == "text":
         inputs_html = ('<p>Send <code>{"text": "..."}</code> or <code>{"texts": ["...", "..."]}</code>.</p>')

@@ -231,6 +231,12 @@ only metadata for scheduled retraining and is never required.
 A run trained on data cleaned in Data prep (or retrained with a recipe) also records `recipe`
 (`{name, steps}`); the key is absent otherwise, so other runs' configs are unchanged.
 
+Since 0.11 such runs also keep `prep.json` (the frozen recipe, see Data prep below) and `raw_data.csv`
+(the raw row behind each `data.csv` row, same order, so `holdout.json` positions work for both). Every
+table and text run writes `data_profile.json`, the reference for the data check
+(`monitoring/datacheck.py`). All three are written by `utils/run_inputs.record_inputs` after training and
+never fail a run; older runs simply lack them (the profile is then computed from `data.csv` in memory).
+
 `evaluation.json` is written by `core/evaluation_charts.py` while the fitted models and the test set
 are in memory: per model, ROC and precision-recall curves (probabilities, else decision scores;
 one-vs-rest for up to 10 classes plus a micro average), predicted-vs-actual and residual histograms
@@ -306,7 +312,10 @@ Endpoints that act on one saved run (logic lives in `retraining.py`, `run_archiv
   HTML file with inline CSS and SVG charts (`reporting/svg.py`), every user string escaped, no scripts or links
 - `GET /runs/<id>/sample`: a random real row to try the model with (`core/artifacts.sample_row`):
   `{values | text, actual, row, source}`, from the `holdout.json` test rows when present (`source: "test"`),
-  else any row (`"training"`); `400` for image runs, which keep no copy of their images
+  else any row (`"training"`); `400` for image runs, which keep no copy of their images. Runs that clean
+  their input answer with the raw row from `raw_data.csv` (the form asks for raw columns)
+- `POST /runs/<id>/data-check` with a multipart `file` or `{rows: [...]}`: `monitoring.datacheck.check_frame`
+  against the run's training profile
 - `GET /runs/<id>/export?include_data=1`: the run archive (.zip)
 - `POST /runs/import` (multipart `file`, `trusted=true`, optional `name`): `201` with the new run id
 
@@ -362,6 +371,34 @@ Endpoints:
 Training routes accept an optional `recipe` (`{name, steps}`), which `route_helpers.recipe_summary`
 validates and the controllers store in `config_json.json`. `run_summary` hides `clean_<hex>.csv`
 upload names like the other internal names.
+
+**Frozen recipes (0.11, `dataprep/frozen.py`).** A recipe recomputes medians, outlier limits and bin
+edges on whatever it is applied to, which is meaningless for one prediction row. So when data is cleaned
+for training (`apply_file(..., freeze=True)`: `/prep/apply`, `retraining._apply_recipe`,
+`MLTrainer(recipe=...)`), `FrozenRecipe.fit` runs the same `engine._step` calls and records per step the
+values it used (fill values, clip limits, bin edges and labels, resolved "all columns" lists), the raw
+column kinds and the date format of the cleaned CSV. Side files `clean_<hex>.prep.json` and
+`clean_<hex>.raw.csv` sit next to the cleaned upload (the upload clean-up knows them); the controllers
+copy them into the run, and `finalize(features, target)` walks the steps backwards from the model's
+columns to find the raw input columns (renames map back; date parts, bins and combined columns add their
+sources; drops, row steps and target-only steps are not needed).
+
+`FrozenRecipe.prepare(df, cleaned=None)` is applied in one place per model type:
+`TabularInference._transform`/`predict_frame_with_notes` (form, CSV, `Predictor`, CLI, serve), the explainer
+(input row only) and `NLPInferenceController.clean_texts`. It restores raw kinds, replays the needed steps
+with frozen values (row steps are skipped; `filter_rows`/`remove_missing` only add notes), then
+round-trips through CSV and reads back as text, exactly like training read `data.csv`. The invariant,
+tested for every step: `prepare(raw_data.csv) == data.csv`. Input that lacks the raw columns but has the
+model's columns is used as is (`cleaned=None`), so clients built for cleaned input keep working; internal
+callers pass `cleaned` explicitly. `export_utils` adds `prep.json` and `easy-ml-studio` to the API package
+of such runs; `scheduling/compare.py` feeds raw holdout rows to models that clean their input.
+
+**Data check (`monitoring/datacheck.py`).** `build_profile` records per input column the range, deciles
+and empty share (numbers) or value shares (categories, top 50). `check_rows` flags values outside the range,
+unseen categories and empty cells where training had none; `check_frame` adds per-column PSI and empty-share
+changes for 30+ rows (fewer rows are never rated "major"). Used by `/inference` and serve (`warnings` key,
+only when non-empty), `POST /runs/<id>/data-check`, `Predictor.check`, `easy-ml check`/`predict`, and
+`scheduling/engine` (`schedule_events.data_check`, JSON).
 
 ### `easyml/routes_schedules.py` and `easyml/scheduling/` (scheduled retraining)
 

@@ -91,6 +91,7 @@ db_schedule_events_columns_config = [
     "compared_on TEXT",          # "same new data" | "own test sets"
     "decision TEXT",             # "promoted" | "kept champion" | "failed"
     "message TEXT",
+    "data_check TEXT",           # 0.11: JSON {status, summary, columns} - the new data vs the champion's training data
 ]
 
 # Bumped when config_json.json gains keys that later code relies on (retrain, export).

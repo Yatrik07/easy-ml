@@ -13,6 +13,7 @@ One attempt (``prepare`` then ``execute``):
 6. Record an event, work out the next run time and release the claim, also when something failed.
 """
 
+import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -39,6 +40,7 @@ class PreparedRun:
     started_at: datetime
     runner: str
     cleanup: list = field(default_factory=list)
+    source_path: str = None  # the new data as it arrived (before any data-prep recipe)
 
 
 def _recipe_argument(value):
@@ -108,10 +110,13 @@ def prepare(schedule_id, trigger="manual", runner="manual", now=None, settle_sec
         plan = plan_retrain(champion, path, name=name, original_dataset_name=data.name,
                             recipe=_recipe_argument(row.get("recipe")))
         cleaned = plan.kwargs.get("dataset_path")
-        if cleaned and cleaned != path:  # the data-prep recipe wrote a cleaned copy
+        if cleaned and cleaned != path:  # the data-prep recipe wrote a cleaned copy (and its side files)
+            from easyml.dataprep.frozen import sidecar_paths
+
             cleanup.append(cleaned)
+            cleanup.extend(sidecar_paths(cleaned))
         return PreparedRun(schedule=row, trigger=trigger, data_name=data.name, signature=data.signature, plan=plan,
-                           started_at=now, runner=runner, cleanup=cleanup)
+                           started_at=now, runner=runner, cleanup=cleanup, source_path=path)
     except Exception as exc:
         from easyml.utils.database_operations import RunNotFoundError
 
@@ -155,6 +160,9 @@ def execute(prepared, notify=None):
     champion = int(plan.parent_run_id)
     event = {"schedule_id": row["id"], "trigger": prepared.trigger, "data_file": prepared.data_name,
              "started_at": to_text(prepared.started_at), "champion_before": champion, "champion_after": champion}
+    check = _data_check(prepared, champion)
+    if check:
+        event["data_check"] = check
     try:
         result = execute_plan(plan)
         update_record("runs", result.run_id, origin="schedule")
@@ -164,7 +172,7 @@ def execute(prepared, notify=None):
                      champion_score=outcome["champion_score"], challenger_score=outcome["challenger_score"],
                      compared_on=outcome["compared_on"], decision="promoted" if promoted else "kept champion",
                      champion_after=result.run_id if promoted else champion,
-                     message=_message(promoted, champion, result.run_id, outcome))
+                     message=_message(promoted, champion, result.run_id, outcome, check))
     except BaseException as exc:
         stopped = isinstance(exc, (InterruptedError, KeyboardInterrupt))
         event.update(decision="failed", message="Stopped before it finished." if stopped else f"Training failed: {exc}")
@@ -176,7 +184,7 @@ def execute(prepared, notify=None):
     return event
 
 
-def _message(promoted, champion, challenger, outcome):
+def _message(promoted, champion, challenger, outcome, check=None):
     def fmt(value):
         return "n/a" if value is None else f"{value:.4f}"
 
@@ -184,13 +192,45 @@ def _message(promoted, champion, challenger, outcome):
               f"on {outcome['compared_on']}")
     text = (f"Run #{challenger} replaces run #{champion} ({scores})." if promoted
             else f"Run #{champion} stays in use; new run #{challenger} was not better ({scores}).")
+    if check and check.get("status") != "ok":
+        text += f" New data: {check['summary']}"
     return f"{text} {outcome['note']}".strip()
+
+
+def _data_check(prepared, champion):
+    """
+    Does the new data look like the data the model in use was trained on? ``{"status", "summary", "columns"}``
+    with the columns that differ, or None (image runs, or nothing to compare with). Never raises.
+    """
+    try:
+        from easyml.core.artifacts import load_frozen_recipe
+        from easyml.dataprep.engine import read_table
+        from easyml.monitoring.datacheck import check_frame, reference_profile
+        from easyml.utils.database_operations import get_record_by_id
+
+        if prepared.plan.task == "ImageClassification":
+            return None
+        folder = get_record_by_id(int(champion))["folder_path"]
+        profile = reference_profile(folder)
+        if not profile:
+            return None
+        # A model that cleans its own input was profiled on raw data: compare the file as it arrived.
+        cleans = load_frozen_recipe(folder) is not None
+        path = prepared.source_path if cleans and prepared.source_path else prepared.plan.kwargs.get("dataset_path")
+        report = check_frame(profile, read_table(path))
+        return {"status": report["status"], "summary": report["summary"],
+                "columns": [{k: c[k] for k in ("column", "status", "message")}
+                            for c in report["columns"] if c["status"] != "ok"]}
+    except Exception as exc:  # the check only informs
+        write_log(f"Schedule data check skipped: {exc!r}", "info", os.path.basename(__file__))
+        return None
 
 
 def _record(prepared, event, notify):
     finished = datetime.now()
     event["finished_at"] = to_text(finished)
-    event["id"] = store.add_event(**{k: v for k, v in event.items() if k != "id"})
+    stored = {k: (json.dumps(v) if k == "data_check" and v is not None else v) for k, v in event.items() if k != "id"}
+    event["id"] = store.add_event(**stored)
     row = prepared.schedule
     values = {"last_status": event["decision"], "last_message": event.get("message")}
     if event["decision"] != "failed":

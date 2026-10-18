@@ -72,11 +72,45 @@ def holdout_inputs(run_id):
     return task, part.drop(columns=[target]), part[target].tolist()
 
 
+def holdout_raw_inputs(run_id):
+    """
+    The raw rows behind the run's test rows (runs trained on cleaned data keep them in ``raw_data.csv``), so a
+    model that cleans its own input gets them the way it was trained: a DataFrame (tables), a list of texts
+    (text runs), or None.
+    """
+    from easyml.core.artifacts import _raw_rows, read_json
+    from easyml.retraining import IMAGE_TASK, TEXT_TASK
+    from easyml.utils.holdout import read_holdout
+
+    record = _record(run_id)
+    folder = record.get("folder_path") or ""
+    rows, raw = read_holdout(folder), _raw_rows(folder) if record["task"] != IMAGE_TASK else None
+    if not rows or raw is None or max(rows) >= len(raw[1]):
+        return None
+    prep, frame = raw
+    part = frame.iloc[rows]
+    if record["task"] == TEXT_TASK:
+        column = read_json(folder, "config_json.json").get("text_column")
+        if column not in prep.input_columns:
+            return None
+        return ["" if v != v else str(v) for v in part[column]]
+    return part[prep.input_columns]
+
+
+def _predict(run_id, data, raw):
+    """A run's predictions: raw rows for a model that cleans its input (when there are any), else ``data``."""
+    from easyml.predictor import Predictor
+
+    predictor = Predictor(run_id)
+    if raw is not None and predictor.cleans_input:
+        return predictor.predict(raw, cleaned=False)
+    return predictor.predict(data)
+
+
 def compare(champion_id, challenger_id):
     """
     Score both runs. Returns ``{"metric", "champion_score", "challenger_score", "compared_on", "rows", "note"}``.
     """
-    from easyml.predictor import Predictor
     from easyml.utils.run_summary import primary_metric
 
     task = _record(challenger_id)["task"]
@@ -90,12 +124,16 @@ def compare(champion_id, challenger_id):
     if inputs is not None:
         task, data, truth = inputs
         try:
-            challenger = score(task, truth, Predictor(challenger_id).predict(data))
+            raw = holdout_raw_inputs(challenger_id)
+        except Exception:  # raw rows are a refinement: fall back to the cleaned rows
+            raw = None
+        try:
+            challenger = score(task, truth, _predict(challenger_id, data, raw))
         except Exception as exc:
             note = f"The new model could not score its test rows ({exc})."
         else:
             try:
-                champion = score(task, truth, Predictor(champion_id).predict(data))
+                champion = score(task, truth, _predict(champion_id, data, raw))
             except Exception as exc:
                 note = (f"Run #{champion_id} could not predict the new data ({exc}), "
                         "so the runs' own test scores were compared.")

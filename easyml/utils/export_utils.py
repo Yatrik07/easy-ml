@@ -41,12 +41,17 @@ def create_deployment_package(run_id: int, model_name: str) -> str:
         source = os.path.join(folder_path, name)
         if os.path.exists(source):
             copies["config.json" if name == "config_json.json" else name] = source
+    # A run trained on cleaned data: the service cleans each request with the frozen recipe first.
+    prep_source = os.path.join(folder_path, "prep.json")
+    cleans = os.path.exists(prep_source)
+    if cleans:
+        copies["prep.json"] = prep_source
 
     generated = {
-        "main.py": generate_fastapi_app(task, model_name, model_filename),
-        "requirements.txt": generate_requirements(model_name),
+        "main.py": generate_fastapi_app(task, model_name, model_filename, cleans_input=cleans),
+        "requirements.txt": generate_requirements(model_name, cleans_input=cleans),
         "Dockerfile": generate_dockerfile(model_name),
-        "README.md": generate_readme(task, model_name, model_filename, example_features(folder_path)),
+        "README.md": generate_readme(task, model_name, model_filename, example_features(folder_path), cleans_input=cleans),
     }
     if task == "MLClassification":
         decoder = load_target_decoder(folder_path)
@@ -64,7 +69,15 @@ def create_deployment_package(run_id: int, model_name: str) -> str:
     return zip_path
 
 
-def generate_fastapi_app(task: str, model_name: str, model_filename: str) -> str:
+CLEANING_LINES = [
+    "    df = pd.DataFrame([features])",
+    "    # The model was trained on cleaned data: clean the request the same way first.",
+    "    df, _ = prep.prepare(df)",
+    "    df = df.replace(r'^\\s*$', np.nan, regex=True)",
+]
+
+
+def generate_fastapi_app(task: str, model_name: str, model_filename: str, cleans_input: bool = False) -> str:
     is_classification = "classification" in task.lower()
     is_catboost = model_name.startswith("CatBoost")
 
@@ -82,6 +95,8 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str) -> str
     ]
     if is_catboost:
         lines.append(f"from catboost import {model_name}")
+    if cleans_input:
+        lines.append("from easyml.dataprep.frozen import FrozenRecipe")
     lines += [
         "",
         "app = FastAPI(title='Easy-ML Exported Model API', version='1.0.0')",
@@ -106,12 +121,15 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str) -> str
         lines.append(f"model = joblib.load('{model_filename}')")
     lines += [
         "column_dtypes = _read_json('column_data.json').get('column_dtypes', {})",
+    ] + (["prep = FrozenRecipe.load('prep.json')"] if cleans_input else []) + [
         "labels = _read_json('labels.json')",
         "target_labels = labels if isinstance(labels, list) else []",
         "",
         "",
         "def _prepare(features):",
+    ] + (CLEANING_LINES if cleans_input else [
         "    df = pd.DataFrame([features]).replace(r'^\\s*$', np.nan, regex=True)",
+    ]) + [
         "    for col, dtype in column_dtypes.items():",
         "        if col not in df.columns:",
         "            df[col] = np.nan",
@@ -169,12 +187,16 @@ def _pinned(dist):
     return f"{dist}=={version}" if version else dist
 
 
-def generate_requirements(model_name: str) -> str:
+def generate_requirements(model_name: str, cleans_input: bool = False) -> str:
     """Pin the libraries that unpickle the model to the versions that trained it."""
     reqs = ["fastapi", "uvicorn", "pydantic"]
     reqs += [_pinned(dist) for dist in ("scikit-learn", "pandas", "numpy", "joblib")]
     if model_name in _MODEL_PACKAGES:
         reqs.append(_pinned(_MODEL_PACKAGES[model_name]))
+    if cleans_input:  # the frozen data-prep recipe is applied with Easy-ML's own code
+        from easyml import __version__
+
+        reqs.append(f"easy-ml-studio=={__version__}")
     return "\n".join(reqs) + "\n"
 
 
@@ -204,8 +226,12 @@ def example_features(folder_path, limit=None):
 
     import pandas as pd
 
-    from easyml.core.artifacts import read_json
+    from easyml.core.artifacts import load_frozen_recipe, read_json
 
+    prep = load_frozen_recipe(folder_path)
+    if prep is not None:  # the run cleans its input: examples use the original columns
+        example = dict(prep.data.get("example") or {})
+        return {c: example.get(c) for c in (prep.input_columns[:limit] if limit else prep.input_columns)}
     columns = list((read_json(folder_path, "column_data.json").get("column_dtypes") or {}).keys())
     data_path = os.path.join(folder_path, "data.csv")
     row = {}
@@ -227,7 +253,8 @@ def example_features(folder_path, limit=None):
     return example
 
 
-def generate_readme(task: str, model_name: str, model_filename: str = "model.pkl", example=None) -> str:
+def generate_readme(task: str, model_name: str, model_filename: str = "model.pkl", example=None,
+                    cleans_input: bool = False) -> str:
     from easyml.utils.run_summary import model_label, task_label
 
     example = example or {"column_a": 1.5, "column_b": "value"}
@@ -238,11 +265,18 @@ def generate_readme(task: str, model_name: str, model_filename: str = "model.pkl
                 else '{"prediction": 123.45}')
     columns = "\n".join(f"- `{name}`" for name in example)
     label_file = "| `labels.json` | Class names, in the order the model uses them |\n" if is_classification else ""
+    if cleans_input:
+        label_file += ("| `prep.json` | The data-prep recipe and the numbers it learned from the training data; "
+                       "each request is cleaned with it first |\n")
+        runs_on = ("It needs no running studio: `requirements.txt` installs the `easy-ml-studio` package only for "
+                   "its data-prep code, because the model was trained on cleaned data and every request is "
+                   "cleaned the same way. Send the original columns.")
+    else:
+        runs_on = "It runs on its own, without Easy-ML Studio, on any computer or server with Python 3.10+\n(or Docker)."
     return f"""# {model_label(model_name)} prediction API
 
 Exported from Easy-ML Studio: your trained **{task_label(task)}** model ({model_name}) as a small
-web service. It runs on its own, without Easy-ML Studio, on any computer or server with Python 3.10+
-(or Docker). Other programs send it one row of data and get the prediction back as JSON.
+web service. {runs_on} Other programs send it one row of data and get the prediction back as JSON.
 
 ## What is in this folder
 

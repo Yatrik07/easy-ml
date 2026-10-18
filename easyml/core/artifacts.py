@@ -76,6 +76,21 @@ def load_pipeline(folder_path):
     return cached_load("pipeline", path, lambda: joblib.load(path))
 
 
+def load_frozen_recipe(folder_path):
+    """
+    The run's frozen data-prep recipe (``prep.json``: runs trained on cleaned data since Easy-ML 0.11), or
+    None. Shared and read-only like a model.
+    """
+    from easyml.dataprep.frozen import PREP_FILE, FrozenRecipe
+
+    path = os.path.join(folder_path or "", PREP_FILE)
+    if not folder_path or not os.path.exists(path):
+        return None
+    from easyml.core.model_cache import cached_load
+
+    return cached_load("frozen_recipe", path, lambda: FrozenRecipe.load(path), size=os.path.getsize(path) * 4)
+
+
 def read_json(folder_path, filename):
     path = os.path.join(folder_path, filename)
     if not os.path.exists(path):
@@ -200,10 +215,48 @@ def sample_row(folder_path, task, rng=None):
     target = config.get("target_column")
     result = {"row": int(row), "source": "test" if holdout else "training",
               "actual": _python_value(frame[target].iloc[row]) if target in frame.columns else None}
+    raw = _raw_rows(folder_path)
+    raw_row = raw[1].iloc[row] if raw is not None and row < len(raw[1]) else None
     if task == "NLPTextClassification":
-        text = _python_value(frame[config["text_column"]].iloc[row])
+        column = config["text_column"]
+        if raw_row is not None and column in raw[0].input_columns:
+            text = _json_value(raw_row.get(column))  # the raw text: the model cleans it the same way
+        else:
+            text = _python_value(frame[column].iloc[row])
         result["text"] = "" if text is None else str(text)
+        return result
+    if raw_row is not None:
+        # The run cleans its input: the form gets the raw row behind this cleaned row.
+        result["values"] = {c: _json_value(raw_row.get(c)) for c in raw[0].input_columns}
         return result
     columns = list((read_json(folder_path, "column_data.json").get("column_dtypes") or {}).keys())
     result["values"] = {c: _python_value(frame[c].iloc[row]) if c in frame.columns else None for c in columns}
     return result
+
+
+def _json_value(value):
+    """Like _python_value, also for raw rows: dates become text, NaT/NaN become None."""
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, (pd.Timestamp, np.datetime64)):
+        return str(pd.Timestamp(value))
+    return _python_value(value)
+
+
+def _raw_rows(folder_path):
+    """``(frozen recipe, raw rows)`` for runs that clean their input (row i matches data.csv row i), else None."""
+    from easyml.core.model_cache import cached_load
+
+    prep = load_frozen_recipe(folder_path)
+    path = os.path.join(folder_path, "raw_data.csv")
+    if prep is None or not os.path.exists(path):
+        return None
+    from easyml.dataprep.frozen import read_raw_rows
+
+    rows = cached_load("raw_rows", path, lambda: read_raw_rows(path, prep), size=os.path.getsize(path) * 3)
+    return prep, rows

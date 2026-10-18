@@ -1,5 +1,6 @@
 """Creating, changing and describing schedules: shared by the studio API, the CLI and ``easyml.schedules``."""
 
+import json
 import os
 from datetime import datetime
 
@@ -181,9 +182,14 @@ def _recipe_label(value):
 
 
 def event_summary(event):
-    return {k: event.get(k) for k in ("id", "schedule_id", "trigger", "data_file", "started_at", "finished_at",
-                                      "challenger_run_id", "champion_before", "champion_after", "metric",
-                                      "champion_score", "challenger_score", "compared_on", "decision", "message")}
+    summary = {k: event.get(k) for k in ("id", "schedule_id", "trigger", "data_file", "started_at", "finished_at",
+                                         "challenger_run_id", "champion_before", "champion_after", "metric",
+                                         "champion_score", "challenger_score", "compared_on", "decision", "message")}
+    try:
+        summary["data_check"] = json.loads(event["data_check"]) if event.get("data_check") else None
+    except (TypeError, ValueError):
+        summary["data_check"] = None
+    return summary
 
 
 def list_summaries():

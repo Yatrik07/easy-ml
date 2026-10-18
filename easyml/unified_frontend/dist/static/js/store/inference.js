@@ -1,6 +1,6 @@
 // Predictions with a saved run: manual input, batch CSV, SHAP explanations and export.
 import { reactive } from '../lib/vue.js';
-import { getJSON, postForBlob, postJSON, saveBlob } from '../lib/api.js';
+import { getJSON, postForBlob, postForm, postJSON, saveBlob } from '../lib/api.js';
 import { naturalSort } from '../lib/format.js';
 import { navigate, toastError, toastSuccess } from './ui.js';
 
@@ -31,11 +31,22 @@ export const inference = reactive({
   exporting: false,
   sample: null, // a real row put in the form: {actual, row, source, form}
   sampling: false,
+  cleaning: null, // {name, steps, automatic}: the data-prep recipe of a run trained on cleaned data
+  dataCheck: null, // the last CSV file compared with the training data (POST /runs/<id>/data-check)
+  checking: false,
 });
 
 export function columnChoices(column) {
   const details = inference.columnDetails[column];
   return details && details.type === 'categorical' ? naturalSort(details.values || []) : [];
+}
+
+// How the form asks for a column: a list of choices, a number, or free text (dates, long text).
+export function inputKind(column) {
+  const details = inference.columnDetails[column];
+  if (details && details.type === 'categorical' && (details.values || []).length) return 'choice';
+  if (details && details.type === 'text') return 'text';
+  return 'number';
 }
 
 export async function openInference(runId) {
@@ -64,6 +75,8 @@ export async function openInference(runId) {
       shapPlot: null,
       explanation: null,
       sample: null,
+      cleaning: data.cleaning || null,
+      dataCheck: null,
     });
     for (const col of inference.columns) inference.values[col] = '';
     navigate('inference');
@@ -112,10 +125,27 @@ export async function predictBatch() {
     const blob = await postForBlob('/inference_batch', form, 'Batch prediction failed');
     saveBlob(blob, 'predictions_run_' + inference.runId + '.csv');
     toastSuccess('Predictions downloaded.');
+    checkBatch(inference.batchFile);
   } catch (e) {
     toastError(e.message);
   } finally {
     inference.predicting = false;
+  }
+}
+
+// Compare the predicted file with the training data. Only informs, so a failure is not shown as an error.
+export async function checkBatch(file) {
+  if (!file) return;
+  inference.checking = true;
+  inference.dataCheck = null;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    inference.dataCheck = await postForm('/runs/' + inference.runId + '/data-check', form, 'Data check failed');
+  } catch (e) {
+    inference.dataCheck = null;
+  } finally {
+    inference.checking = false;
   }
 }
 

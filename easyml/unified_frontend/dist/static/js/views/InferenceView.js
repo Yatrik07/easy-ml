@@ -3,7 +3,8 @@ import { formatNumber, formatPercent, formatPrediction, formatScore } from '../l
 import { featureAvailable, installHint, modelLabel, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
 import {
-  allInputsEmpty, columnChoices, explain, exportModel, inference, predict, predictBatch, sampleInForm, setImage, tryRealRow,
+  allInputsEmpty, columnChoices, explain, exportModel, inference, inputKind, predict, predictBatch, sampleInForm, setImage,
+  tryRealRow,
 } from '../store/inference.js';
 
 // A value for the API example: what the user typed, else a real value from the training data.
@@ -118,7 +119,10 @@ export default {
       await exportModel();
     }
 
-    function onBatch(event) { inference.batchFile = event.target.files[0] || null; }
+    function onBatch(event) {
+      inference.batchFile = event.target.files[0] || null;
+      inference.dataCheck = null; // it described the previous file
+    }
     function onImage(event) { setImage(event.target.files[0]); }
 
     // Predicting a form with no values only shows what the model does with missing data.
@@ -176,10 +180,21 @@ export default {
       : 'Red bars push towards “' + predictedLabel.value + '”, blue bars push away from it. Strongest effects first.'));
     const hasMissing = computed(() => !!inference.explanation && inference.explanation.features.some(f => f.missing));
 
+    // The data-prep recipe of a run trained on cleaned data, in one sentence.
+    const cleaningSteps = computed(() => {
+      const c = inference.cleaning;
+      if (!c || !c.steps || !c.steps.length) return '';
+      const shown = c.steps.slice(0, 6).join(', ');
+      return c.steps.length > 6 ? shown + ' and ' + (c.steps.length - 6) + ' more' : shown;
+    });
+    const resultWarnings = computed(() => (inference.result && inference.result.warnings) || []);
+    const flaggedColumns = computed(() => (inference.dataCheck ? inference.dataCheck.columns.filter(c => c.status !== 'ok') : []));
+
     return {
       inference, isTabular, isText, isImage, codeTabs, columnChoices, predict, predictBatch, explain, exportModel,
       exportOpen, apiTabs, downloadExport, allEmpty, canSample, tryRealRow, sample, verdict,
       explainCard, plotOpen, explainAndShow, predictedLabel, explanationSummary, axisTitle, explainHint, hasMissing,
+      cleaningSteps, resultWarnings, flaggedColumns, inputKind,
       onBatch, onImage, featureAvailable, installHint, modelLabel, taskLabel, navigate, formatPrediction, formatPercent, formatScore,
     };
   },
@@ -203,6 +218,19 @@ export default {
                 </select>
               </div>
 
+              <div v-if="inference.cleaning && inference.cleaning.automatic && !isImage" class="alert alert-info">
+                <Icon name="cleaning_services" />
+                <div>Trained on cleaned data: your input is cleaned with the recipe <strong>{{ inference.cleaning.name }}</strong>
+                  ({{ cleaningSteps }}) before predicting, using the values learned from the training data.
+                  Enter the data as it originally looks.</div>
+              </div>
+              <div v-else-if="inference.cleaning && !isImage" class="alert alert-warning">
+                <Icon name="warning_amber" />
+                <div>This run was trained on data cleaned with the recipe <strong>{{ inference.cleaning.name }}</strong>
+                  before Easy-ML 0.11, so it does not clean input itself. Enter values as they look after cleaning,
+                  or retrain the run to have input cleaned automatically.</div>
+              </div>
+
               <template v-if="isTabular">
                 <div class="segmented" role="group" aria-label="Input mode">
                   <button :class="{ active: inference.mode === 'manual' }" @click="inference.mode = 'manual'"><Icon name="edit_note" size="sm" />Single row</button>
@@ -211,15 +239,16 @@ export default {
                 <div v-if="inference.mode === 'manual'" class="form-grid">
                   <div v-for="col in inference.columns" :key="col" class="field">
                     <label :for="'in-' + col" class="truncate" :title="col">{{ col }}</label>
-                    <select v-if="columnChoices(col).length" :id="'in-' + col" class="select" v-model="inference.values[col]">
+                    <select v-if="inputKind(col) === 'choice'" :id="'in-' + col" class="select" v-model="inference.values[col]">
                       <option value="">(missing)</option>
                       <option v-for="v in columnChoices(col)" :key="String(v)" :value="v">{{ v }}</option>
                     </select>
+                    <input v-else-if="inputKind(col) === 'text'" :id="'in-' + col" class="input" type="text" v-model="inference.values[col]" placeholder="text" />
                     <input v-else :id="'in-' + col" class="input" type="number" step="any" v-model="inference.values[col]" placeholder="number" />
                   </div>
                 </div>
                 <div v-else class="field">
-                  <label for="batch-file">CSV with the same columns</label>
+                  <label for="batch-file">{{ inference.cleaning && inference.cleaning.automatic ? 'CSV with the original columns' : 'CSV with the same columns' }}</label>
                   <input id="batch-file" class="input" type="file" accept=".csv" @change="onBatch" />
                   <span class="field-hint">You get the file back with a Prediction column added.</span>
                 </div>
@@ -277,6 +306,12 @@ export default {
                 <p class="subtle text-xs">Row {{ (sample.row + 1).toLocaleString() }} of the run's data,
                   {{ sample.source === 'test' ? 'from its test set: the model never trained on it.' : 'used for training.' }}</p>
               </div>
+              <div v-if="resultWarnings.length" class="alert alert-warning text-sm">
+                <Icon name="warning_amber" />
+                <div class="stack-xs"><strong>Unlike the training data</strong>
+                  <span v-for="(w, i) in resultWarnings" :key="i">{{ w }}</span>
+                  <span class="subtle text-xs">The prediction may be less reliable.</span></div>
+              </div>
               <template v-if="isTabular">
                 <button class="btn btn-secondary" @click="explainAndShow" :disabled="inference.explaining || !featureAvailable('explain')">
                   <Spinner v-if="inference.explaining" /><Icon v-else name="insights" />Explain this prediction
@@ -289,6 +324,38 @@ export default {
           </div>
         </aside>
       </div>
+
+      <section v-if="isTabular && inference.mode === 'batch' && (inference.checking || inference.dataCheck)" class="card">
+        <div class="card-header">
+          <div><h3>Data check</h3>
+            <div class="card-hint">Does the file you predicted look like the data the model was trained on?</div></div>
+          <span v-if="inference.dataCheck" class="badge"
+                :class="inference.dataCheck.status === 'ok' ? 'badge-success' : (inference.dataCheck.status === 'major' ? 'badge-danger' : 'badge-warning')">
+            {{ inference.dataCheck.status === 'ok' ? 'Looks alike' : (inference.dataCheck.status === 'major' ? 'Looks different' : 'Slightly different') }}</span>
+        </div>
+        <div class="card-body stack-sm">
+          <p v-if="inference.checking" class="muted text-sm"><Spinner /> Comparing with the training data...</p>
+          <template v-else>
+            <p class="text-sm">{{ inference.dataCheck.summary }}</p>
+            <div v-if="flaggedColumns.length" class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Column</th><th>Status</th><th>What changed</th></tr></thead>
+                <tbody>
+                  <tr v-for="c in flaggedColumns" :key="c.column">
+                    <td class="strong">{{ c.column }}</td>
+                    <td><span class="badge" :class="c.status === 'major' ? 'badge-danger' : 'badge-warning'">{{ c.status === 'major' ? 'Different' : 'Slightly' }}</span></td>
+                    <td class="text-sm">{{ c.message }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p v-if="inference.dataCheck.missing_columns.length" class="subtle text-xs">Not in the file:
+              {{ inference.dataCheck.missing_columns.join(', ') }}</p>
+            <p v-if="inference.dataCheck.status !== 'ok'" class="subtle text-xs">Predictions for data unlike the training
+              data are less reliable. If this is the new normal, retrain the run on recent data.</p>
+          </template>
+        </div>
+      </section>
 
       <section v-if="inference.explanation && inference.result" ref="explainCard" class="card explain-card">
         <div class="card-header">

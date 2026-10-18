@@ -56,7 +56,8 @@ python -m easyml             # same as easy-ml
 ## Features
 
 - Train several models in one run and compare accuracy, confusion matrices and classification reports
-- Data prep without code: clean a table step by step with a live preview, then train on it or save the steps as a reusable recipe
+- Data prep without code: clean a table step by step with a live preview, then train on it or save the steps as a reusable recipe;
+  a model trained on cleaned data cleans new input the same way (with the values learned from its training data)
 - Result charts for every model: ROC and precision-recall curves, predicted vs actual, errors, feature importance and top words
 - Light or thorough hyperparameter search (GridSearchCV)
 - Missing-value imputation, scaling, PCA, one-hot encoding, and SMOTE / Tomek Links for imbalanced classes
@@ -68,7 +69,7 @@ python -m easyml             # same as easy-ml
 - Scheduled retraining: retrain on new data automatically and switch to the new model only when it scores better
 - Reproducible training (random seed) and optional k-fold cross-validation
 - Tag, annotate and rename runs; share any run as one HTML report
-- Single-record and batch (CSV) predictions
+- Single-record and batch (CSV) predictions, with a data check that warns when new data looks different from the training data
 - SHAP waterfall explanations for tabular predictions
 - One-click export of a tabular model as a FastAPI app with Dockerfile
 - Use any trained model from Python or the command line (`easyml.load_model`, `easy-ml predict`)
@@ -94,6 +95,7 @@ Or from the command line:
 ```bash
 easy-ml runs                                        # list runs with their best model
 easy-ml predict 5 new_customers.csv -o out.csv      # adds Prediction (and Confidence) columns
+easy-ml check 5 new_customers.csv                   # does the file look like run #5's training data?
 easy-ml predict 3 "my laptop got a software update" # text runs print the label
 easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per image
 easy-ml retrain 5 october.csv                       # run #5's settings on new data

@@ -225,10 +225,13 @@ def _apply_recipe(recipe, dataset_path, warnings):
             raise ValueError(str(exc)) from exc
     os.makedirs(UPLOADS_DIR, exist_ok=True)
     output = os.path.join(UPLOADS_DIR, f"clean_{uuid.uuid4().hex[:8]}.csv")
-    _, reports = apply_file(dataset_path, recipe.steps, output)
+    _, reports = apply_file(dataset_path, recipe.steps, output, freeze=True)
     failed = [r for r in reports if r.get("error")]
     if failed:
+        from easyml.dataprep.frozen import remove_sidecars
+
         os.remove(output)
+        remove_sidecars(output)
         raise ValueError(f"Recipe '{recipe.name}' could not clean this file: "
                          + "; ".join(f"{r['label']}: {r['error']}" for r in failed))
     warnings.append(f"Cleaned the new data with recipe '{recipe.name}' ({len(recipe.steps)} steps).")

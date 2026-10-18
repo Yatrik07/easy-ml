@@ -10,6 +10,7 @@ Request bodies (``POST /predict``):
 
     tabular  {"features": {"age": 45, "city": "NY"}}          -> {"prediction": ..., "confidence": ...}
              {"rows": [{...}, {...}]}                          -> {"predictions": [...], "confidences": [...]}
+             (+ "warnings": [...] when the input does not look like the training data)
     text     {"text": "great phone"}  /  {"texts": ["...", "..."]}
     image    multipart "file" (one or several)  /  {"image_base64": "..."}  /  {"images_base64": [...]}
 
@@ -46,6 +47,9 @@ class ServeState:
             self._predictor, self._info = predictor, info
 
 
+RAW_DTYPES = {"int": "int64", "float": "float64", "bool": "bool", "datetime": "datetime64[ns]"}
+
+
 class BadRequest(ValueError):
     """The request body does not have a shape this model accepts."""
 
@@ -71,10 +75,19 @@ def model_info(predictor):
     }
     folder = predictor._folder
     if predictor.task in ("MLClassification", "MLRegression"):
+        from easyml.core.artifacts import load_frozen_recipe
         from easyml.utils.export_utils import example_features
 
-        columns = read_json(folder, "column_data.json").get("column_dtypes") or {}
-        info["inputs"] = {"kind": "features", "columns": columns}
+        prep = load_frozen_recipe(folder)
+        if prep is not None:
+            # Trained on cleaned data: callers send the original columns, the service cleans them.
+            kinds = prep.data.get("raw_kinds") or {}
+            columns = {c: RAW_DTYPES.get(kinds.get(c), "object") for c in prep.input_columns}
+            info["inputs"] = {"kind": "features", "columns": columns,
+                              "cleaning": {"recipe": prep.name, "steps": prep.summary()["steps"]}}
+        else:
+            columns = read_json(folder, "column_data.json").get("column_dtypes") or {}
+            info["inputs"] = {"kind": "features", "columns": columns}
         info["example"] = {"features": example_features(folder)}
         if predictor.task == "MLClassification":
             decoder = load_target_decoder(folder)
@@ -154,7 +167,12 @@ def run_prediction(predictor, body, files):
         else:
             raise BadRequest('Send JSON {"features": {"column": value, ...}} for one row, '
                              'or {"rows": [{...}, {...}]} for several.')
-        predictions, confidences = predictor.predict_with_confidence(rows)
+        predictions, confidences, notes = predictor.predict_with_notes(rows)
+        answer = (_single if single else _many)(predictions, confidences, with_confidence)
+        warnings = notes + predictor.data_warnings(rows)
+        if warnings:  # only when there is something to say, so ordinary answers stay as they were
+            answer["warnings"] = warnings
+        return answer
 
     return (_single if single else _many)(predictions, confidences, with_confidence)
 

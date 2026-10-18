@@ -3,6 +3,7 @@ import os
 import traceback
 
 from easyml.core.seeding import validate_cv_folds, validate_seed
+from easyml.utils.run_inputs import record_inputs, recipe_from_sidecars
 from easyml.utils.run_meta import clean_tags, tags_json
 from easyml.config.GLOBAL_VARS import ML_RequestBody, error_code_mappings
 from easyml.core.model_builder import ml_model_builder_trainer_controller
@@ -48,6 +49,9 @@ class _TabularController:
             parent_run_id (int): The run this one retrains, if any.
         """
 
+        # A file cleaned by Data prep carries its frozen recipe next to it (see easyml.dataprep.frozen).
+        self.source_path = dataset_path
+        recipe = recipe or recipe_from_sidecars(dataset_path)
         self.request_body = ML_RequestBody(
             name=name,
             dataset_path=dataset_path,
@@ -91,6 +95,9 @@ class _TabularController:
 
             emit_progress(f"🤖 Training {self.label.lower()} models...", pct=45)
             ml_model_builder_trainer_controller(self.request_body)
+            record_inputs(self.request_body.path_to_save, self.source_path, self.request_body.df,
+                          list(self.request_body.X.columns), self.request_body.target_column,
+                          recipe=self.request_body.recipe)
 
             dataset_name = self.request_body.original_dataset_name or os.path.basename(self.request_body.dataset_path or "")
             self.request_body.run_id = enter_record_to_table(

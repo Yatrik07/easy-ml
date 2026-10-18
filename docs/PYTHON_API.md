@@ -50,6 +50,7 @@ print(run.performance)   # test/validation scores per model
 | `hyper_parameter_tuning` | Grid-search level: `0` none (default), `1` small, `2` larger |
 | `random_seed` | Seed for the split, resampling, cross-validation and every model with randomness (default `42`): the same data, settings and seed always give the same models and scores |
 | `cv_folds` | k-fold cross-validation of every model on the training data, e.g. `5` (default `0`: off). Scores land in `run.performance[model]["cv"]` (`mean`, `std`, `scores`); the test set still ranks the models |
+| `recipe` | A Data prep recipe (name, id, `.json` file or `prep.Recipe`) to clean `dataset_path` with first, like the studio's "Train with this data". The run then cleans prediction input itself (see [Runs trained on cleaned data](#runs-trained-on-cleaned-data)) |
 
 ### Tabular options
 
@@ -130,6 +131,42 @@ strings such as `"1"`; runs trained with older versions now return numbers too.)
 Tabular inputs can be strings or numbers, the same as the studio's form: values are converted to the
 types seen during training. Missing columns are treated as missing values.
 
+`model.input_columns` lists the columns to pass in.
+
+### Runs trained on cleaned data
+
+A run trained on data cleaned with a Data prep recipe (Easy-ML 0.11+) cleans prediction input itself:
+give it the data as it originally looks, and it applies the same steps with the numbers learned from
+its training data. Fill values, outlier limits and ranges come from the training data, never from the rows
+you predict, so one row gets the same treatment as a whole file.
+
+```python
+model = easyml.load_model(12)
+model.cleans_input        # True
+model.input_columns       # the original columns, e.g. ["area", "bedrooms", ...] (no "area splitted")
+model.predict({"area": 5800, "bedrooms": 3, "mainroad": "yes"})
+model.predict(already_clean_frame)                  # has the cleaned columns: used as it is
+model.predict(frame, cleaned=True)                  # or say so explicitly (cleaned=False always cleans)
+```
+
+Steps that remove or reorder rows (remove duplicates, filters, sorting) are skipped, because every row
+needs a prediction; `predict_with_notes` returns notes about rows a training filter would have removed.
+Runs cleaned before 0.11 expect cleaned input, as before.
+
+### Check new data against the training data
+
+```python
+report = model.check("new_customers.csv")   # same inputs as predict (tables and text)
+report.ok                                   # False when something looks different
+print(report.summary)                       # "2 of 12 columns look different from the training data. ..."
+report.to_frame()                           # one row per column: status, PSI, empty shares, outside range, unseen
+```
+
+Each column is compared with the training data: numbers outside the training range, categories the model
+never saw, cells that are empty more often, and (with 30 rows or more) how far the distribution moved
+(population stability index: under 0.1 fine, 0.1 to 0.25 slightly different, above 0.25 clearly
+different). The check only informs; predictions are made either way.
+
 Errors:
 
 - `easyml.utils.database_operations.RunNotFoundError` when the run does not exist.
@@ -178,11 +215,13 @@ print(recipe.to_json())                              # share it as a file; Recip
   missing) makes `apply` raise a `ValueError` that names the step, so a recipe never half-cleans data
   silently.
 - Steps that use statistics (median/mean fill, outlier limits, ranges) compute them on the data they are
-  applied to, so new data is filled with its own medians.
+  applied to, so new data is filled with its own medians. (A *trained model* is different: it keeps the
+  numbers from its training data, see [Runs trained on cleaned data](#runs-trained-on-cleaned-data).)
 - Nothing in a recipe runs code: steps are a fixed list of pandas operations.
 
-A run trained on cleaned data (the **Train with this data** button) remembers its recipe, and
-retraining it cleans new files with the same steps (next section).
+A run trained on cleaned data (the **Train with this data** button, or `MLTrainer(..., recipe=...)`)
+remembers its recipe: predictions clean raw input with it, and retraining cleans new files with the same
+steps (next section).
 
 ## Retrain on new data
 
@@ -251,9 +290,15 @@ How a schedule decides:
    still being copied is never used.
 2. Both models predict the new run's test rows (data neither trained on) and are scored with the run's
    metric. When the old model cannot score them (for example the columns changed, or image runs), their
-   own test scores are compared and the event says so (`compared_on`).
+   own test scores are compared and the event says so (`compared_on`). Models trained on cleaned data get
+   those rows as they arrived and clean them with their own recipe, so each is judged the way it predicts.
 3. A better model becomes the one in use. A worse one is still saved in Run History (marked "Not
    promoted"), so nothing is lost.
+
+Each attempt also compares the new data with the data the model in use was trained on (see
+[Check new data](#check-new-data-against-the-training-data)): `event["data_check"]` holds
+`{"status", "summary", "columns"}`, and the message says when the data looks different. This only informs;
+the decision is still made on the scores.
 
 Schedules run while the studio is open, or without it:
 
@@ -340,6 +385,12 @@ Open <http://127.0.0.1:8000/> for the model's inputs and copy-paste examples. En
 Regression answers have no confidence. The single-row format is the same as the "Export as API"
 package, so a program written for one works with the other.
 
+When a request does not look like the training data (a number outside the training range, a category the
+model never saw, an empty value that never was empty), table answers include `"warnings": [...]` in plain
+words; ordinary answers have no such key. A run trained on cleaned data takes the original columns and
+cleans each request itself (its help page lists the recipe); requests that already have the cleaned
+columns still work.
+
 ```python
 import requests
 
@@ -374,6 +425,7 @@ easy-ml predict 5 new_customers.csv --model RandomForestClassifier
 easy-ml predict 3 "my laptop got a software update" # text runs print the label
 easy-ml predict 3 reviews.csv --text-column review  # text CSV with another column name
 easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per image
+easy-ml check 5 new_customers.csv                   # does the file look like run #5's training data?
 
 easy-ml retrain 5 customers_october.csv             # same settings as run #5, new data
 easy-ml retrain 5 october.csv --name churn-oct --models random_forest,light_gbm
@@ -399,6 +451,8 @@ easy-ml import churn.zip                            # asks for confirmation; --y
 ```
 
 Without `-o`, the predictions are written to the terminal as CSV, so you can pipe them to another command.
+After predicting a file, `easy-ml predict` prints a one-line data check on stderr when the file does not look
+like the training data (`--no-check` turns it off); `easy-ml check` shows the details per column (`--json`).
 `easy-ml predict`, `retrain`, `prep`, `schedule`, `export` and `import` exit with code 1 when something is wrong
 (unknown run, missing columns, damaged archive, ...) and print the reason.
 

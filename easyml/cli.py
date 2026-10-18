@@ -114,7 +114,56 @@ def tag(run_id, tags, remove=False, out=None):
     return 0
 
 
-def predict(run_id, source, model=None, output=None, text_column=None, out=None):
+def _report_check(predictor, frame, notes=()):
+    """After predicting a file: the cleaning notes and, when it found something, the data check (on stderr)."""
+    for note in notes:
+        print(f"Note: {note}", file=sys.stderr)
+    try:
+        report = predictor.check(frame)
+    except Exception:  # the check only informs; it never fails a prediction
+        return
+    if not report.ok:
+        print(f"Data check: {report.summary} (details: easy-ml check {predictor.run_id} <file>)", file=sys.stderr)
+
+
+def check(run_id, source, as_json=False, out=None):
+    """Compare a CSV/Excel file with the data a run was trained on."""
+    _quiet_logs()
+    from easyml.predictor import IMAGE_TASK, Predictor
+    from easyml.utils.database_operations import RunNotFoundError
+
+    out = out or sys.stdout
+    try:
+        predictor = Predictor(run_id)
+        if predictor.task == IMAGE_TASK:
+            raise ValueError("The data check works on tables and text, not images.")
+        if not os.path.isfile(source):
+            raise FileNotFoundError(f"File not found: {source}")
+        report = predictor.check(source)
+    except RunNotFoundError:
+        print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except (ValueError, FileNotFoundError, TypeError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if as_json:
+        print(json.dumps(dict(report), indent=2, default=str), file=out)
+        return 0
+    print(report.summary, file=out)
+    if report["columns"]:
+        print("", file=out)
+        rows = [(c["column"], c["status"], "" if c["psi"] is None else f"{c['psi']:.3f}", c["message"] or "")
+                for c in report["columns"]]
+        width = max(len("COLUMN"), *(len(str(r[0])) for r in rows))
+        print(f"{'COLUMN':<{width}}  STATUS  PSI     DETAILS", file=out)
+        for name, status, psi, message in rows:
+            print(f"{str(name):<{width}}  {status:<6}  {psi:<6}  {message}", file=out)
+    if report["missing_columns"]:
+        print(f"\nNot in the file: {', '.join(report['missing_columns'])}", file=out)
+    return 0
+
+
+def predict(run_id, source, model=None, output=None, text_column=None, out=None, check_data=True):
     _quiet_logs()
     from easyml.predictor import IMAGE_TASK, TABULAR_TASKS, TEXT_TASK, Predictor, image_paths
     from easyml.utils.database_operations import RunNotFoundError
@@ -138,10 +187,13 @@ def predict(run_id, source, model=None, output=None, text_column=None, out=None)
                 print(f"File not found: {source}", file=sys.stderr)
                 return 1
             frame = load_data_from_path(source)
+            notes = []
             if predictor.task == TEXT_TASK:
                 predictions, confidences = predictor._predict_text(source, text_column=text_column, frame=frame)
             else:
-                predictions, confidences = predictor.predict_with_confidence(frame)
+                predictions, confidences, notes = predictor.predict_with_notes(frame)
+            if check_data:
+                _report_check(predictor, frame, notes)
             frame = frame.copy()
             frame["Prediction"] = predictions
             if confidences is not None:

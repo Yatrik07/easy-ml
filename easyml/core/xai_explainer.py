@@ -8,6 +8,7 @@ import pandas as pd
 from easyml.core.artifacts import (
     coerce_feature_frame,
     flatten_predictions,
+    load_frozen_recipe,
     load_pipeline,
     load_tabular_model,
     read_json,
@@ -41,6 +42,7 @@ class XAIExplainer:
         self.folder_path = None
         self.column_data = {}
         self.feature_names = None
+        self.shown_values = None  # the cleaned input, for runs that clean their input with a recipe
 
     def load_artifacts(self):
         record = get_record_by_id(self.run_id)
@@ -118,7 +120,8 @@ class XAIExplainer:
             grouped = False
 
         def shown(column):
-            raw = self.data.get(column) if grouped and isinstance(self.data, dict) else None
+            values = self.shown_values if self.shown_values is not None else self.data
+            raw = values.get(column) if grouped and isinstance(values, dict) else None
             return None if raw is None or (isinstance(raw, str) and not raw.strip()) else raw
 
         ordered = sorted(totals.items(), key=lambda item: -abs(item[1]))
@@ -142,7 +145,14 @@ class XAIExplainer:
 
         write_log("loading artifacts for XAI", "info", "xai_explainer.py")
         self.load_artifacts()
-        transformed_input = self._transform(pd.DataFrame([self.data]))
+        frame = pd.DataFrame([self.data])
+        prep = load_frozen_recipe(self.folder_path)
+        if prep is not None:
+            # A run trained on cleaned data: explain the cleaned row, which is what the model sees.
+            frame, _ = prep.prepare(frame)
+            cleaned = coerce_feature_frame(frame, self.column_data).iloc[0]
+            self.shown_values = {c: (None if pd.isna(v) else v) for c, v in cleaned.items()}
+        transformed_input = self._transform(frame)
 
         write_log("generating SHAP values", "info", "xai_explainer.py")
         if self.model_name in TREE_MODELS:

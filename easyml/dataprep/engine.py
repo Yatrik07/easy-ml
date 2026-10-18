@@ -147,10 +147,24 @@ def _json_rows(frame):
     return frame.astype(object).where(frame.notna(), None).to_dict(orient="records")
 
 
-def apply_file(path, steps, output):
-    """Apply ``steps`` to the whole file at ``path`` and write ``output`` (CSV). Returns ``(frame, reports)``."""
-    frame, reports = apply_steps(read_table(path), steps)
+def apply_file(path, steps, output, freeze=False):
+    """
+    Apply ``steps`` to the whole file at ``path`` and write ``output`` (CSV). Returns ``(frame, reports)``.
+
+    With ``freeze=True`` (data that a model will be trained on) the recipe is also frozen: the numbers its
+    steps learned and the raw row behind each cleaned row are saved next to ``output``
+    (:mod:`easyml.dataprep.frozen`), so predictions can later clean raw input the same way.
+    """
+    raw = read_table(path)
+    if not freeze:
+        frame, reports = apply_steps(raw, steps)
+        frame.to_csv(output, index=False)
+        return frame, reports
+    from easyml.dataprep.frozen import FrozenRecipe, write_sidecars
+
+    frame, reports, frozen = FrozenRecipe.fit(raw, steps)
     frame.to_csv(output, index=False)
+    write_sidecars(output, frozen, raw.loc[frame.index])
     return frame, reports
 
 

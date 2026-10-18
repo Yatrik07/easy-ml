@@ -47,15 +47,29 @@ class MLTrainer:
 
     ``timestamp`` and ``path_to_save`` are optional; a run folder is created in the
     Easy-ML data directory when they are omitted.
+
+    ``recipe="name"`` (a Data prep recipe's name or id, a recipe .json file, or an
+    :class:`easyml.prep.Recipe`) cleans the dataset first, like "Train on it" in the studio. The run then
+    cleans prediction input the same way, with the numbers learned from this dataset.
     """
 
     def __init__(self, **args):
         self.controller = None
         # Only a folder created here is removed again when the run fails; a caller's path_to_save is left alone.
         self._created_folder = None
+        self._cleaned_upload = None  # the copy cleaned with ``recipe``, removed once the run has its own
 
         try:
             task = args["task"]
+            recipe = args.get("recipe")
+            if recipe is not None and recipe is not False and not isinstance(recipe, dict):
+                # A recipe to apply (a dict is the record of one already applied, as retraining passes it).
+                from easyml.retraining import _apply_recipe
+
+                original = str(args.get("dataset_path") or "")
+                args["original_dataset_name"] = args.get("original_dataset_name") or os.path.basename(original)
+                self._cleaned_upload, args["recipe"] = _apply_recipe(recipe, original, [])
+                args["dataset_path"] = self._cleaned_upload
             if not args.get("timestamp"):
                 args["timestamp"] = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
             if not args.get("path_to_save"):
@@ -79,6 +93,7 @@ class MLTrainer:
 
         except Exception as exc:
             self._remove_created_folder()
+            self._remove_cleaned_upload()
             if (
                 self.controller is not None
                 and hasattr(self.controller, "request_body")
@@ -106,6 +121,17 @@ class MLTrainer:
         if self._created_folder and os.path.isdir(self._created_folder):
             shutil.rmtree(self._created_folder, ignore_errors=True)
 
+    def _remove_cleaned_upload(self):
+        if self._cleaned_upload:
+            from easyml.dataprep.frozen import remove_sidecars
+
+            try:
+                os.remove(self._cleaned_upload)
+            except OSError:
+                pass
+            remove_sidecars(self._cleaned_upload)
+            self._cleaned_upload = None
+
     def run(self):
         try:
             return self.controller.run()
@@ -130,3 +156,5 @@ class MLTrainer:
                 )
 
             raise exc
+        finally:
+            self._remove_cleaned_upload()  # the run keeps its own copies (data.csv, raw_data.csv, prep.json)

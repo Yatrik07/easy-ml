@@ -176,7 +176,10 @@ export const ScheduleEventsDialog = {
                 <td class="right num">{{ score(e, e.challenger_score) }}</td>
                 <td class="right num">{{ score(e, e.champion_score) }}<div v-if="e.champion_before" class="subtle text-xs">run #{{ e.champion_before }}</div></td>
                 <td class="hide-sm"><span class="truncate event-file" :title="e.data_file">{{ e.data_file || '-' }}</span>
-                  <div v-if="e.compared_on" class="subtle text-xs">compared on {{ e.compared_on }}</div></td>
+                  <div v-if="e.compared_on" class="subtle text-xs">compared on {{ e.compared_on }}</div>
+                  <span v-if="e.data_check && e.data_check.status !== 'ok'" class="badge"
+                        :class="e.data_check.status === 'major' ? 'badge-danger' : 'badge-warning'" :title="e.data_check.summary">
+                    <Icon name="insights" />{{ e.data_check.status === 'major' ? 'Data looks different' : 'Data slightly different' }}</span></td>
               </tr>
               <tr v-if="e.message" class="event-message"><td colspan="6" class="subtle text-xs">{{ e.message }}</td></tr>
             </template>

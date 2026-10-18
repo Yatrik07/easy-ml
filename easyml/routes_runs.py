@@ -75,6 +75,33 @@ def run_sample(run_id):
         return error_response(exc)
 
 
+@runs_bp.route("/runs/<int:run_id>/data-check", methods=["POST"])
+def run_data_check(run_id):
+    """
+    Does new data look like the run's training data? Multipart ``file`` (CSV/Excel) or JSON ``{"rows": [...]}``.
+    Returns the report of :func:`easyml.monitoring.datacheck.check_frame`.
+    """
+    import pandas as pd
+
+    from easyml.monitoring.datacheck import check_frame, reference_profile
+    from easyml.route_helpers import _read_uploaded_table
+
+    try:
+        record = get_record_by_id(run_id)
+        if record["task"] == IMAGE_TASK:
+            raise ValueError("The data check works on tables and text, not images.")
+        if "file" in request.files:
+            frame = _read_uploaded_table(request.files["file"])
+        else:
+            rows = (request.get_json(silent=True) or {}).get("rows")
+            if not isinstance(rows, list) or not rows or not all(isinstance(r, dict) for r in rows):
+                raise ValueError('Send a CSV/Excel "file", or JSON {"rows": [{...}, ...]}.')
+            frame = pd.DataFrame(rows)
+        return jsonify(check_frame(reference_profile(record["folder_path"]), frame))
+    except Exception as exc:
+        return error_response(exc)
+
+
 @runs_bp.route("/runs/<int:run_id>/retrain", methods=["POST"])
 def retrain_run(run_id):
     write_log(f"new incoming request to retrain run {run_id}", "info", os.path.basename(__file__))

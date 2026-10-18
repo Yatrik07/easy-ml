@@ -6,6 +6,7 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml download-models      fetch the spaCy English model used for lemmatization
     easy-ml runs                 list trained runs
     easy-ml predict 5 data.csv   predict with run #5 (see `easy-ml predict --help`)
+    easy-ml check 5 data.csv     does data.csv look like the data run #5 was trained on?
     easy-ml retrain 5 new.csv    train run #5's settings on new data
     easy-ml export 5             save run #5 as a .zip; `easy-ml import file.zip` loads it elsewhere
     easy-ml serve 5              serve run #5 as a REST API on http://127.0.0.1:8000
@@ -67,6 +68,13 @@ def _build_parser():
     predict.add_argument("--model", help="Model class name (default: the run's best model).")
     predict.add_argument("-o", "--output", help="Write the predictions to this CSV file instead of the console.")
     predict.add_argument("--text-column", help="Text column of the input CSV (text runs; default: the training column).")
+    predict.add_argument("--no-check", action="store_true",
+                         help="Do not check whether the file looks like the training data.")
+
+    check = subcommands.add_parser("check", help="Check whether a file looks like the data a run was trained on.")
+    check.add_argument("run_id", type=int, help="Run to compare with (see `easy-ml runs`).")
+    check.add_argument("input", help="CSV or Excel file.")
+    check.add_argument("--json", action="store_true", help="Print machine-readable JSON.")
 
     retrain = subcommands.add_parser("retrain", help="Train a run again on new data, with the same settings.")
     retrain.add_argument("run_id", type=int, help="Run to retrain (see `easy-ml runs`).")
@@ -227,7 +235,11 @@ def main(argv=None):
         return tag(args.run_id, args.tags, remove=args.remove)
     if args.command == "predict":
         from easyml.cli import predict
-        return predict(args.run_id, args.input, model=args.model, output=args.output, text_column=args.text_column)
+        return predict(args.run_id, args.input, model=args.model, output=args.output, text_column=args.text_column,
+                       check_data=not args.no_check)
+    if args.command == "check":
+        from easyml.cli import check
+        return check(args.run_id, args.input, as_json=args.json)
     if args.command == "retrain":
         from easyml.cli import retrain
         models = [m.strip() for m in args.models.split(",") if m.strip()] if args.models else None

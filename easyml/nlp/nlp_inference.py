@@ -20,7 +20,7 @@ from easyml.nlp.nlp_feature_engineering import (
     transform_text_for_inference,
     transform_texts_for_inference,
 )
-from easyml.core.artifacts import validate_model_name
+from easyml.core.artifacts import load_frozen_recipe, validate_model_name
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.labels import decoder_from_config
 from easyml.utils.logger import write_log
@@ -50,6 +50,8 @@ class NLPInferenceController:
             data=data,
             model_name=validate_model_name(model_name),
         )
+        self.prep = None  # the run's frozen data-prep recipe, when it was trained on cleaned data
+        self.text_column = None
 
     def get_inference(self):
         """
@@ -84,15 +86,41 @@ class NLPInferenceController:
                           "error", os.path.basename(__file__))
             raise e
 
-    def predict_texts(self, texts):
+    def clean_texts(self, texts, cleaned=None):
         """
-        Classify several texts at once.
+        Texts as the model saw them in training: runs trained on cleaned data apply their recipe to the text
+        column first (e.g. trimming or a fixed letter case). Other runs get the texts unchanged.
+        """
+        if self.prep is None or cleaned is True:
+            return list(texts)
+        import pandas as pd
+
+        frame, _ = self.prep.prepare(pd.DataFrame({self.text_column: list(texts)}), cleaned=cleaned)
+        return [("" if pd.isna(t) else str(t)) for t in frame[self.text_column]]
+
+    def predict_frame_texts(self, frame, cleaned=None):
+        """Classify the rows of a table: runs trained on cleaned data clean the table first (any recipe step)."""
+        if self.inference_body.model is None:
+            self._load_artifacts()
+        if self.prep is not None and cleaned is not True:
+            prepared, _ = self.prep.prepare(frame, cleaned=cleaned)
+            texts = ["" if t != t else str(t) for t in prepared[self.text_column]]
+            return self.predict_texts(texts, cleaned_input=True)
+        if self.text_column not in frame.columns:
+            raise ValueError(f"Column {self.text_column!r} not found.")
+        return self.predict_texts(frame[self.text_column].astype(str).tolist(), cleaned_input=True)
+
+    def predict_texts(self, texts, cleaned_input=None):
+        """
+        Classify several texts at once. ``cleaned_input`` works like ``cleaned`` in
+        :meth:`FrozenRecipe.prepare` for runs trained on cleaned data.
 
         Returns:
             tuple: (labels, confidences); confidences is None for models without predict_proba.
         """
         if self.inference_body.model is None:
             self._load_artifacts()
+        texts = self.clean_texts(texts, cleaned=cleaned_input)
         config = self.inference_body.preprocessing_config
         cleaned = [apply_preprocessing_for_inference(str(t), config) for t in texts]
         features = transform_texts_for_inference(cleaned, self._folder_path, self.inference_body.embedding_config)
@@ -137,6 +165,8 @@ class NLPInferenceController:
             config = json.load(f)
 
         self.inference_body.preprocessing_config = config
+        self.text_column = config.get("text_column")
+        self.prep = load_frozen_recipe(folder_path)
 
         # Load target encodings (reverse: encoded_value -> label)
         decoder = decoder_from_config(config)
@@ -157,7 +187,7 @@ class NLPInferenceController:
         Returns:
             dict: {'prediction': <label>, 'probability': <confidence>}
         """
-        raw_text = str(self.inference_body.data)
+        raw_text = self.clean_texts([str(self.inference_body.data)])[0]
 
         # Step 1: Apply same preprocessing
         cleaned_text = apply_preprocessing_for_inference(

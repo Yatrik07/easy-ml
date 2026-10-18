@@ -8,6 +8,7 @@ from easyml.config.GLOBAL_VARS import ML_InferenceBody, error_code_mappings
 from easyml.core.artifacts import (
     coerce_feature_frame,
     flatten_predictions,
+    load_frozen_recipe,
     load_pipeline,
     load_tabular_model,
     load_target_decoder,
@@ -42,6 +43,8 @@ class MLInferenceController:
             model_name=model_name
         )
         self.column_data = {}
+        self.prep = None  # the run's frozen data-prep recipe, when it was trained on cleaned data
+        self.folder_path = None
 
     def _record_error(self):
         if self.inference_body.status_code == 200:
@@ -69,9 +72,29 @@ class MLInferenceController:
             self._record_error()
             raise
 
-    def _transform(self, df):
+    def _prepare(self, df, cleaned=None):
+        """
+        Input as the model saw it in training: raw input is cleaned with the run's recipe first (runs trained
+        on cleaned data). Returns ``(frame, notes)``; see :meth:`FrozenRecipe.prepare` for ``cleaned``.
+        """
+        if self.prep is None:
+            return df, []
+        return self.prep.prepare(df, cleaned=cleaned)
+
+    def _transform(self, df, cleaned=None):
+        df, _ = self._prepare(df, cleaned)
         df = coerce_feature_frame(df, self.column_data)
         return self.inference_body.pipeline.transform(df)
+
+    def data_warnings(self, df, limit=10):
+        """Plain-language warnings when ``df`` does not look like the training data (never raises)."""
+        try:
+            from easyml.monitoring.datacheck import reference_profile, warnings_for
+
+            return warnings_for(reference_profile(self.folder_path), df, limit=limit)
+        except Exception as exc:  # a check must never stop a prediction
+            write_log(f"data check skipped: {exc!r}", "debug", os.path.basename(__file__))
+            return []
 
     def _decode(self, value):
         value = convert_numpy(value)
@@ -89,7 +112,9 @@ class MLInferenceController:
 
         write_log("entered predict_single_point", "debug", os.path.basename(__file__))
 
-        transformed_input = self._transform(pd.DataFrame([self.inference_body.data]))
+        frame = pd.DataFrame([self.inference_body.data])
+        prepared, notes = self._prepare(frame)
+        transformed_input = self._transform(prepared, cleaned=True)
         model = self.inference_body.model
         prediction = flatten_predictions(model.predict(transformed_input))[0]
 
@@ -102,10 +127,13 @@ class MLInferenceController:
             "prediction": self._decode(prediction) if is_classification else convert_numpy(prediction),
             "probability": probability,
         }
+        warnings = notes + self.data_warnings(frame)
+        if warnings:  # only when there is something to say, so ordinary answers stay as they were
+            output["warnings"] = warnings
         write_log(f"prediction complete: {output['prediction']}", "info", os.path.basename(__file__))
         return output
 
-    def predict_frame(self, df: pd.DataFrame):
+    def predict_frame(self, df: pd.DataFrame, cleaned=None):
         """
         Predict every row of ``df``.
 
@@ -113,16 +141,22 @@ class MLInferenceController:
             tuple: (predictions, confidences). Classification predictions are decoded to the original
             labels; confidences is None when the model has no predict_proba (and for regression).
         """
+        predictions, confidences, _ = self.predict_frame_with_notes(df, cleaned=cleaned)
+        return predictions, confidences
+
+    def predict_frame_with_notes(self, df: pd.DataFrame, cleaned=None):
+        """Like :meth:`predict_frame`, plus the notes from cleaning the input: ``(predictions, confidences, notes)``."""
         self.load_objects()
-        transformed = self._transform(df)
+        prepared, notes = self._prepare(df, cleaned)
+        transformed = self._transform(prepared, cleaned=True)
         model = self.inference_body.model
         predictions = flatten_predictions(model.predict(transformed))
         if "classification" not in self.inference_body.task.lower():
-            return [convert_numpy(p) for p in predictions], None
+            return [convert_numpy(p) for p in predictions], None, notes
         confidences = None
         if hasattr(model, "predict_proba"):
             confidences = [float(row.max()) for row in np.asarray(model.predict_proba(transformed))]
-        return [self._decode(p) for p in predictions], confidences
+        return [self._decode(p) for p in predictions], confidences, notes
 
     def predict_batch(self, df: pd.DataFrame):
         """
@@ -151,6 +185,9 @@ class MLInferenceController:
         record = get_record_by_id(self.inference_body.run_id)
         folder_path = record["folder_path"]
         self.inference_body.task = record["task"]
+        # The frozen recipe of runs trained on cleaned data: raw input is cleaned with it before predicting.
+        self.prep = load_frozen_recipe(folder_path)
+        self.folder_path = folder_path
 
         self.inference_body.model = load_tabular_model(folder_path, self.inference_body.model_name, record["task"])
         self.inference_body.pipeline = load_pipeline(folder_path)

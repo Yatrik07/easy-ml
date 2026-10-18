@@ -59,26 +59,74 @@ class Predictor:
 
     # ------------------------------------------------------------------ public API
 
-    def predict(self, data):
+    def predict(self, data, cleaned=None):
         """
         Predict and return a list with one prediction per input.
 
         * Tabular runs: a dict (one row), a list of dicts, a pandas DataFrame, or a .csv/.xlsx path.
         * Text runs: a string, a list of strings, or a .csv path (uses the run's text column).
         * Image runs: an image path, a list of image paths, or a folder of images.
-        """
-        return self.predict_with_confidence(data)[0]
 
-    def predict_with_confidence(self, data):
+        A run trained on cleaned data (Data prep) first cleans raw input with the same steps and the
+        numbers learned from its training data. Data that already has the cleaned columns is used as it
+        is; ``cleaned=True`` or ``cleaned=False`` decides this explicitly.
+        """
+        return self.predict_with_confidence(data, cleaned=cleaned)[0]
+
+    def predict_with_confidence(self, data, cleaned=None):
         """Like :meth:`predict`, but returns ``(predictions, confidences)``; confidences may be None."""
+        predictions, confidences, _ = self.predict_with_notes(data, cleaned=cleaned)
+        return predictions, confidences
+
+    def predict_with_notes(self, data, cleaned=None):
+        """Like :meth:`predict_with_confidence`, plus notes about cleaning the input: ``(predictions, confidences, notes)``."""
         if self.task in TABULAR_TASKS:
-            return self._predict_tabular(data)
+            return self._predict_tabular(data, cleaned)
         if self.task == TEXT_TASK:
-            return self._predict_text(data)
+            return (*self._predict_text(data, cleaned=cleaned), [])
         if self.task == IMAGE_TASK:
-            return self._predict_images(data)
+            return (*self._predict_images(data), [])
         raise ValueError(f"Unsupported task {self.task!r}")
 
+    @property
+    def cleans_input(self):
+        """True when the run was trained on cleaned data and cleans raw input itself (Easy-ML 0.11+)."""
+        return self.task != IMAGE_TASK and getattr(self._ready_controller(), "prep", None) is not None
+
+    @property
+    def input_columns(self):
+        """The columns to give :meth:`predict` (for runs that clean their input: the original, raw columns)."""
+        from easyml.core.artifacts import read_json
+
+        if self.task == IMAGE_TASK:
+            return []
+        prep = getattr(self._ready_controller(), "prep", None)
+        if self.task == TEXT_TASK:
+            column = self.text_column()
+            return list(prep.input_columns) if prep is not None and column not in prep.input_columns else [column]
+        if prep is not None:
+            return list(prep.input_columns)
+        return list((read_json(self._folder, "column_data.json").get("column_dtypes") or {}).keys())
+
+    def check(self, data):
+        """
+        Does ``data`` look like the data this model was trained on? Returns a
+        :class:`~easyml.monitoring.datacheck.DataCheckReport` (``.ok``, ``.summary``, ``.to_frame()``).
+        Accepts the same inputs as :meth:`predict` (tables and text, not images).
+        """
+        import pandas as pd
+
+        from easyml.monitoring.datacheck import DataCheckReport, check_frame, reference_profile
+
+        if self.task == IMAGE_TASK:
+            raise ValueError("The data check works on tables and text, not images.")
+        is_file = isinstance(data, (str, os.PathLike)) and str(data).lower().endswith((".csv", ".xlsx", ".xls"))
+        if self.task == TEXT_TASK and not is_file and not isinstance(data, pd.DataFrame):
+            texts = [data] if isinstance(data, str) else [str(t) for t in data]
+            frame = pd.DataFrame({self.text_column(): texts})
+        else:
+            frame = self._frame(data)
+        return DataCheckReport(check_frame(reference_profile(self._folder), frame))
     def warm_up(self):
         """Load the model now instead of on the first prediction. Returns self."""
         self._ready_controller()
@@ -127,23 +175,35 @@ class Predictor:
 
     # ------------------------------------------------------------------ task specific
 
-    def _predict_tabular(self, data):
+    def data_warnings(self, data, limit=10):
+        """Short warnings when table input does not look like the training data (empty list otherwise; never raises)."""
+        if self.task not in TABULAR_TASKS:
+            return []
+        try:
+            from easyml.monitoring.datacheck import reference_profile, warnings_for
+
+            return warnings_for(reference_profile(self._folder), self._frame(data), limit=limit)
+        except Exception:
+            return []
+
+    @staticmethod
+    def _frame(data):
         import pandas as pd
 
         from easyml.utils.data_loader import load_data_from_path
 
         if isinstance(data, (str, os.PathLike)):
-            frame = load_data_from_path(str(data))
-        elif isinstance(data, pd.DataFrame):
-            frame = data
-        elif isinstance(data, dict):
-            frame = pd.DataFrame([data])
-        elif isinstance(data, (list, tuple)):
-            frame = pd.DataFrame(list(data))
-        else:
-            raise TypeError("Tabular input must be a dict, a list of dicts, a DataFrame or a CSV/Excel path.")
+            return load_data_from_path(str(data))
+        if isinstance(data, pd.DataFrame):
+            return data
+        if isinstance(data, dict):
+            return pd.DataFrame([data])
+        if isinstance(data, (list, tuple)):
+            return pd.DataFrame(list(data))
+        raise TypeError("Tabular input must be a dict, a list of dicts, a DataFrame or a CSV/Excel path.")
 
-        return self._ready_controller().predict_frame(frame)
+    def _predict_tabular(self, data, cleaned=None):
+        return self._ready_controller().predict_frame_with_notes(self._frame(data), cleaned=cleaned)
 
     def text_column(self):
         import json
@@ -154,7 +214,7 @@ class Predictor:
         except OSError:
             return None
 
-    def _predict_text(self, data, text_column=None, frame=None):
+    def _predict_text(self, data, text_column=None, frame=None, cleaned=None):
         if isinstance(data, (str, os.PathLike)) and str(data).lower().endswith((".csv", ".xlsx", ".xls")) \
                 and os.path.isfile(str(data)):
             if frame is None:  # the CLI passes the frame it already loaded
@@ -162,6 +222,9 @@ class Predictor:
 
                 frame = load_data_from_path(str(data))
             column = text_column or self.text_column()
+            controller = self._ready_controller()
+            if controller.prep is not None and column == self.text_column() and cleaned is not True:
+                return controller.predict_frame_texts(frame, cleaned=cleaned)  # cleaned with the run's recipe
             if column not in frame.columns:
                 raise ValueError(f"Column {column!r} not found in {data}. Pass text_column=... to choose one.")
             texts = frame[column].astype(str).tolist()
@@ -177,7 +240,7 @@ class Predictor:
             else:
                 raise TypeError("Text input must be a string, a list of strings, or a CSV path.")
 
-        return self._ready_controller().predict_texts(texts)
+        return self._ready_controller().predict_texts(texts, cleaned_input=cleaned)
 
     def _predict_images(self, data):
         paths = image_paths(data)

@@ -72,7 +72,7 @@ def prep_apply():
         path = resolve_data_file(body.get("dataset_path"))
         upload_dir = ensure_writable_dir(current_app.config.get("EASYML_UPLOADS_DIR", UPLOADS_DIR))
         output = os.path.join(upload_dir, f"clean_{uuid.uuid4().hex[:8]}.csv")
-        frame, reports = apply_file(path, _steps(body), output)
+        frame, reports = apply_file(path, _steps(body), output, freeze=True)
         info = get_data_info(frame, dataset_path=output)
     except Exception as exc:
         return error_response(exc)

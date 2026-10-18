@@ -3,6 +3,25 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.11.0 (2026-10-18)
+
+Predict the way you trained.
+
+- **Models trained on cleaned data clean their input themselves.** A run trained on data from Data prep
+  now keeps its recipe frozen, with the numbers it learned from the training data (fill values, outlier
+  limits, ranges). Predictions take the original columns and clean them exactly like the training data:
+  the prediction form, CSV files, `easy-ml predict`, Python, `easy-ml serve`, explanations and **Export as
+  API** all do this. The form asks for `area` instead of a range like "area splitted"; **Try a real row**
+  fills in the raw row. Steps that remove or reorder rows are skipped, since every row needs a prediction.
+  Data that already has the cleaned columns still works. Runs cleaned with older versions are unchanged
+  (retrain them to get this).
+- **Data check**: does new data look like the training data? Values outside the training range, new
+  categories, unusual empty cells and (for 30+ rows) shifted distributions are explained in plain words:
+  a warning under a single prediction, a **Data check** card after a CSV prediction, `warnings` in serve
+  answers, `easy-ml check`, `model.check(...)`, and a badge in a schedule's history.
+- Scheduled retraining compares the old and new model on the new data cleaned each model's own way.
+- `MLTrainer(..., recipe="name")` cleans the dataset with a saved recipe before training, like the studio.
+
 ## 0.10.1 (2026-10-18)
 
 Easy-ML Studio is open source: the code is on [GitHub](https://github.com/Yatrik07/easy-ml).

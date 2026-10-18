@@ -99,8 +99,8 @@ def export_run(run_id, output_path=None, include_data=True):
 
     Args:
         output_path: Where to write the archive (default: ``easyml-run-<id>-<name>.zip`` in the current folder).
-        include_data: Include the training data (``data.csv``). Explanations (SHAP) and retraining
-            from the imported run use it.
+        include_data: Include the training data (``data.csv``, and ``raw_data.csv`` for runs trained on
+            cleaned data). Explanations (SHAP), "Try a real row" and retraining from the imported run use it.
     """
     from easyml import __version__
     from easyml.core.artifacts import read_json
@@ -128,8 +128,8 @@ def export_run(run_id, output_path=None, include_data=True):
         if not NAME_RE.match(name) or not name.lower().endswith(ALLOWED_SUFFIXES):
             write_log(f"Export skips {name}", "info", os.path.basename(__file__))
             continue
-        if name == "data.csv" and not has_data:
-            continue
+        if name in ("data.csv", "raw_data.csv") and not has_data:
+            continue  # raw_data.csv holds the same rows before cleaning
         entries.append((name, entry.path))
 
     config_bytes = json.dumps(config, indent=2, default=str).encode("utf-8")
@@ -316,6 +316,13 @@ def import_archive(path, name=None):
             if set(listed) != set(infos):
                 raise ArchiveError("The archive's files do not match its manifest.")
             _check_required(archive, task, metrics, set(infos))
+            if "prep.json" in infos:  # the frozen data-prep recipe must be one this version can run
+                from easyml.dataprep.frozen import FrozenRecipe
+
+                try:
+                    FrozenRecipe.from_dict(_read_small_json(archive, "run/prep.json"))
+                except ValueError as exc:
+                    raise ArchiveError(f"The run's data-prep recipe (prep.json) cannot be used: {exc}") from exc
 
             os.makedirs(staging)
             limit, written = max_import_bytes(), 0

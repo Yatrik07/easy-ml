@@ -187,10 +187,18 @@ Available steps:
 The preview uses the first 5,000 rows so it stays fast on big files; downloading and training clean
 every row. Steps that use statistics (median, outlier limits) compute them on the data they clean.
 
-A run trained on cleaned data remembers its recipe (shown in the run's settings). When you retrain it,
-the new file is cleaned with the same steps first, so you can retrain on raw data. Recipes also work
-outside the studio: `easy-ml prep apply <recipe> new.csv -o clean.csv`, or `easyml.prep` in Python
-(see the Python guide).
+A run trained on cleaned data remembers its recipe (shown in the run's settings) and, since Easy-ML
+0.11, **cleans prediction input itself**. The prediction form asks for the original columns (for example
+`area`, not the "area splitted" range a step made from it), and every prediction is cleaned with the same
+steps and the numbers learned from the training data: the training median fills an empty cell, the
+training limits clip an extreme value, the training ranges group a number. This applies to the form, CSV
+files, `easy-ml predict`, Python, `easy-ml serve` and **Export as API**. Steps that remove or reorder rows
+are skipped, since every row needs a prediction. Runs cleaned with an older version expect cleaned input;
+retrain them to get this.
+
+When you retrain such a run, the new file is cleaned with the same steps first, so you can retrain on raw
+data. Recipes also work outside the studio: `easy-ml prep apply <recipe> new.csv -o clean.csv`, or
+`easyml.prep` in Python (see the Python guide).
 
 ## Tabular Classification and Regression
 
@@ -434,7 +442,9 @@ retraining** on a run in Run history (the calendar button) or **New schedule** o
 Each time, the schedule retrains the model in use with the same settings, then lets both models predict
 the new data's test rows (rows neither has trained on). The better one stays in use. Every attempt is
 listed under **History** with both scores, and every new run is kept in Run history: "In use by NAME"
-marks the model a schedule uses now, "Not promoted" a newer run that was not better.
+marks the model a schedule uses now, "Not promoted" a newer run that was not better. History also
+marks attempts whose new data **looks different** from the data the model in use was trained on (see
+[Data check](#data-check)).
 
 Schedules run while Easy-ML Studio is open. To run them when the studio is closed, keep
 `easy-ml schedule worker` running, or run `easy-ml schedule run-due` regularly from Windows Task
@@ -465,6 +475,12 @@ Easy-ML supports inference after training.
 
 Provide a single record using the fields expected by the saved preprocessing pipeline. Fields left empty
 are filled in the same way missing values were during training; at least one field must have a value.
+For a run trained on cleaned data a note above the form names its recipe, and the form asks for the
+original columns (see [Data Prep](#data-prep)).
+
+When a value is unlike anything in the training data (a number outside the training range, a category the
+model never saw, an empty field that was never empty in training), a warning under the prediction says so:
+the model is guessing outside what it learned, so treat the answer with care.
 
 **Try a real row** fills the form with a random row of the run's own data and predicts it. For runs
 trained with Easy-ML 0.9.0 or later the row comes from the test set, so the model never trained on it,
@@ -482,6 +498,17 @@ the studio (it checks which optional libraries are installed when it starts).
 ### Batch tabular inference
 
 Upload a CSV file and Easy-ML returns a new CSV with a `Prediction` column.
+
+### Data check
+
+After a CSV prediction, a **Data check** card compares the file with the data the model was trained on,
+column by column: numbers outside the training range, new categories, cells that are empty more often,
+and (with 30 rows or more) whether a column's values moved, measured with the population stability index
+(below 0.1 fine, 0.1 to 0.25 slightly different, above 0.25 clearly different). Each flagged column gets a
+plain sentence, such as "values are much higher (median 9,200, training 4,600)". When the data keeps looking
+different, it is time to retrain on recent data. The check only informs: predictions are made either way.
+The same check is available as `easy-ml check <run id> file.csv` and `model.check(...)` in Python, and
+scheduled retraining records it for every new file.
 
 ### NLP inference
 
@@ -516,7 +543,7 @@ The model then answers at `http://127.0.0.1:8000/predict`, and `http://127.0.0.1
 and ready-to-copy examples. The prediction page's "Serve as API" tab shows the exact command and a
 request for the run you are looking at. It works for table, text and image runs. Unlike **Export as
 API**, nothing needs to be unzipped or installed; use the export when the model must run on a computer
-without Easy-ML.
+without Easy-ML. Answers include `warnings` when a request does not look like the training data.
 
 ## Model Export
 
@@ -546,6 +573,10 @@ Open <http://127.0.0.1:8000/docs> to try it in the browser, or send a `POST` to
 `http://127.0.0.1:8000/predict` with `{"features": {"column": value, ...}}`. Classification answers
 `{"prediction": ..., "confidence": ...}`; regression answers `{"prediction": ...}`. The predictions are
 the same as the studio's.
+
+For a run trained on cleaned data the package also holds `prep.json` (its recipe and the numbers learned
+from the training data), and `requirements.txt` adds `easy-ml-studio` for the code that applies it: the
+service takes the original columns and cleans each request the same way the studio does.
 
 ## Frequently Asked Questions
 

@@ -228,6 +228,11 @@ def build_report(run_id):
             names = [str(step.get("op")) for step in recipe["steps"]]
         out.append(f"<h3>Data prep recipe: {_e(recipe.get('name'))}</h3><ol>"
                    + "".join(f"<li>{_e(n)}</li>" for n in names) + "</ol>")
+        if os.path.exists(os.path.join(folder, "prep.json")):
+            out.append("<p>Predictions clean raw input with this recipe automatically, using the values it learned "
+                       "from the training data (fill values, limits, ranges).</p>")
+        else:
+            out.append("<p>Trained before Easy-ML 0.11: input for predictions must already be cleaned.</p>")
 
     eval_models = (evaluation.get("models") or {}) if isinstance(evaluation, dict) else {}
     out.append("<h2>Models</h2>")

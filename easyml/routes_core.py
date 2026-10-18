@@ -10,7 +10,7 @@ from easyml.config.GLOBAL_VARS import (
     ui2back_mappings_regression_models,
 )
 from easyml.capabilities import get_capabilities
-from easyml.core.artifacts import validate_model_name
+from easyml.core.artifacts import load_frozen_recipe, validate_model_name
 from easyml.core.inference import MLInferenceController
 from easyml.route_helpers import (
     recipe_summary,
@@ -232,6 +232,7 @@ def get_run_data():
     column_data = []
     column_details = {}
     target = ""
+    config_data = {}
 
     column_data_json_path = os.path.join(data_path, "column_data.json")
     config_json_path = os.path.join(data_path, "config_json.json")
@@ -256,6 +257,13 @@ def get_run_data():
     except Exception as exc:
         write_log(f"Error reading config files for run {run_id}: {str(exc)}", "error", os.path.basename(__file__))
 
+    cleaning = _cleaning_info(data_path, config_data)
+    if cleaning and cleaning["automatic"] and result.get("task") in ("MLClassification", "MLRegression"):
+        # The run cleans its input: the form asks for the original columns.
+        prep = load_frozen_recipe(data_path)
+        column_data = prep.input_columns
+        column_details = prep.inputs
+
     ranked = rank_models(result.get("task"), parse_metrics(result.get("metrics_json")))
     model_names = _list_run_models(result, data_path)
     order = {m["key"]: i for i, m in enumerate(ranked)}
@@ -274,7 +282,27 @@ def get_run_data():
         "metric": primary_metric(result.get("task")),
         "model_scores": {m["key"]: m["test_score"] for m in ranked},
         "example_row": _example_row(result.get("task"), data_path),
+        "cleaning": cleaning,
     }), 200
+
+
+def _cleaning_info(folder, config):
+    """
+    How prediction input is cleaned: ``{"name", "steps", "automatic"}`` for runs trained on cleaned data
+    (automatic since Easy-ML 0.11; older runs expect cleaned input), else None.
+    """
+    prep = load_frozen_recipe(folder)
+    if prep is not None:
+        summary = prep.summary()
+        return {"name": summary["name"], "steps": summary["steps"], "automatic": True}
+    recipe = config.get("recipe") if isinstance(config, dict) else None
+    if isinstance(recipe, dict) and recipe.get("steps"):
+        from easyml.dataprep.steps import STEP_SPECS
+
+        steps = [STEP_SPECS.get(s.get("op"), {}).get("label", str(s.get("op"))) for s in recipe["steps"]
+                 if isinstance(s, dict) and s.get("enabled", True)]
+        return {"name": recipe.get("name") or "data-prep recipe", "steps": steps, "automatic": False}
+    return None
 
 
 def _example_row(task, folder):
