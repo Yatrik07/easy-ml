@@ -321,6 +321,10 @@ class ML_RequestBody(BaseModel):
     tags: Optional[List[str]] = None  # the new run's tags (a retrain inherits its parent's)
     cv_folds: int = 0      # k-fold cross-validation of each model on the training data (0 = off)
     X_train_raw: Optional[pd.DataFrame] = None  # the training rows before preprocessing, for cross-validation
+    # 0.12, the final model: trained on every row of this evaluated run, with its best settings (no test set).
+    final_of_run: Optional[int] = None
+    fixed_params: dict = Field(default_factory=dict)  # model class -> the evaluated run's best parameters
+    estimates: dict = Field(default_factory=dict)     # model class -> the evaluated run's test scores
     requested_categorical_columns: Optional[List[str]] = Field(default_factory=list)
     # Kept in memory for the result charts (evaluation.json); never serialized.
     pipeline: Any = None
@@ -365,6 +369,8 @@ class ML_RequestBody(BaseModel):
         to_dump["cv_folds"] = self.cv_folds
         if self.recipe:
             to_dump["recipe"] = self.recipe
+        if self.final_of_run:
+            to_dump["final_of_run"] = self.final_of_run
         return to_dump
 
 class ML_InferenceBody(BaseModel):

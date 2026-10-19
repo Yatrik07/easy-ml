@@ -8,6 +8,7 @@ Command-line entry point: ``easy-ml`` (or ``python -m easyml``).
     easy-ml predict 5 data.csv   predict with run #5 (see `easy-ml predict --help`)
     easy-ml check 5 data.csv     does data.csv look like the data run #5 was trained on?
     easy-ml retrain 5 new.csv    train run #5's settings on new data
+    easy-ml final 5              train run #5's best model again on all its data, for deployment
     easy-ml export 5             save run #5 as a .zip; `easy-ml import file.zip` loads it elsewhere
     easy-ml serve 5              serve run #5 as a REST API on http://127.0.0.1:8000
     easy-ml prep apply customers new.csv -o clean.csv    re-apply a saved data-prep recipe
@@ -84,6 +85,13 @@ def _build_parser():
     retrain.add_argument("--recipe", help="Data-prep recipe (name or id) to clean the new data with first; 'none' uses "
                                           "the file as it is. Default: the recipe the run was trained with, if any.")
     retrain.add_argument("--json", action="store_true", help="Print the result as JSON.")
+
+    final = subcommands.add_parser("final", help="Train a run's final model on all its data (training + test rows).")
+    final.add_argument("run_id", type=int, help="The evaluated run (see `easy-ml runs`).")
+    final.add_argument("--model", action="append", dest="models", metavar="MODEL",
+                       help="Model class name or key to train (repeatable; default: the run's best model).")
+    final.add_argument("--name", help="Name of the new run (default: '<run name>-final').")
+    final.add_argument("--json", action="store_true", help="Print the result as JSON.")
 
     export = subcommands.add_parser("export", help="Save a run as a .zip to move it to another computer.")
     export.add_argument("run_id", type=int, help="Run to export (see `easy-ml runs`).")
@@ -240,6 +248,9 @@ def main(argv=None):
     if args.command == "check":
         from easyml.cli import check
         return check(args.run_id, args.input, as_json=args.json)
+    if args.command == "final":
+        from easyml.cli import final
+        return final(args.run_id, models=args.models, name=args.name, as_json=args.json)
     if args.command == "retrain":
         from easyml.cli import retrain
         models = [m.strip() for m in args.models.split(",") if m.strip()] if args.models else None

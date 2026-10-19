@@ -63,16 +63,21 @@ def preprocessing_controller(request_body: ML_RequestBody):
         # Process categorical variables (ordinal and nominal) before split
         encode_categorical(request_body)
 
-        # Split data — use stratify for classification but guard against rare classes
-        write_log("splitting the data into train-test-split", "info", os.path.basename(__file__))
-        is_classification = "classification" in request_body.task.lower()
-        stratify = None
-        if is_classification:
-            counts = pd.Series(request_body.y).value_counts()
-            stratify = request_body.y if counts.min() >= 2 else None
-        request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
-            train_test_split(request_body.X, request_body.y, test_size=0.2, random_state=request_body.random_seed,
-                             stratify=stratify)
+        if request_body.final_of_run:
+            # The final model learns from every row; its expected score comes from the evaluated run.
+            request_body.X_train, request_body.y_train = request_body.X, request_body.y
+            request_body.X_test = request_body.y_test = None
+        else:
+            # Split data — use stratify for classification but guard against rare classes
+            write_log("splitting the data into train-test-split", "info", os.path.basename(__file__))
+            is_classification = "classification" in request_body.task.lower()
+            stratify = None
+            if is_classification:
+                counts = pd.Series(request_body.y).value_counts()
+                stratify = request_body.y if counts.min() >= 2 else None
+            request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \
+                train_test_split(request_body.X, request_body.y, test_size=0.2, random_state=request_body.random_seed,
+                                 stratify=stratify)
 
         emit_progress("🔢 Setting up numerical transformations...", pct=26)
         # Process numerical variables after split
@@ -92,7 +97,8 @@ def preprocessing_controller(request_body: ML_RequestBody):
         request_body.X_test_raw = request_body.X_test  # for permutation importance (transform never modifies it)
         request_body.X_train_raw = request_body.X_train  # for cross-validation, which refits preprocessing per fold
         request_body.X_train = final_pipeline.fit_transform(request_body.X_train)
-        request_body.X_test = final_pipeline.transform(request_body.X_test)
+        if request_body.X_test is not None:
+            request_body.X_test = final_pipeline.transform(request_body.X_test)
         request_body.pipeline = final_pipeline
         write_log("transformed the data using the final pipeline", "info", os.path.basename(__file__))
 
@@ -100,8 +106,9 @@ def preprocessing_controller(request_body: ML_RequestBody):
 
         write_log(f"X_train transformed: shape->{request_body.X_train.shape} type->{type(request_body.X_train)}", "info", os.path.basename(
             __file__))
-        write_log(f"X_test transformed: shape->{request_body.X_test.shape} type->{type(request_body.X_test)}", "info", os.path.basename(
-            __file__))
+        if request_body.X_test is not None:
+            write_log(f"X_test transformed: shape->{request_body.X_test.shape} type->{type(request_body.X_test)}", "info",
+                      os.path.basename(__file__))
 
     except Exception as e:
         if request_body.status_code == 200:

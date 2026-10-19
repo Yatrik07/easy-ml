@@ -250,6 +250,10 @@ class NLP_RequestBody(BaseModel):
     random_seed: int = 42              # split, resampling, CV folds and models with a seed
     tags: Optional[List[str]] = None   # the new run's tags (a retrain inherits its parent's)
     cv_folds: int = 0                  # k-fold cross-validation on the training texts (0 = off)
+    # 0.12, the final model: trained on every text of this evaluated run, with its best settings.
+    final_of_run: Optional[int] = None
+    fixed_params: dict = Field(default_factory=dict)  # model class -> the evaluated run's best parameters
+    estimates: dict = Field(default_factory=dict)     # model class -> the evaluated run's test scores
     # Kept in memory for the result charts (evaluation.json); never serialized.
     vectorizer: Optional[Any] = None
     charts: dict = Field(default_factory=dict)
@@ -263,6 +267,8 @@ class NLP_RequestBody(BaseModel):
         from easyml.utils.labels import labels_in_code_order
 
         extra = {"recipe": self.recipe} if self.recipe else {}
+        if self.final_of_run:
+            extra["final_of_run"] = self.final_of_run
         return {
             **extra,
             "config_version": CONFIG_VERSION,

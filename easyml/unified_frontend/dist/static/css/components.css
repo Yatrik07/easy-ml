@@ -205,7 +205,8 @@ button.chip:hover { border-color: var(--border-strong); color: var(--text); }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(8px); }
 
 /* ---------- Modal & drawer ---------- */
-.backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: 80; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }
+/* dialogs open above the side drawer (81), e.g. Retrain from a run's details */
+.backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: 90; display: grid; place-items: center; grid-template-columns: minmax(0, 1fr); padding: var(--space-4); }
 .modal { width: min(520px, 100%); min-width: 0; max-height: calc(100vh - 48px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); }
 .modal.modal-wide { width: min(860px, 100%); }
 .modal.modal-xl { width: min(1240px, 100%); }

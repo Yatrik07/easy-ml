@@ -257,6 +257,25 @@ result.load_model().predict("new_customers.csv")
   easyml.retrain(5, "october_clean.csv", recipe=False)
   ```
 
+## Train the final model
+
+A run holds back a test set (20 % of the rows) to measure its models honestly. Once the scores (and
+cross-validation, if on) show a model is good, train it again on **all** the data for use:
+
+```python
+final = easyml.train_final(5)                                  # run #5's best model, on every row
+final = easyml.train_final(5, models=["RandomForestClassifier"], name="churn-final")
+final.load_model().predict("new_customers.csv")
+```
+
+The final run uses the evaluated run's settings and the best hyperparameters its search found (no new
+search), and the same seed, so training it twice gives the same model. No rows are left to test it on, so
+its `performance` repeats the evaluated run's test and cross-validation scores with
+`"estimated_from_run": 5`; `accuracy_train`/`train_metrics` are measured on all the rows. The run has
+`origin == "final"` and `parent_run_id == 5`; runs trained on cleaned data keep cleaning input the same way.
+`train_final` raises `ValueError` for image runs and for a run that already is a final model. Retraining a
+final model on new data trains an evaluated run again (with a test set).
+
 ## Retrain on a schedule
 
 A schedule keeps a model fresh: it retrains a run when new data arrives (or at set times) and uses the
@@ -292,7 +311,8 @@ How a schedule decides:
    metric. When the old model cannot score them (for example the columns changed, or image runs), their
    own test scores are compared and the event says so (`compared_on`). Models trained on cleaned data get
    those rows as they arrived and clean them with their own recipe, so each is judged the way it predicts.
-3. A better model becomes the one in use. A worse one is still saved in Run History (marked "Not
+3. A better model becomes the one in use (when the model in use is a final model, the better one is
+   first trained again on all the new data, so the schedule keeps using a final model). A worse one is still saved in Run History (marked "Not
    promoted"), so nothing is lost.
 
 Each attempt also compares the new data with the data the model in use was trained on (see
@@ -431,6 +451,7 @@ easy-ml retrain 5 customers_october.csv             # same settings as run #5, n
 easy-ml retrain 5 october.csv --name churn-oct --models random_forest,light_gbm
 easy-ml retrain 7 new_photos/                       # image runs: a folder of class folders
 easy-ml retrain 5 october_raw.csv --recipe customers   # clean with a recipe first (--recipe none: as it is)
+easy-ml final 5                                     # run #5's best model trained on all its data (--model to choose)
 
 easy-ml prep list                                   # saved data-prep recipes
 easy-ml prep show customers                         # a recipe's steps as JSON

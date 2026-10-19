@@ -423,6 +423,19 @@ On the **Choose models** step:
   another seed shows how much the results depend on chance. When models tie on the test score, the
   one with the better cross-validation score is ranked first.
 
+## Final Model
+
+Every run keeps 20 % of its rows aside as a test set, so the leaderboard shows how each model does on data
+it has not seen. When you are happy with a model, **Train final model** (on the Results page, or **Final
+model** in a run's details) trains it again on all the data, test rows included, with the same settings and
+the best hyperparameters the run found. A model trained on more data is usually a little better, so this is
+the one to use for predictions, **Serve as API** or **Export as API**.
+
+The final model is a new run, marked "Final model of #N". With no rows left to test it on, its leaderboard
+shows the evaluated run's scores as **Expected** scores, with a note saying so; its train score is measured
+on all the rows. The same works from Python (`easyml.train_final`) and the command line (`easy-ml final`).
+Image runs keep their validation images, so they have no final model.
+
 ## Scheduled Retraining
 
 A schedule keeps a model up to date without you retraining it by hand. Create one with **Schedule

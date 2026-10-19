@@ -256,6 +256,10 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
     run_id = int(run_id)
     warnings, assumed = [], []
     name = (str(name).strip() if name else "") or f"{record.get('run_name') or 'run'}-retrain"
+    if config.get("final_of_run"):
+        warnings.append(f"Run #{run_id} is a final model (trained on every row of run #{config['final_of_run']}). "
+                        "The retrained run is tested on part of the new data again; train its final model once "
+                        "you are happy with its scores.")
     capabilities = get_capabilities()
     recipe_info = None
     if recipe is False or (isinstance(recipe, str) and recipe.strip().lower() == "none"):
@@ -394,6 +398,75 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
 
     return RetrainPlan(task=task, name=name, parent_run_id=run_id, kwargs=kwargs, warnings=warnings,
                        assumed_defaults=assumed)
+
+
+def is_final_model(run_id):
+    """True for a final model: a run trained on every row of an evaluated run (``final_of_run`` in its config)."""
+    try:
+        return bool(load_run(run_id)["config"].get("final_of_run"))
+    except Exception:
+        return False
+
+
+def plan_final(run_id, models=None, name=None):
+    """
+    Plan the final model of an evaluated run: the chosen models (default: its best one) trained again on
+    every row of the run's own data (training and test rows), with the run's settings and the best
+    parameters its search found. No rows are left to test it on, so its test and cross-validation scores
+    are the evaluated run's, marked as estimates (``estimated_from_run``).
+
+    ``models`` are model class names (``"RandomForestClassifier"``) or keys (``"random_forest"``).
+
+    Raises:
+        RunNotFoundError, FileNotFoundError (the run's data is missing),
+        ValueError (image runs, a run that already is a final model, models not in the run).
+    """
+    run = load_run(run_id)
+    record, config, metrics = run["record"], run["config"], run["metrics"]
+    task, run_id = record["task"], int(run_id)
+    if task == IMAGE_TASK:
+        raise ValueError("Final models are for table and text runs. Image runs need their validation images "
+                         "to decide when to stop training.")
+    if config.get("final_of_run"):
+        raise ValueError(f"Run #{run_id} already is a final model (of run #{config['final_of_run']}).")
+    data_path = os.path.join(run["folder"], "data.csv")
+    if not os.path.isfile(data_path):
+        raise FileNotFoundError(f"Run #{run_id} has no saved copy of its data, so it cannot be trained again.")
+
+    ranked = [m["key"] for m in rank_models(task, metrics)]
+    if not ranked:
+        raise ValueError(f"Run #{run_id} has no trained models.")
+    keys = _TABULAR_KEYS if task in TABULAR_TASKS else _TEXT_KEYS
+    chosen = []
+    for wanted in (list(models) if models else ranked[:1]):
+        match = wanted if wanted in ranked else next((c for c in ranked if keys.get(c) == wanted), None)
+        if match is None:
+            raise ValueError(f"{wanted!r} is not a model of run #{run_id}. Its models: {', '.join(ranked)}.")
+        if match not in chosen:
+            chosen.append(match)
+
+    plan = plan_retrain(run_id, data_path, name=(str(name).strip() if name else "") or
+                        f"{record.get('run_name') or 'run'}-final", models=[keys.get(c, c) for c in chosen],
+                        original_dataset_name=record.get("dataset_name"), recipe=False)
+    kwargs = dict(plan.kwargs)
+    kwargs.update(
+        final_of_run=run_id,
+        fixed_params={c: (metrics.get(c) or {}).get("best_params") or {} for c in chosen},
+        estimates={c: {k: v for k, v in (metrics.get(c) or {}).items()
+                       if k in ("accuracy_test", "test_metrics", "f1_test", "cv") and v is not None} for c in chosen},
+        # data.csv is already clean: the recipe is the parent's, kept as a record (prep.json is copied over)
+        recipe=config.get("recipe") if isinstance(config.get("recipe"), dict) else None,
+    )
+    warnings = [w for w in plan.warnings if not w.startswith("Ignoring")]
+    return RetrainPlan(task=task, name=plan.name, parent_run_id=run_id, kwargs=kwargs, warnings=warnings)
+
+
+def train_final(run_id, models=None, name=None):
+    """
+    Train the final model of run ``run_id`` on all its rows (see :func:`plan_final`) and return its
+    :class:`RunResult`. Use it once cross-validation and the test set have shown the model is good.
+    """
+    return execute_plan(plan_final(run_id, models=models, name=name))
 
 
 def retrain(run_id, dataset_path, name=None, models=None, recipe=None):

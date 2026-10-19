@@ -152,7 +152,7 @@ def execute(prepared, notify=None):
     Train, compare and record the result. Returns the event (a dict). Training errors (and a stop
     request, ``InterruptedError``) are recorded as a failed event and then raised again.
     """
-    from easyml.retraining import execute_plan
+    from easyml.retraining import execute_plan, is_final_model, plan_final
     from easyml.scheduling.compare import compare, is_better
     from easyml.utils.database_operations import update_record
 
@@ -168,11 +168,18 @@ def execute(prepared, notify=None):
         update_record("runs", result.run_id, origin="schedule")
         outcome = compare(champion, result.run_id)
         promoted = is_better(outcome, row.get("min_improvement") or 0.0)
+        in_use = result.run_id
+        if promoted and is_final_model(champion):
+            # The model in use was a final model: the better new run is trained again on all the new data,
+            # and that final model is the one put in use.
+            in_use = execute_plan(plan_final(result.run_id)).run_id
+        message = _message(promoted, champion, result.run_id, outcome, check)
+        if in_use != result.run_id:
+            message += f" Run #{in_use} is its final model, trained on all the new data, and is now in use."
         event.update(challenger_run_id=result.run_id, metric=outcome["metric"],
                      champion_score=outcome["champion_score"], challenger_score=outcome["challenger_score"],
                      compared_on=outcome["compared_on"], decision="promoted" if promoted else "kept champion",
-                     champion_after=result.run_id if promoted else champion,
-                     message=_message(promoted, champion, result.run_id, outcome, check))
+                     champion_after=in_use if promoted else champion, message=message)
     except BaseException as exc:
         stopped = isinstance(exc, (InterruptedError, KeyboardInterrupt))
         event.update(decision="failed", message="Stopped before it finished." if stopped else f"Training failed: {exc}")

@@ -102,6 +102,9 @@ def serve(run_id=None, model_name=None, host=DEFAULT_HOST, port=DEFAULT_PORT, th
         run_id, model_name = int(row.get("champion_run_id") or row["base_run_id"]), None
     elif run_id is None:
         raise ValueError("Give a run id, or --schedule NAME to serve a schedule's current model.")
+    from easyml.utils.database_operations import get_record_by_id
+
+    get_record_by_id(int(run_id))  # an unknown run is reported before a busy port (a quick database lookup)
     if _port_in_use(host, port):
         raise OSError(f"Port {port} is already in use. Choose another one with --port.")
 

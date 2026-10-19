@@ -8,7 +8,7 @@ import tempfile
 
 from flask import Blueprint, jsonify, request, send_file
 
-from easyml.retraining import IMAGE_TASK, DatasetMismatchError, plan_retrain, run_spec
+from easyml.retraining import IMAGE_TASK, DatasetMismatchError, plan_final, plan_retrain, run_spec
 from easyml.run_archive import TRUST_WARNING, export_run, import_archive, max_import_bytes
 from easyml.route_helpers import (
     clean_display_filename,
@@ -148,6 +148,38 @@ def retrain_run(run_id):
         "warnings": plan.warnings,
         "message": "Retraining started",
     }), 202
+
+
+@runs_bp.route("/runs/<int:run_id>/final", methods=["POST"])
+def final_run(run_id):
+    """
+    Train the final model of run ``run_id`` on all its rows: ``{models?: [class names], name?}`` (default: the
+    run's best model). ``202`` with the job id, like a retrain.
+    """
+    write_log(f"new incoming request to train the final model of run {run_id}", "info", os.path.basename(__file__))
+    data = request.get_json(silent=True) or {}
+    try:
+        models = data.get("models")
+        if models is not None and (not isinstance(models, list) or not all(isinstance(m, str) for m in models)):
+            raise ValueError("models must be a list of model names.")
+        plan = plan_final(run_id, models=models or None, name=data.get("name"))
+    except ImportError as exc:
+        return jsonify({"status": "error", "status_code": 503, "error_message": str(exc), "message": str(exc)}), 503
+    except Exception as exc:
+        return error_response(exc)
+
+    path_to_save, timestamp = create_run_folder(plan.name)
+    try:
+        from easyml.trainer import MLTrainer
+
+        train_fn = MLTrainer(**plan.kwargs, path_to_save=path_to_save, timestamp=timestamp).run
+    except Exception as exc:
+        remove_orphan_run_folder(path_to_save)
+        return error_response(exc)
+
+    job = start_training_job(train_fn, "Final model", run_folder=path_to_save)
+    return jsonify({"status": "started", "job_id": job.job_id, "task": plan.task, "parent_run_id": plan.parent_run_id,
+                    "name": plan.name, "warnings": plan.warnings, "message": "Training the final model"}), 202
 
 
 def _remove_quietly(path):

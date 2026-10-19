@@ -183,15 +183,20 @@ def build_report(run_id):
     if run.get("notes"):
         out.append(f'<div class="notes">{_e(run["notes"])}</div>')
 
+    final_of = run.get("parent_run_id") if run.get("origin") == "final" else None
     tiles = [("Best model", _e(run.get("best_model_label") or "—")),
-             (f"Test {metric['name']}", _score(run.get("best_score"), metric)),
+             (f"Expected {metric['name']}" if final_of else f"Test {metric['name']}", _score(run.get("best_score"), metric)),
              ("Models trained", str(len(ranked)))]
     if evaluation.get("n_test"):
-        tiles.append(("Test rows", f"{int(evaluation['n_test']):,}"))
+        tiles.append((f"Test rows (run #{int(final_of)})" if final_of else "Test rows", f"{int(evaluation['n_test']):,}"))
     out.append('<div class="tiles">' + "".join(f"<div class=\"tile\"><span>{_e(k)}</span><b>{v}</b></div>" for k, v in tiles) + "</div>")
 
     lineage = []
-    if run.get("parent_run_id"):
+    if final_of:
+        lineage.append(f"This is the final model of run #{int(final_of)}, trained on all its rows (training and test). "
+                       f"No rows were left to test it on, so its test and cross-validation scores and charts are "
+                       f"run #{int(final_of)}'s: estimates, measured on data the model had not seen.")
+    elif run.get("parent_run_id"):
         how = "scheduled retrain" if run.get("origin") == "schedule" else "retrained"
         lineage.append(f"This run was {how} from run #{int(run['parent_run_id'])}.")
     if run.get("origin") == "import":

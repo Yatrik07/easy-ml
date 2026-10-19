@@ -69,6 +69,35 @@ def _cross_validate(request_body, template, class_name, dense=False):
                           on_fold=lambda number, k: emit_progress(f"🔁 {class_name}: fold {number}/{k} done"))
 
 
+def _save_final_model(request_body, class_name, model, X_train):
+    """Save a final text model (every text) with its training score and the evaluated run's test scores."""
+    from easyml.nlp.nlp_evaluator import get_nlp_metrics
+
+    labels = list(request_body.target_encodings.keys()) if request_body.target_encodings else None
+    train_metrics = get_nlp_metrics(request_body, request_body.y_train, model.predict(X_train),
+                                    **({'labels': labels} if labels else {}))
+    model_path = os.path.join(request_body.path_to_save, f"{class_name}.pkl")
+    joblib.dump(model, model_path, protocol=5)
+    estimate = request_body.estimates.get(class_name) or {}
+
+    def rounded(value):
+        return round(value, 5) if value is not None else None
+
+    request_body.performance[class_name] = {
+        "model_path": model_path,
+        "accuracy_train": rounded(train_metrics.get('accuracy')),
+        "accuracy_test": estimate.get("accuracy_test"),
+        "f1_train": rounded(train_metrics.get('f1_weighted')),
+        "f1_test": estimate.get("f1_test"),
+        "train_metrics": train_metrics,
+        "test_metrics": estimate.get("test_metrics") or {},
+        "best_params": request_body.fixed_params.get(class_name) or {},
+        "estimated_from_run": request_body.final_of_run,
+    }
+    if estimate.get("cv"):
+        request_body.performance[class_name]["cv"] = estimate["cv"]
+
+
 def nlp_model_builder_controller(request_body: NLP_RequestBody):
     """
     Trains and evaluates NLP models.
@@ -146,6 +175,10 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
 
             # Get param grid for this model
             param_grid = grid.get(class_name, {})
+            if request_body.final_of_run:
+                # The final model: the evaluated run's best settings, fitted once on every text (no search).
+                model.set_params(**(request_body.fixed_params.get(class_name) or {}))
+                param_grid = {}
 
             write_log(f"GridSearchCV for {class_name} with params: {param_grid}", "info", os.path.basename(__file__))
 
@@ -168,9 +201,14 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
             # Save and evaluate the bare model: metrics below use the original (not resampled) data.
             best_estimator, best_params = unwrap_model(fitted, best_params)
             cv_result = None
-            if request_body.cv_folds:
+            if request_body.cv_folds and not request_body.final_of_run:
                 cv_result = _cross_validate(request_body, grid_search.best_estimator_ if search_grid else estimator,
                                             class_name, dense=is_sparse and model_name in DENSE_ONLY_MODELS)
+
+            if request_body.final_of_run:
+                _save_final_model(request_body, class_name, best_estimator, X_train)
+                emit_progress(f"✅ Finished NLP model: {class_name}", pct=model_base_pct + int(50 / max(1, total_models)))
+                continue
 
             # Predict
             y_pred_train = best_estimator.predict(X_train)
@@ -229,8 +267,9 @@ def nlp_model_builder_controller(request_body: NLP_RequestBody):
             emit_progress(f"✅ Finished NLP model: {class_name} (test_acc={accuracy_test})", pct=model_base_pct + int(50/max(1, total_models)))
 
         labels = labels_in_code_order(request_body.target_encodings)
-        write_evaluation(request_body.path_to_save, request_body.task, request_body.charts,
-                         {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels or []]})
+        if not request_body.final_of_run:  # a final model shows the evaluated run's charts (run_inputs)
+            write_evaluation(request_body.path_to_save, request_body.task, request_body.charts,
+                             {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels or []]})
 
         # Save run config and column data
         config_path = os.path.join(request_body.path_to_save, "config_json.json")

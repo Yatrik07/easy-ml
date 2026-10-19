@@ -1,6 +1,6 @@
 """Easy-ML Studio: a no-code machine learning studio with a browser UI."""
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 from easyml.trainer import MLTrainer  # noqa: E402
 
@@ -31,6 +31,21 @@ def retrain(run_id, dataset_path, name=None, models=None, recipe=None):
     from easyml.retraining import retrain as _retrain
 
     return _retrain(run_id, dataset_path, name=name, models=models, recipe=recipe)
+
+
+def train_final(run_id, models=None, name=None):
+    """
+    Train the final model of a run on all its data (training and test rows), with the same settings and the
+    best parameters the run found. Its scores are the run's test scores, shown as estimates.
+
+        final = easyml.train_final(5)                 # the best model of run #5
+        final.load_model().predict("new_customers.csv")
+
+    See :func:`easyml.retraining.train_final`.
+    """
+    from easyml.retraining import train_final as _train_final
+
+    return _train_final(run_id, models=models, name=name)
 
 
 def export_run(run_id, output_path=None, include_data=True):
@@ -85,5 +100,5 @@ def __getattr__(name):
     raise AttributeError(f"module 'easyml' has no attribute {name!r}")
 
 
-__all__ = ["MLTrainer", "load_model", "retrain", "export_run", "import_run", "serve", "report", "prep",
-           "schedules", "__version__"]
+__all__ = ["MLTrainer", "load_model", "retrain", "train_final", "export_run", "import_run", "serve", "report",
+           "prep", "schedules", "__version__"]

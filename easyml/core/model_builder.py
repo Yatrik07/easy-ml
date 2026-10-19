@@ -25,7 +25,7 @@ from easyml.core.evaluation_charts import (
     tabular_importance,
     write_evaluation,
 )
-from easyml.core.evaluator import get_train_test_metrics
+from easyml.core.evaluator import get_metrics, get_train_test_metrics
 from easyml.core.cancellable_search import CancellableGridSearchCV
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
 from easyml.utils.cancellation import is_cancelled
@@ -91,6 +91,37 @@ def _cross_validate(request_body, template, model_name, task):
                           on_fold=lambda number, k: emit_progress(f"🔁 {model_name}: fold {number}/{k} done"))
 
 
+def _save_final_model(request_body, task, model_name, model, is_catboost):
+    """
+    Save a final model (trained on every row) and record its scores: the training score is measured, the
+    test and cross-validation scores are the evaluated run's (``estimated_from_run``), since no rows are
+    left to test it on.
+    """
+    labels = {'labels': list(request_body.target_encodings.keys())} if task == 'classification' else {}
+    y_pred_train = np.asarray(model.predict(request_body.X_train)).reshape(-1)
+    train_metrics = get_metrics(request_body, task, request_body.y_train, y_pred_train, **labels)
+    accuracy_train = train_metrics.get('r2_score' if task == 'regression' else 'accuracy')
+    model_path = os.path.join(request_body.path_to_save, f"{model_name}.{'cbm' if is_catboost else 'pkl'}")
+    if is_catboost:
+        model.save_model(model_path)
+    else:
+        joblib.dump(model, model_path, protocol=5)
+    estimate = request_body.estimates.get(model_name) or {}
+    request_body.performance[model_name] = {
+        "model_path": model_path,
+        "accuracy_train": round(accuracy_train, 5) if accuracy_train is not None else None,
+        "accuracy_test": estimate.get("accuracy_test"),
+        "best_params": request_body.fixed_params.get(model_name) or {},
+        "train_metrics": train_metrics,
+        "test_metrics": estimate.get("test_metrics") or {},
+        "estimated_from_run": request_body.final_of_run,
+    }
+    if estimate.get("cv"):
+        request_body.performance[model_name]["cv"] = estimate["cv"]
+    write_log(f"trained final {model_name} on {len(request_body.y_train)} rows - saved at {model_path}", "info",
+              os.path.basename(__file__))
+
+
 def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
     """
     Handles model training and evaluation for classification or regression tasks.
@@ -151,6 +182,10 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
             model_name = type(single_model).__name__
             is_catboost = model_name in CATBOOST_MODEL_NAMES
             param_grid = grid.get(model_name, {})
+            if request_body.final_of_run:
+                # The final model: the evaluated run's best settings, fitted once on every row (no search).
+                single_model.set_params(**(request_body.fixed_params.get(model_name) or {}))
+                param_grid = {}
             write_log(f"training - {single_model} - grid - {param_grid}", "info", os.path.basename(__file__))
 
             temp_dir = None
@@ -172,10 +207,16 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                 # Save and evaluate the bare model: metrics below use the original (not resampled) data.
                 best_estimator, best_params = unwrap_model(fitted, best_params)
                 cv_result = (_cross_validate(request_body, search.best_estimator_ if search_grid else estimator,
-                                             model_name, task) if request_body.cv_folds else None)
+                                             model_name, task)
+                             if request_body.cv_folds and not request_body.final_of_run else None)
             finally:
                 if temp_dir:
                     shutil.rmtree(temp_dir, ignore_errors=True)
+
+            if request_body.final_of_run:
+                _save_final_model(request_body, task, model_name, best_estimator, is_catboost)
+                emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))
+                continue
 
             y_pred_train = best_estimator.predict(request_body.X_train).reshape(-1)
             y_pred_test = best_estimator.predict(request_body.X_test).reshape(-1)
@@ -228,8 +269,9 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
             emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))
 
         labels = labels_in_code_order(request_body.target_encodings) if task == "classification" else None
-        write_evaluation(request_body.path_to_save, request_body.task, request_body.charts,
-                         {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels] if labels else None})
+        if not request_body.final_of_run:  # a final model shows the evaluated run's charts (run_inputs)
+            write_evaluation(request_body.path_to_save, request_body.task, request_body.charts,
+                             {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels] if labels else None})
 
         # Write column_data.json and config_json.json ONCE after all models are done
         column_data = {}

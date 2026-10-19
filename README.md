@@ -68,6 +68,7 @@ python -m easyml             # same as easy-ml
 - Serve any trained model as a REST API with one command (`easy-ml serve`)
 - Scheduled retraining: retrain on new data automatically and switch to the new model only when it scores better
 - Reproducible training (random seed) and optional k-fold cross-validation
+- Train the final model on all the data (training + test rows) once a model has proven itself
 - Tag, annotate and rename runs; share any run as one HTML report
 - Single-record and batch (CSV) predictions, with a data check that warns when new data looks different from the training data
 - SHAP waterfall explanations for tabular predictions
@@ -99,6 +100,7 @@ easy-ml check 5 new_customers.csv                   # does the file look like ru
 easy-ml predict 3 "my laptop got a software update" # text runs print the label
 easy-ml predict 7 photos/ -o labels.csv             # image runs: one row per image
 easy-ml retrain 5 october.csv                       # run #5's settings on new data
+easy-ml final 5                                     # run #5's best model trained on all its data
 easy-ml export 5 -o churn.zip                       # move run #5 to another computer...
 easy-ml import churn.zip                            # ...and load it there
 easy-ml serve 5                                     # REST API for run #5 on http://127.0.0.1:8000

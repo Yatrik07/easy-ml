@@ -6,6 +6,7 @@ import {
 import { openCompare } from '../store/compare.js';
 import { openInference } from '../store/inference.js';
 import { openRetrain } from '../store/retrain.js';
+import { openFinalDialog } from '../store/final.js';
 import { openScheduleDialog } from '../store/schedules.js';
 import { confirmAction, navigate } from '../store/ui.js';
 import { taskLabel } from '../store/session.js';
@@ -80,7 +81,7 @@ export default {
 
     return {
       FILTERS, query, filter, tagFilter, allTags, toggleTag, runs, filtered, remove, detail, detailTitle, openRunDetail, closeRunDetail,
-      openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel, openRetrain, importOpen, openScheduleDialog,
+      openInference, navigate, formatScore, relativeTime, absoluteTime, taskLabel, openRetrain, openFinalDialog, importOpen, openScheduleDialog,
       canSelect, toggleSelected, clearSelected, compareSelected, selectTitle, parentInList, compareWithParent,
     };
   },
@@ -205,6 +206,9 @@ export default {
                 <Icon name="download" /><span class="btn-label">Download run (.zip)</span></a>
               <button v-if="parentInList" class="btn btn-ghost btn-sm" @click="compareWithParent"><Icon name="compare_arrows" /><span class="btn-label">Compare with parent</span></button>
               <button class="btn btn-ghost btn-sm" @click="openScheduleDialog(detail.id); closeRunDetail()"><Icon name="event_available" /><span class="btn-label">Schedule</span></button>
+              <button v-if="detail.task !== 'ImageClassification' && detail.origin !== 'final'" class="btn btn-ghost btn-sm"
+                      @click="openFinalDialog(detail.id)" title="Train the chosen model again on all this run's data, for use">
+                <Icon name="verified" /><span class="btn-label">Final model</span></button>
               <button class="btn btn-secondary btn-sm" @click="openRetrain(detail.id)"><Icon name="autorenew" />Retrain</button>
               <button class="btn btn-primary btn-sm" @click="openInference(detail.id); closeRunDetail()"><Icon name="bolt" />Predict</button>
             </div>
@@ -213,6 +217,7 @@ export default {
         </div>
       </SideDrawer>
       <RetrainDialog />
+      <FinalModelDialog />
       <ScheduleDialog />
       <ImportRunDialog :open="importOpen" @close="importOpen = false" />
     </div>`,

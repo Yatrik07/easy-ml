@@ -16,7 +16,7 @@ export const training = reactive({
   result: null,
   task: '',
   stopping: false,
-  kind: 'wizard', // wizard | retrain | schedule
+  kind: 'wizard', // wizard | retrain | schedule | final
   parentRunId: null, // the run being retrained
   label: '', // the schedule's name (kind 'schedule')
   lastRequest: null, // { endpoint, payload, task, kind, parentRunId } for "Try again"
@@ -57,6 +57,11 @@ export function startTraining() {
 // Train a saved run's recipe on new data (POST /runs/<id>/retrain).
 export function startRetrain(runId, body, task) {
   return runJob({ endpoint: '/runs/' + runId + '/retrain', payload: body, task, kind: 'retrain', parentRunId: runId });
+}
+
+// Train the final model of an evaluated run on all its rows (POST /runs/<id>/final).
+export function startFinal(runId, body, task) {
+  return runJob({ endpoint: '/runs/' + runId + '/final', payload: body, task, kind: 'final', parentRunId: runId });
 }
 
 // Run a retraining schedule now (POST /schedules/<id>/run); the schedule then keeps or replaces its model.

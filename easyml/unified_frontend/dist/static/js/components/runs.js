@@ -1,6 +1,8 @@
-// Run History extras: retrain dialog, run import dialog and the "retrained from" badge.
+// Run History extras: retrain and final-model dialogs, run import dialog and the "retrained from" badge.
 import { computed, ref, watch } from '../lib/vue.js';
 import { postForm } from '../lib/api.js';
+import { formatNumber, formatScore } from '../lib/format.js';
+import { closeFinalDialog, finalModel, submitFinal, toggleFinalModel } from '../store/final.js';
 import { cleaningRecipe, closeRetrain, columnCheck, retrain, submitRetrain, uploadRetrainFile } from '../store/retrain.js';
 import { loadRuns, openRunDetail, runs, saveRunMeta } from '../store/runs.js';
 import { training } from '../store/training.js';
@@ -10,12 +12,15 @@ export const LineageBadge = {
   props: { run: Object },
   setup(props) {
     const parentExists = computed(() => runs.list.some(r => r.id === props.run.parent_run_id));
-    return { parentExists, openRunDetail };
+    const lineageText = computed(() => ({ schedule: 'Scheduled retrain of', final: 'Final model of' }[props.run.origin]
+      || 'Retrained from'));
+    const lineageIcon = computed(() => ({ schedule: 'event_available', final: 'verified' }[props.run.origin] || 'autorenew'));
+    return { parentExists, openRunDetail, lineageText, lineageIcon };
   },
   template: /* html */ `
     <button v-if="run && run.parent_run_id" class="badge badge-accent lineage" @click.stop="openRunDetail(run.parent_run_id)"
             :disabled="!parentExists" :title="parentExists ? 'Open run #' + run.parent_run_id : 'Run #' + run.parent_run_id + ' was deleted'">
-      <Icon :name="run.origin === 'schedule' ? 'event_available' : 'autorenew'" />{{ run.origin === 'schedule' ? 'Scheduled retrain of' : 'Retrained from' }} #{{ run.parent_run_id }}<span v-if="!parentExists">&nbsp;(deleted)</span>
+      <Icon :name="lineageIcon" />{{ lineageText }} #{{ run.parent_run_id }}<span v-if="!parentExists">&nbsp;(deleted)</span>
     </button>
     <span v-else-if="run && run.origin === 'import'" class="badge lineage" title="Imported from a run archive"><Icon name="move_to_inbox" />Imported</span>`,
 };
@@ -171,6 +176,48 @@ export const RetrainDialog = {
       <template #footer>
         <button class="btn btn-secondary" @click="closeRetrain">Cancel</button>
         <button class="btn btn-primary" :disabled="!ready" @click="submitRetrain"><Icon name="autorenew" />Start retraining</button>
+      </template>
+    </ModalDialog>`,
+};
+
+// Train the final model: the chosen models of an evaluated run again on all its rows, with its best settings.
+export const FinalModelDialog = {
+  setup() {
+    const run = computed(() => finalModel.run);
+    function cvText(key) {
+      const entry = run.value && run.value.metrics[key];
+      const cv = entry && entry.cv;
+      if (!cv || cv.mean === null || cv.mean === undefined) return '';
+      const spread = run.value.metric.kind === 'percent' ? formatNumber(cv.std * 100, 1) : formatNumber(cv.std, 3);
+      return 'CV ' + formatScore(cv.mean, run.value.metric) + ' ± ' + spread;
+    }
+    return { finalModel, run, cvText, formatScore, closeFinalDialog, submitFinal, toggleFinalModel };
+  },
+  template: /* html */ `
+    <ModalDialog :open="finalModel.open" :title="run ? 'Final model of run #' + run.id : 'Final model'" @close="closeFinalDialog">
+      <div v-if="finalModel.loading" class="row muted"><Spinner /> Loading run…</div>
+      <div v-else-if="run" class="stack">
+        <p class="text-sm">Trains the chosen model again on <strong>all</strong> the data of this run, its training and
+          test rows, with the same settings and the best hyperparameters the run found. More data usually makes a
+          slightly better model, so this is the one to use for predictions.</p>
+        <div class="stack-xs">
+          <div class="field-label">Models</div>
+          <label v-for="m in run.models" :key="m.key" class="check" :class="{ checked: finalModel.chosen.includes(m.key) }">
+            <input type="checkbox" :checked="finalModel.chosen.includes(m.key)" @change="toggleFinalModel(m.key)" />
+            <div><div class="check-title">{{ m.label }}<span v-if="m.key === run.best_model" class="badge badge-accent">Best</span></div>
+              <div class="check-hint">Test {{ run.metric.name }} {{ formatScore(m.score, run.metric) }}
+                <span v-if="cvText(m.key)"> · {{ cvText(m.key) }}</span></div></div>
+          </label>
+        </div>
+        <div class="alert alert-info text-sm"><Icon name="info" />
+          <div>No rows are left to test the final model on, so its scores are shown as estimates: this run's test
+            and cross-validation scores, measured on data the model had not seen.</div>
+        </div>
+      </div>
+      <template #footer>
+        <button class="btn btn-secondary" @click="closeFinalDialog">Cancel</button>
+        <button class="btn btn-primary" :disabled="!run || !finalModel.chosen.length" @click="submitFinal">
+          <Icon name="verified" />Train final model</button>
       </template>
     </ModalDialog>`,
 };

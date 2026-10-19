@@ -59,6 +59,27 @@ def _create_vectorizer(request_body: NLP_RequestBody):
         raise ValueError(f"Unknown vectorizer type: {vtype}. Use 'count', 'tfidf', or 'hashing'.")
 
 
+def _split(request_body):
+    """
+    ``(text_train, text_test, y_train, y_test)`` and the test-row bookkeeping. The final model (0.12)
+    learns from every text, so its test parts are None.
+    """
+    if request_body.final_of_run:
+        request_body.test_rows = None
+        request_body.X_text_train = request_body.X.reset_index(drop=True)
+        request_body.X_text_test = None
+        return request_body.X, None, request_body.y, None
+    text_train, text_test, y_train, y_test = train_test_split(
+        request_body.X, request_body.y,
+        test_size=0.2, random_state=request_body.random_seed,
+        stratify=_safe_stratify(request_body.y)
+    )
+    request_body.test_rows = text_test.index.to_numpy()
+    request_body.X_text_train = text_train.reset_index(drop=True)
+    request_body.X_text_test = text_test.reset_index(drop=True)
+    return text_train, text_test, y_train, y_test
+
+
 def vectorizer_controller(request_body: NLP_RequestBody):
     """
     Vectorize text using the configured vectorizer.
@@ -78,16 +99,7 @@ def vectorizer_controller(request_body: NLP_RequestBody):
         write_log("entered vectorizer_controller", "debug", os.path.basename(__file__))
 
         # Split text before vectorizing to prevent data leakage
-        text_train, text_test, y_train, y_test = train_test_split(
-            request_body.X, request_body.y,
-            test_size=0.2, random_state=request_body.random_seed,
-            stratify=_safe_stratify(request_body.y)
-        )
-
-        # Preserve text copies for reference
-        request_body.test_rows = text_test.index.to_numpy()
-        request_body.X_text_train = text_train.reset_index(drop=True)
-        request_body.X_text_test = text_test.reset_index(drop=True)
+        text_train, text_test, y_train, y_test = _split(request_body)
 
         vectorizer = _create_vectorizer(request_body)
 
@@ -95,14 +107,13 @@ def vectorizer_controller(request_body: NLP_RequestBody):
                   "info", os.path.basename(__file__))
 
         request_body.X_train = vectorizer.fit_transform(text_train)
-        request_body.X_test = vectorizer.transform(text_test)
+        request_body.X_test = vectorizer.transform(text_test) if text_test is not None else None
         request_body.vectorizer = vectorizer
 
         request_body.y_train = y_train.reset_index(drop=True)
-        request_body.y_test = y_test.reset_index(drop=True)
+        request_body.y_test = y_test.reset_index(drop=True) if y_test is not None else None
 
-        write_log(f"vectorizer output: X_train={request_body.X_train.shape}, X_test={request_body.X_test.shape}",
-                  "info", os.path.basename(__file__))
+        write_log(f"vectorizer output: X_train={request_body.X_train.shape}", "info", os.path.basename(__file__))
 
         # Save vectorizer (HashingVectorizer is stateless but we save config anyway)
         if request_body.vectorizer_type.lower() != "hashing":
@@ -167,15 +178,7 @@ def embedding_controller(request_body: NLP_RequestBody):
 
 
         # Split text before embedding
-        text_train, text_test, y_train, y_test = train_test_split(
-            request_body.X, request_body.y,
-            test_size=0.2, random_state=request_body.random_seed,
-            stratify=_safe_stratify(request_body.y)
-        )
-
-        request_body.test_rows = text_test.index.to_numpy()
-        request_body.X_text_train = text_train.reset_index(drop=True)
-        request_body.X_text_test = text_test.reset_index(drop=True)
+        text_train, text_test, y_train, y_test = _split(request_body)
 
         model_name = request_body.embedding_model
         write_log(f"loading sentence-transformer model: {model_name}", "info", os.path.basename(__file__))
@@ -199,25 +202,26 @@ def embedding_controller(request_body: NLP_RequestBody):
         )
 
 
-        write_log(f"encoding {len(text_test)} test texts", "info", os.path.basename(__file__))
-        try:
-            emit_progress(f"🔠 Encoding {len(text_test)} test texts...", pct=33)
-        except Exception:
-            pass
+        if text_test is not None:
+            write_log(f"encoding {len(text_test)} test texts", "info", os.path.basename(__file__))
+            try:
+                emit_progress(f"🔠 Encoding {len(text_test)} test texts...", pct=33)
+            except Exception:
+                pass
 
-        request_body.X_test = model.encode(
-            text_test.tolist(),
-            batch_size=request_body.embedding_batch_size,
-            show_progress_bar=False,
-            normalize_embeddings=True
-        )
-
+            request_body.X_test = model.encode(
+                text_test.tolist(),
+                batch_size=request_body.embedding_batch_size,
+                show_progress_bar=False,
+                normalize_embeddings=True
+            )
+        else:
+            request_body.X_test = None
 
         request_body.y_train = y_train.reset_index(drop=True)
-        request_body.y_test = y_test.reset_index(drop=True)
+        request_body.y_test = y_test.reset_index(drop=True) if y_test is not None else None
 
-        write_log(f"embedding output: X_train={request_body.X_train.shape}, X_test={request_body.X_test.shape}",
-                  "info", os.path.basename(__file__))
+        write_log(f"embedding output: X_train={request_body.X_train.shape}", "info", os.path.basename(__file__))
 
         # Save embedding config
         emb_config = {

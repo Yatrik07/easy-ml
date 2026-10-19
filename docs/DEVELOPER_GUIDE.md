@@ -314,6 +314,7 @@ Endpoints that act on one saved run (logic lives in `retraining.py`, `run_archiv
   `{values | text, actual, row, source}`, from the `holdout.json` test rows when present (`source: "test"`),
   else any row (`"training"`); `400` for image runs, which keep no copy of their images. Runs that clean
   their input answer with the raw row from `raw_data.csv` (the form asks for raw columns)
+- `POST /runs/<id>/final` with `{models?, name?}`: `202` with the job id; trains the final model (see Final models)
 - `POST /runs/<id>/data-check` with a multipart `file` or `{rows: [...]}`: `monitoring.datacheck.check_frame`
   against the run's training profile
 - `GET /runs/<id>/export?include_data=1`: the run archive (.zip)
@@ -442,6 +443,21 @@ Unlike training uploads, a schedule's source may be outside the data folder (the
 copied into `uploads/` before use. `/runs` summaries carry `schedule_champion_of` and
 `schedule_decision` for the Run history badges. `serving/runner.follow_schedule` polls the champion
 every 15 s and swaps a warmed-up `Predictor` into `ServeState`.
+
+### Final models (0.12.0)
+
+`retraining.plan_final(run_id, models=None, name=None)` replays the evaluated run's settings through
+`plan_retrain` on its own `data.csv` (recipe off: the data is already clean) and adds `final_of_run`,
+`fixed_params` (each model's stored `best_params`) and `estimates` (its `accuracy_test`, `test_metrics`,
+`f1_test`, `cv`). With `final_of_run` set, `pre_processing` and `nlp_feature_engineering._split` use every row
+(`X_test`/`y_test` are None), the builders fit each model once with its fixed parameters (no grid search,
+no cross-validation, no `holdout.json`) and `_save_final_model` records the measured train score plus the
+estimates with `estimated_from_run`. `config_json.json` gets `final_of_run`; the DB row gets
+`origin = "final"` and `parent_run_id`. `utils/run_inputs.inherit_from_evaluated_run` copies the evaluated
+run's `prep.json`, `raw_data.csv` and `data_profile.json`, and its `evaluation.json` (with
+`estimated_from_run`). Access: `easyml.train_final`, `easy-ml final`, `POST /runs/<id>/final` (job, UI kind
+`final`). Schedules: when the champion is a final model, a promoted challenger is refit with `plan_final`
+and that run becomes the champion. `plan_retrain` of a final model trains an evaluated run and warns.
 
 ### Reproducibility and cross-validation (0.10.0)
 

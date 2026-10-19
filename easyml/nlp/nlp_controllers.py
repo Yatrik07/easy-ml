@@ -132,7 +132,7 @@ class NLPTextClassificationController:
                  embedding_max_length=256,
                  models=None, hyper_parameter_tuning=0, imputation=True,
                  path_to_save=None, task=None, imbalance_handling="none", original_dataset_name=None, parent_run_id=None, recipe=None,
-                 random_seed=42, cv_folds=0, tags=None, **kwargs):
+                 random_seed=42, cv_folds=0, tags=None, final_of_run=None, fixed_params=None, estimates=None, **kwargs):
         """
         Initialize the NLP text classification controller.
 
@@ -204,6 +204,9 @@ class NLPTextClassificationController:
             random_seed=validate_seed(random_seed),
             cv_folds=validate_cv_folds(cv_folds),
             tags=clean_tags(tags) or None,
+            final_of_run=final_of_run,
+            fixed_params=fixed_params or {},
+            estimates=estimates or {},
         )
 
     @staticmethod
@@ -241,6 +244,10 @@ class NLPTextClassificationController:
             body = self.request_body
             record_inputs(body.path_to_save, self.source_path, body.df, [body.text_column], body.target_column,
                           recipe=body.recipe, text_column=body.text_column)
+            if body.final_of_run:
+                from easyml.utils.run_inputs import inherit_from_evaluated_run
+
+                inherit_from_evaluated_run(body.path_to_save, body.final_of_run, list(body.performance))
 
             self.request_body.run_id = enter_record_to_table(
                 "runs",
@@ -251,7 +258,8 @@ class NLPTextClassificationController:
                 dataset_name=self.request_body.original_dataset_name or os.path.basename(self.request_body.dataset_path or ""),
                 metrics_json=json.dumps(self.request_body.performance, cls=NumpyEncoder),
                 parent_run_id=self.request_body.parent_run_id,
-                origin="retrain" if self.request_body.parent_run_id else None,
+                origin=("final" if self.request_body.final_of_run
+                        else "retrain" if self.request_body.parent_run_id else None),
                 tags=tags_json(self.request_body.tags),
             )
             emit_progress("💾 Results saved to database", pct=95)
@@ -274,7 +282,8 @@ class NLPTextClassificationController:
                     "embedding_model": getattr(self.request_body, 'embedding_model', ''),
                 },
                 "imbalance_handling": getattr(self.request_body, 'imbalance_handling', 'none'),
-                "split": "80/20",
+                "split": "all rows (final model)" if self.request_body.final_of_run else "80/20",
+                "final_of_run": self.request_body.final_of_run,
                 "task": self.request_body.task,
                 "models_trained": list(self.request_body.performance.keys()),
                 "hyper_parameter_tuning": bool(getattr(self.request_body, 'hyper_parameter_tuning', False)),

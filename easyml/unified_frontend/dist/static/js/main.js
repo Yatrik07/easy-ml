@@ -9,7 +9,7 @@ import { CodeBlock, CodeTabs, CopyField } from './components/code.js';
 import { ClassDistribution, ConfusionMatrix, ModelDetail, PipelineSummary, ResultsBoard } from './components/results.js';
 import { AppSidebar, ThemeToggle, TopBar } from './components/shell.js';
 import { CnnBuilder, FolderPicker } from './components/images.js';
-import { ImportRunDialog, LineageBadge, RetrainDialog, RunMetaEditor } from './components/runs.js';
+import { FinalModelDialog, ImportRunDialog, LineageBadge, RetrainDialog, RunMetaEditor } from './components/runs.js';
 import {
   AddStepDialog, MappingField, PreviewTable, ProfileTable, RecipesDialog, SaveRecipeDialog, StepForm, StepList, TrainDialog,
 } from './components/prep.js';
@@ -28,7 +28,7 @@ const components = {
   PipelineSummary, ConfusionMatrix, ModelDetail, ResultsBoard, ClassDistribution,
   AppSidebar, TopBar, ThemeToggle,
   FolderPicker, CnnBuilder,
-  RetrainDialog, ImportRunDialog, LineageBadge, RunMetaEditor,
+  RetrainDialog, ImportRunDialog, LineageBadge, RunMetaEditor, FinalModelDialog,
   AddStepDialog, MappingField, PreviewTable, ProfileTable, RecipesDialog, SaveRecipeDialog, StepForm, StepList, TrainDialog,
   ScheduleDialog, ScheduleEventsDialog, ScheduleBadges,
   ModelCharts, RocChart, PrChart, ScatterChart, ResidualChart, ImportanceChart, TopTerms, ContributionChart,

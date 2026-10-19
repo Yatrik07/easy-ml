@@ -3,6 +3,23 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.12.0 (2026-10-18)
+
+The final model.
+
+- **Train final model**: once cross-validation and the test set show a model is good, train it again on
+  all the data, training and test rows, with the same settings and the best hyperparameters the run found.
+  It is the model to use. With no rows left to test it on, its scores are the evaluated run's test and
+  cross-validation scores, clearly marked as estimates ("Expected R²", "Final model of #5"). In the studio:
+  **Train final model** on the Results page and **Final model** in a run's details; also
+  `easyml.train_final(5)`, `easy-ml final 5` and `POST /runs/<id>/final`. Image runs are not supported
+  (they need their validation images to decide when to stop training).
+- Schedules whose model in use is a final model stay final: a better new model is trained again on all the
+  new data before it is put in use.
+- Retraining a final model trains an evaluated run again (with a test set) and says so.
+- Dialogs opened from a run's details (such as **Retrain**) no longer open hidden behind the details panel.
+- `easy-ml serve` with an unknown run says so, even when the port is busy.
+
 ## 0.11.0 (2026-10-18)
 
 Predict the way you trained.

@@ -164,22 +164,37 @@ export const ResultsBoard = {
     }
     const expanded = ref(null);
     function toggle(key) { expanded.value = expanded.value === key ? null : key; }
-    const hints = computed(() => rows.value
+    // A final model (trained on every row) has no test set: its test scores are its evaluated run's.
+    const estimatedFrom = computed(() => {
+      const row = rows.value.find(r => r.entry && r.entry.estimated_from_run);
+      return row ? row.entry.estimated_from_run : null;
+    });
+    const hints = computed(() => (estimatedFrom.value ? [] : rows.value
       .filter(r => overfitHint(r, metric.value))
-      .map(r => ({ key: r.key, label: r.label, train: formatScore(r.train, metric.value), test: formatScore(r.test, metric.value) })));
+      .map(r => ({ key: r.key, label: r.label, train: formatScore(r.train, metric.value), test: formatScore(r.test, metric.value) }))));
     return {
-      metric, rows, isRegression, showF1, showCv, cvText, cvTitle, expanded, toggle, hints, formatScore, formatNumber, formatMape, formatPercent,
+      metric, rows, isRegression, showF1, showCv, cvText, cvTitle, expanded, toggle, hints, estimatedFrom,
+      formatScore, formatNumber, formatMape, formatPercent,
     };
   },
   template: /* html */ `
     <div class="stack">
       <PipelineSummary v-if="summary" :summary="summary" :task="task" />
 
+      <div v-if="estimatedFrom" class="alert alert-info">
+        <Icon name="verified" />
+        <div><strong>Final model, trained on all the data of run #{{ estimatedFrom }}.</strong>
+          No rows were left to test it on, so its test and cross-validation scores (and charts) are run
+          #{{ estimatedFrom }}'s, measured on data the model had not seen: expect about that score in use.
+          Its train score is measured on all the rows.</div>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <div>
             <h3>Leaderboard</h3>
-            <div class="card-hint">Models ranked by test-set {{ metric.name }}. Select a model to see its details.</div>
+            <div v-if="estimatedFrom" class="card-hint">Expected {{ metric.name }} from run #{{ estimatedFrom }}'s test set. Select a model to see its details.</div>
+            <div v-else class="card-hint">Models ranked by test-set {{ metric.name }}. Select a model to see its details.</div>
           </div>
           <slot name="actions" />
         </div>
@@ -188,7 +203,7 @@ export const ResultsBoard = {
             <thead>
               <tr>
                 <th>#</th><th>Model</th>
-                <th class="right">Test {{ metric.name }}</th>
+                <th class="right" :title="estimatedFrom ? 'Test score of run #' + estimatedFrom : ''">{{ estimatedFrom ? 'Expected' : 'Test' }} {{ metric.name }}</th>
                 <th class="right">Train {{ metric.name }}</th>
                 <th v-if="showCv" class="right" title="Mean ± spread over the cross-validation folds">CV {{ metric.name }}</th>
                 <th v-if="showF1" class="right">Test F1</th>

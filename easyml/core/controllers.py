@@ -3,7 +3,7 @@ import os
 import traceback
 
 from easyml.core.seeding import validate_cv_folds, validate_seed
-from easyml.utils.run_inputs import record_inputs, recipe_from_sidecars
+from easyml.utils.run_inputs import inherit_from_evaluated_run, record_inputs, recipe_from_sidecars
 from easyml.utils.run_meta import clean_tags, tags_json
 from easyml.config.GLOBAL_VARS import ML_RequestBody, error_code_mappings
 from easyml.core.model_builder import ml_model_builder_trainer_controller
@@ -28,7 +28,8 @@ class _TabularController:
     def __init__(self, name, dataset_path, target_column, timestamp, preprocessing=True, imputation=False, scaling=False,
                  models=None, hyper_parameter_tuning=0, categorical_columns=None, path_to_save=None,
                  reduce_features=False, ignore_columns=None, task=None, imbalance_handling="none",
-                 original_dataset_name=None, parent_run_id=None, recipe=None, random_seed=42, cv_folds=0, tags=None, **kwargs):
+                 original_dataset_name=None, parent_run_id=None, recipe=None, random_seed=42, cv_folds=0, tags=None,
+                 final_of_run=None, fixed_params=None, estimates=None, **kwargs):
         """
         Args:
             name (str): Name of the run.
@@ -47,6 +48,8 @@ class _TabularController:
             task (str): Task type (e.g., 'MLClassification').
             imbalance_handling (str): Resampling method for classification ("none", "smote", ...).
             parent_run_id (int): The run this one retrains, if any.
+            final_of_run (int): Train the final model of this evaluated run: every row, its best parameters
+                (``fixed_params``), its test scores as estimates (``estimates``); see ``retraining.plan_final``.
         """
 
         # A file cleaned by Data prep carries its frozen recipe next to it (see easyml.dataprep.frozen).
@@ -76,6 +79,9 @@ class _TabularController:
             random_seed=validate_seed(random_seed),
             cv_folds=validate_cv_folds(cv_folds),
             tags=clean_tags(tags) or None,
+            final_of_run=final_of_run,
+            fixed_params=fixed_params or {},
+            estimates=estimates or {},
         )
 
     supports_imbalance_handling = False
@@ -88,7 +94,9 @@ class _TabularController:
             emit_progress("⚙️ Initializing pipeline and loading data...", pct=5)
 
             data_loader(self.request_body)
-            emit_progress("🧹 Validating and splitting dataset into train/test...", pct=15)
+            emit_progress("🧹 Validating the dataset (final model: every row is used for training)..."
+                          if self.request_body.final_of_run else "🧹 Validating and splitting dataset into train/test...",
+                          pct=15)
 
             preprocessing_controller(self.request_body)
             emit_progress("🔧 Applying preprocessing and feature engineering...", pct=35)
@@ -98,6 +106,9 @@ class _TabularController:
             record_inputs(self.request_body.path_to_save, self.source_path, self.request_body.df,
                           list(self.request_body.X.columns), self.request_body.target_column,
                           recipe=self.request_body.recipe)
+            if self.request_body.final_of_run:
+                inherit_from_evaluated_run(self.request_body.path_to_save, self.request_body.final_of_run,
+                                           list(self.request_body.performance))
 
             dataset_name = self.request_body.original_dataset_name or os.path.basename(self.request_body.dataset_path or "")
             self.request_body.run_id = enter_record_to_table(
@@ -109,7 +120,8 @@ class _TabularController:
                 dataset_name=dataset_name,
                 metrics_json=json.dumps(self.request_body.performance, cls=NumpyEncoder),
                 parent_run_id=self.request_body.parent_run_id,
-                origin="retrain" if self.request_body.parent_run_id else None,
+                origin=("final" if self.request_body.final_of_run
+                        else "retrain" if self.request_body.parent_run_id else None),
                 tags=tags_json(self.request_body.tags),
             )
             emit_progress("💾 Results saved to database", step=4, total_steps=5)
@@ -129,7 +141,8 @@ class _TabularController:
                     "ignored_columns": self.request_body.ignore_columns or [],
                 },
                 "imbalance_handling": self.request_body.imbalance_handling,
-                "split": "80/20",
+                "split": "all rows (final model)" if self.request_body.final_of_run else "80/20",
+                "final_of_run": self.request_body.final_of_run,
                 "task": self.request_body.task,
                 "models_trained": list(self.request_body.performance.keys()),
                 "hyper_parameter_tuning": bool(self.request_body.hyper_parameter_tuning),

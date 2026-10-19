@@ -61,7 +61,8 @@ def list_runs(task=None, limit=20, as_json=False, out=None, tag=None):
     for s in summaries:
         table.append((
             str(s["id"]), s["run_name"] or "", s["task_label"], s["dataset_name"] or "",
-            s["best_model"] or "-", _format_score(s["best_score"], s["metric"]),
+            s["best_model"] or "-",
+            _format_score(s["best_score"], s["metric"]) + (" (est.)" if s.get("origin") == "final" else ""),
             (s["timestamp"] or "").replace("T", " "),
         ) + ((", ".join(s["tags"]),) if with_tags else ()))
     widths = [min(max(len(row[i]) for row in table), 32) for i in range(len(table[0]))]
@@ -249,6 +250,33 @@ def _print_leaderboard(task, performance, out):
     print(f"  {'MODEL'.ljust(width)}  TEST {metric['name']}", file=out)
     for m in ranked:
         print(f"  {m['label'].ljust(width)}  {_format_score(m['test_score'], metric)}", file=out)
+
+
+def final(run_id, models=None, name=None, as_json=False, out=None):
+    """Train the final model of a run on all its data (training and test rows)."""
+    _quiet_logs()
+    from easyml.retraining import train_final
+    from easyml.utils.database_operations import RunNotFoundError
+
+    out = out or sys.stdout
+    try:
+        result = train_final(run_id, models=models, name=name)
+    except RunNotFoundError:
+        print(f"Run {run_id} was not found. List your runs with `easy-ml runs`.", file=sys.stderr)
+        return 1
+    except (ValueError, FileNotFoundError, ImportError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if as_json:
+        print(json.dumps({"run_id": result.run_id, "final_of_run": result.parent_run_id, "name": result.run_name,
+                          "models": list(result.performance), "warnings": result.warnings}, indent=2), file=out)
+        return 0
+    for warning in result.warnings:
+        print(f"Note: {warning}", file=sys.stderr)
+    print(f"Run #{result.run_id} ({result.run_name}): the final model of run #{result.parent_run_id}, trained on all "
+          f"its rows. Its expected score is run #{result.parent_run_id}'s test score.", file=out)
+    print(f"Use it: easy-ml predict {result.run_id} new_data.csv", file=out)
+    return 0
 
 
 def retrain(run_id, data, name=None, models=None, as_json=False, out=None, recipe=None):
