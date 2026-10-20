@@ -9,6 +9,8 @@ preview). ``STEP_SPECS`` describes each step's parameters; the studio builds its
 import numpy as np
 import pandas as pd
 
+from easyml.utils.frames import is_text
+
 TRUE_WORDS = {"true", "yes", "y", "1", "t"}
 FALSE_WORDS = {"false", "no", "n", "0", "f"}
 
@@ -87,7 +89,7 @@ def change_type(frame, columns=(), to="number"):
         series = frame[column]
         if to == "number":
             # plain str (not pandas' nullable "string") so the result is an ordinary float64/int64 column
-            source = series.astype(str).str.strip() if series.dtype == object else series
+            source = series.astype(str).str.strip() if is_text(series) else series
             new = pd.to_numeric(source, errors="coerce")
         elif to == "date":
             new = pd.to_datetime(series, errors="coerce", format="mixed")
@@ -128,7 +130,7 @@ OPERATORS = ("eq", "ne", "gt", "ge", "lt", "le", "contains", "starts_with", "end
 def _row_mask(series, operator, value):
     if operator == "is_empty":
         empty = series.isna()
-        if series.dtype == object:
+        if is_text(series):
             empty |= series.astype("string").str.strip().eq("").fillna(False)
         return empty
     if operator == "not_empty":
@@ -231,7 +233,7 @@ def replace_values(frame, column=None, mapping=None):
 def clean_text(frame, columns=(), trim=True, case="none", collapse_spaces=False):
     columns = _columns(frame, {"columns": columns}, default_all=False)
     if not columns:
-        columns = [c for c in frame.columns if frame[c].dtype == object]
+        columns = [c for c in frame.columns if is_text(frame[c])]
     changes = {}
     for column in columns:
         series = frame[column]

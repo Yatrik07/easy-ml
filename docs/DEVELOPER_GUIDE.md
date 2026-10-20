@@ -1301,3 +1301,9 @@ If you are working on a specific area:
 - NLP: start with `easyml/nlp/`
 - CV: start with `easyml/cv/`
 - app wiring and endpoints: start with `app_factory.py` and the route modules
+
+pandas 2 and pandas 3 are both supported (a core install on Python 3.11 or later gets pandas 3). pandas 3
+reads text columns as the `str` dtype instead of `object`, so test for text with
+`easyml.utils.frames.is_text(series)`, never `series.dtype == object`. In pandas 3, `astype(str)` keeps
+missing values missing (`frames.as_texts` gives the older `"nan"` strings), and putting a number into a
+text column raises an error.

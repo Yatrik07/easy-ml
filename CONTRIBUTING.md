@@ -37,7 +37,8 @@ python -m build && twine check --strict dist/*                # packaging
 
 Tests that need an optional library (boosters, spaCy, PyTorch, SHAP) skip themselves when it is missing.
 CI runs the suite on Python 3.10, 3.11 and 3.12, and once more on a basic install. That second run catches
-optional libraries leaking into the core, so it is worth running `pytest` in a venv with only `.[dev]` too.
+optional libraries leaking into the core, and it is the one that gets pandas 3, so it is worth running
+`pytest` in a Python 3.11+ venv with only `.[dev]` too.
 
 ## Ground rules
 
@@ -46,6 +47,8 @@ optional libraries leaking into the core, so it is worth running `pytest` in a v
   `capabilities.optional_import(...)`. Never import them at the top of a core module.
 - **Same results.** Speed-ups and refactors must keep metrics, predictions and saved files identical.
   Randomized code takes the run's `random_seed`, never a fixed number.
+- **pandas 2 and 3 both work.** pandas 3 reads text as the `str` dtype, not `object`: test for text with
+  `easyml.utils.frames.is_text(series)`, never `series.dtype == object`.
 - **Errors become proper HTTP errors.** Use `route_helpers.error_response(exc)`; never return an error with
   status 200.
 - **The frontend has no build step.** It is Vue 3 as plain ES modules in `easyml/unified_frontend/dist`.

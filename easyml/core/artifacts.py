@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from easyml.config.constants import CATBOOST_MODEL_NAMES
+from easyml.utils.frames import is_text
 
 _MODEL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -144,7 +145,7 @@ def coerce_feature_frame(df, column_data):
     """
     df = df.copy()
     for col in df.columns:
-        if df[col].dtype == object:
+        if is_text(df[col]):
             df[col] = df[col].where(~_blank_strings(df[col]), np.nan)
 
     dtypes = column_data.get("column_dtypes") or {}

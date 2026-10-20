@@ -21,6 +21,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from easyml.utils.frames import is_text
+
 FORMAT_VERSION = 1
 PREP_FILE = "prep.json"
 RAW_DATA_FILE = "raw_data.csv"
@@ -197,7 +199,7 @@ def _freeze(op, before, params):
                 "rights": [float(iv.right) for iv in categories],
                 "labels": [str(iv) for iv in categories]}
     if op == "clean_text":
-        columns = list(params.get("columns") or []) or [c for c in before.columns if before[c].dtype == object]
+        columns = list(params.get("columns") or []) or [c for c in before.columns if is_text(before[c])]
         return {"params": {**params, "columns": columns}}
     if op == "round_numbers":
         columns = list(params.get("columns") or []) or _number_columns(before)

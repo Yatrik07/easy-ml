@@ -3,6 +3,16 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.12.1 (2026-10-20)
+
+Works with pandas 3.
+
+- New installs on Python 3.11 and later get pandas 3, which stores text columns differently. With it,
+  empty form fields and empty cells in text columns were not treated as missing (in predictions and the
+  data check), and **Clean text** with no columns chosen cleaned nothing. Both now work as on pandas 2.
+- Predicting a CSV with an empty text cell no longer fails on pandas 3.
+- The automatic tests on GitHub pass again on Linux, with pandas 2 and 3 and the newest Socket.IO server.
+
 ## 0.12.0 (2026-10-18)
 
 The final model.

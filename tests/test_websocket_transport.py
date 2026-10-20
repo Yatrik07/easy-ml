@@ -55,7 +55,19 @@ def _close_like_a_browser(sock):
     after_close = _recv(sock, timeout=3)
     sock.close()
     assert b"HTTP/1.1" not in after_close, after_close
-    assert after_close == b"\x88\x00"  # nothing but the server's close frame
+    frames = _server_frames(after_close)
+    # nothing but the server's close frame, after at most Engine.IO no-op packets ("6", sent by python-engineio 4.14)
+    assert frames and frames[-1] == (8, b"") and all(f == (1, b"6") for f in frames[:-1]), after_close
+
+
+def _server_frames(data):
+    """Split unmasked server frames with short payloads into (opcode, payload) pairs."""
+    frames = []
+    while len(data) >= 2:
+        opcode, length = data[0] & 0x0F, data[1] & 0x7F
+        frames.append((opcode, data[2:2 + length]))
+        data = data[2 + length:]
+    return frames if not data else frames + [(None, data)]
 
 
 def test_direct_websocket_closes_cleanly(server_port):

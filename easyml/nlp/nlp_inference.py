@@ -22,6 +22,7 @@ from easyml.nlp.nlp_feature_engineering import (
 )
 from easyml.core.artifacts import load_frozen_recipe, validate_model_name
 from easyml.utils.database_operations import get_record_by_id
+from easyml.utils.frames import as_texts
 from easyml.utils.labels import decoder_from_config
 from easyml.utils.logger import write_log
 from easyml.utils.utils import convert_numpy
@@ -108,7 +109,7 @@ class NLPInferenceController:
             return self.predict_texts(texts, cleaned_input=True)
         if self.text_column not in frame.columns:
             raise ValueError(f"Column {self.text_column!r} not found.")
-        return self.predict_texts(frame[self.text_column].astype(str).tolist(), cleaned_input=True)
+        return self.predict_texts(as_texts(frame[self.text_column]), cleaned_input=True)
 
     def predict_texts(self, texts, cleaned_input=None):
         """

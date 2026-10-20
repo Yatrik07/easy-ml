@@ -23,6 +23,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from easyml.utils.frames import is_text
+
 PROFILE_FILE = "data_profile.json"
 PROFILE_VERSION = 1
 MIN_ROWS = 30          # fewer rows: only row-by-row checks
@@ -169,7 +171,7 @@ def check_rows(profile, frame, limit=50):
         if column not in frame.columns:
             continue
         series = frame[column].reset_index(drop=True)
-        if series.dtype == object:
+        if is_text(series):
             blank = series.astype(str).str.strip().eq("") & series.notna()
             series = series.where(~blank, np.nan)
         empty = series.isna()
@@ -319,7 +321,7 @@ def check_frame(profile, frame):
             report["missing_columns"].append(column)
             continue
         series = frame[column]
-        if series.dtype == object:
+        if is_text(series):
             series = series.where(~(series.astype(str).str.strip().eq("") & series.notna()), np.nan)
         entry = _check_column(column, info, series, enough)
         if not enough and entry["status"] == "major":

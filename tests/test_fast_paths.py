@@ -201,7 +201,7 @@ def _coerce_reference(df, column_data):
     """coerce_feature_frame as it was before the per-column shortcuts (the reference behaviour)."""
     df = df.copy()
     for col in df.columns:
-        if df[col].dtype == object:
+        if df[col].dtype == object or isinstance(df[col].dtype, pd.StringDtype):  # text: object, or str on pandas 3
             blank = df[col].map(lambda v: isinstance(v, str) and not v.strip())
             df[col] = df[col].where(~blank, np.nan)
     dtypes = column_data.get("column_dtypes") or {}

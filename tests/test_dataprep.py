@@ -85,7 +85,7 @@ def test_value_steps():
     assert replaced["city"][2] == "Los Angeles" and pd.isna(replaced["city"][5])
     assert _run("replace_values", column="age", mapping={"300": "30"})[0]["age"][4] == 30.0
     cleaned, _ = _run("clean_text", columns=["city"], case="upper")
-    assert cleaned["city"].tolist()[:2] == ["NY", "NY"] and cleaned["city"][4] is None
+    assert cleaned["city"].tolist()[:2] == ["NY", "NY"] and pd.isna(cleaned["city"][4])  # None, or NaN on pandas 3
     mixed = pd.DataFrame({"m": [" a ", 5, None]})
     assert _run("clean_text", mixed, columns=["m"])[0]["m"].tolist()[:2] == ["a", 5]
     clipped, _ = _run("clip_outliers", columns=["age"])

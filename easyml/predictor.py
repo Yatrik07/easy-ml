@@ -215,6 +215,8 @@ class Predictor:
             return None
 
     def _predict_text(self, data, text_column=None, frame=None, cleaned=None):
+        from easyml.utils.frames import as_texts
+
         if isinstance(data, (str, os.PathLike)) and str(data).lower().endswith((".csv", ".xlsx", ".xls")) \
                 and os.path.isfile(str(data)):
             if frame is None:  # the CLI passes the frame it already loaded
@@ -227,7 +229,7 @@ class Predictor:
                 return controller.predict_frame_texts(frame, cleaned=cleaned)  # cleaned with the run's recipe
             if column not in frame.columns:
                 raise ValueError(f"Column {column!r} not found in {data}. Pass text_column=... to choose one.")
-            texts = frame[column].astype(str).tolist()
+            texts = as_texts(frame[column])
         elif isinstance(data, str):
             texts = [data]
         elif isinstance(data, (list, tuple)):
@@ -236,7 +238,7 @@ class Predictor:
             import pandas as pd
 
             if isinstance(data, pd.Series):
-                texts = data.astype(str).tolist()
+                texts = as_texts(data)
             else:
                 raise TypeError("Text input must be a string, a list of strings, or a CSV path.")
 
