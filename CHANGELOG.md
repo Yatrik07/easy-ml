@@ -3,6 +3,29 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.13.0 (2026-10-20)
+
+Several columns to predict.
+
+- **Predict several columns in one table run**: for example a house's `price` and `rent`, or several yes/no
+  label columns. Add them with **Predict more columns** in the Data step, or pass a list as `target_column`
+  in Python.
+- **Each column gets its own copy of every model**, trained, tuned and cross-validated on that column
+  alone, so no column's accuracy is traded for another's.
+- **Weights** say which columns matter most. They decide how the columns' scores add up into the run's score,
+  which ranks the models, and never change a column's predictions.
+- **Results** show the weighted score, a table of every model's score per column with each column's best
+  model marked, and per-column details and charts. Classification also shows the share of rows with every
+  column right.
+- **Best for each target**: predictions use, for each column, the model that did best on it (the default for
+  these runs).
+- **Everything that predicts handles several columns**: the prediction form (one answer per column),
+  CSV files (a `Prediction: <column>` column each), `easy-ml predict`, Python (one `{column: value}` dict
+  per row), `easy-ml serve`, **Export as API**, explanations (choose the column), reports, retraining,
+  final models and schedules.
+- `easyml.export_run` accepts a `pathlib.Path` as the output path.
+- Card headers wrap on narrow screens (the uploaded file's buttons no longer widen the page on phones).
+
 ## 0.12.1 (2026-10-20)
 
 Works with pandas 3.

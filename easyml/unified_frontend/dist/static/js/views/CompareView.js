@@ -113,7 +113,7 @@ export default {
               <button class="btn btn-ghost btn-sm" @click="openInference(side.detail.id)"><Icon name="bolt" />Predict</button>
             </div>
             <h3>{{ side.detail.run_name }}</h3>
-            <div class="run-sub"><span>#{{ side.detail.id }}</span><TaskBadge :task="side.detail.task" /><LineageBadge :run="side.detail" /></div>
+            <div class="run-sub"><span>#{{ side.detail.id }}</span><TaskBadge :task="side.detail.task" /><LineageBadge :run="side.detail" /><TargetsBadge :run="side.detail" /></div>
             <dl class="kv">
               <dt>Dataset</dt><dd>{{ side.detail.dataset_name || '—' }}</dd>
               <dt>Created</dt><dd>{{ absoluteTime(side.detail.timestamp) }}</dd>

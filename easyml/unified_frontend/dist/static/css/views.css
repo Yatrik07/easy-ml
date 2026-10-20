@@ -154,6 +154,21 @@ button.lineage:disabled { cursor: default; opacity: 0.7; }
 .team-card .team-name { font-weight: 700; }
 .link-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 
+/* ---------- Several columns to predict ---------- */
+.target-list { display: flex; flex-direction: column; gap: var(--space-2); border-top: 1px solid var(--border); }
+.target-item { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.target-item .badge { max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+.target-weight { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: auto;
+  font-size: var(--text-sm); color: var(--text-muted); }
+.target-weight .input { width: 84px; height: 32px; }
+.target-picker { max-width: 320px; }
+.target-answers { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.target-answer { display: flex; flex-direction: column; gap: 2px; padding: var(--space-3); border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface-2); min-width: 0; }
+.target-answer .target-name { font-size: var(--text-xs); color: var(--text-subtle); font-weight: 600; overflow-wrap: anywhere; }
+.target-answer .target-value { font-size: var(--text-lg); font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.target-scores td.winner { color: var(--accent); font-weight: 700; }
+
 /* ---------- Data preview ---------- */
 .preview-table td { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

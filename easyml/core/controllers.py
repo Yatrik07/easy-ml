@@ -2,6 +2,7 @@ import json
 import os
 import traceback
 
+from easyml.core.multi_target import clean_targets, clean_weights
 from easyml.core.seeding import validate_cv_folds, validate_seed
 from easyml.utils.run_inputs import inherit_from_evaluated_run, record_inputs, recipe_from_sidecars
 from easyml.utils.run_meta import clean_tags, tags_json
@@ -25,16 +26,20 @@ class _TabularController:
 
     label = ""
 
-    def __init__(self, name, dataset_path, target_column, timestamp, preprocessing=True, imputation=False, scaling=False,
+    def __init__(self, name, dataset_path, target_column=None, timestamp="", preprocessing=True, imputation=False,
+                 scaling=False,
                  models=None, hyper_parameter_tuning=0, categorical_columns=None, path_to_save=None,
                  reduce_features=False, ignore_columns=None, task=None, imbalance_handling="none",
                  original_dataset_name=None, parent_run_id=None, recipe=None, random_seed=42, cv_folds=0, tags=None,
-                 final_of_run=None, fixed_params=None, estimates=None, **kwargs):
+                 final_of_run=None, fixed_params=None, estimates=None, target_columns=None, target_weights=None,
+                 **kwargs):
         """
         Args:
             name (str): Name of the run.
             dataset_path (str): Path to the dataset file.
-            target_column (str): Name of the target column.
+            target_column (str or list): Name of the target column, or a list of several (0.13; also
+                ``target_columns``). Each target gets its own models; ``target_weights`` ({column: 0.1-10})
+                weigh the targets' scores in the run's score.
             timestamp (str): Timestamp of the run.
             preprocessing (bool): Whether to perform preprocessing.
             imputation (bool): Whether to apply missing value imputation.
@@ -52,6 +57,17 @@ class _TabularController:
                 (``fixed_params``), its test scores as estimates (``estimates``); see ``retraining.plan_final``.
         """
 
+        target_column, target_columns = clean_targets(target_column, target_columns)
+        if target_columns:
+            target_weights = clean_weights(target_weights, target_columns)
+            left_out = [t for t in target_columns if t in (ignore_columns or [])]
+            if left_out:
+                raise ValueError(f"'{left_out[0]}' is a column to predict, so it cannot also be left out.")
+            if self.supports_imbalance_handling and (imbalance_handling or "none").lower() != "none":
+                raise ValueError("Class balance (resampling) is not available with several columns to predict.")
+        elif target_weights:
+            raise ValueError("Target weights need several columns to predict.")
+
         # A file cleaned by Data prep carries its frozen recipe next to it (see easyml.dataprep.frozen).
         self.source_path = dataset_path
         recipe = recipe or recipe_from_sidecars(dataset_path)
@@ -59,6 +75,8 @@ class _TabularController:
             name=name,
             dataset_path=dataset_path,
             target_column=target_column,
+            target_columns=target_columns,
+            target_weights=target_weights or {},
             # Inference always loads preprocessing_pipeline.pkl, so the pipeline is always built.
             preprocessing=True,
             scaling=scaling,
@@ -104,7 +122,8 @@ class _TabularController:
             emit_progress(f"🤖 Training {self.label.lower()} models...", pct=45)
             ml_model_builder_trainer_controller(self.request_body)
             record_inputs(self.request_body.path_to_save, self.source_path, self.request_body.df,
-                          list(self.request_body.X.columns), self.request_body.target_column,
+                          list(self.request_body.X.columns),
+                          self.request_body.target_columns or self.request_body.target_column,
                           recipe=self.request_body.recipe)
             if self.request_body.final_of_run:
                 inherit_from_evaluated_run(self.request_body.path_to_save, self.request_body.final_of_run,
@@ -148,6 +167,9 @@ class _TabularController:
                 "hyper_parameter_tuning": bool(self.request_body.hyper_parameter_tuning),
                 "parent_run_id": self.request_body.parent_run_id,
             }
+            if self.request_body.target_columns:
+                pipeline_summary["targets"] = self.request_body.target_columns
+                pipeline_summary["target_weights"] = self.request_body.target_weights
 
             response_payload = {
                 "status_code": 200,

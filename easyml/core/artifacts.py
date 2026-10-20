@@ -31,11 +31,12 @@ def model_file_path(folder_path, model_name):
     Return the path of a saved tabular model.
 
     CatBoost models are stored natively as ``<Model>.cbm``; runs created before 0.4.0
-    used ``<Model>.pkl.cbm``, which is still accepted.
+    used ``<Model>.pkl.cbm``, which is still accepted. Runs with several targets (0.13) pickle every
+    model, CatBoost included, as ``<Model>.pkl``.
     """
     validate_model_name(model_name)
     if model_name in CATBOOST_MODEL_NAMES:
-        candidates = [f"{model_name}.cbm", f"{model_name}.pkl.cbm"]
+        candidates = [f"{model_name}.cbm", f"{model_name}.pkl.cbm", f"{model_name}.pkl"]
     else:
         candidates = [f"{model_name}.pkl"]
 
@@ -49,7 +50,15 @@ def model_file_path(folder_path, model_name):
 def load_tabular_model(folder_path, model_name, task):
     """The saved model (shared, read-only: reused between calls while the file is unchanged)."""
     from easyml.core.model_cache import cached_load
+    from easyml.core.multi_target import BEST_FOR_EACH_TARGET, best_for_each_target
 
+    if model_name == BEST_FOR_EACH_TARGET:
+        # Put together from the run's saved models, so it is cached under the run's config file.
+        config_path = os.path.join(folder_path, "config_json.json")
+        if not os.path.exists(config_path):
+            raise FileNotFoundError("This run has no best model for each target.")
+        return cached_load("tabular_model", config_path, lambda: best_for_each_target(folder_path, task),
+                           extra=(BEST_FOR_EACH_TARGET,))
     path = model_file_path(folder_path, model_name)
     is_regression = "regression" in (task or "").lower()
     return cached_load("tabular_model", path, lambda: _load_tabular_model(path, model_name, task),
@@ -57,7 +66,7 @@ def load_tabular_model(folder_path, model_name, task):
 
 
 def _load_tabular_model(path, model_name, task):
-    if model_name in CATBOOST_MODEL_NAMES:
+    if model_name in CATBOOST_MODEL_NAMES and not path.endswith(".pkl"):
         if "regression" in task.lower():
             from catboost import CatBoostRegressor
             model = CatBoostRegressor()
@@ -216,6 +225,9 @@ def sample_row(folder_path, task, rng=None):
     target = config.get("target_column")
     result = {"row": int(row), "source": "test" if holdout else "training",
               "actual": _python_value(frame[target].iloc[row]) if target in frame.columns else None}
+    if len(config.get("target_columns") or []) > 1:  # several columns to predict: {target: value}
+        result["actual"] = {t: _python_value(frame[t].iloc[row]) if t in frame.columns else None
+                            for t in config["target_columns"]}
     raw = _raw_rows(folder_path)
     raw_row = raw[1].iloc[row] if raw is not None and row < len(raw[1]) else None
     if task == "NLPTextClassification":

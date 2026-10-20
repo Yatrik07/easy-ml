@@ -38,7 +38,17 @@ def _normalise(values):
     return series.astype(str).str.strip().to_numpy()
 
 
-def score(task, truth, predictions):
+def score(task, truth, predictions, weights=None):
+    """
+    The task's metric on ``truth``. With several target columns (0.13) truth and predictions are
+    ``{target: value}`` rows, and the score is the targets' scores averaged with ``weights``.
+    """
+    if len(truth) and isinstance(truth[0], dict):
+        from easyml.core.multi_target import weighted_mean
+
+        targets = list(truth[0])
+        scores = [score(task, [row[t] for row in truth], [row[t] for row in predictions]) for t in targets]
+        return weighted_mean(scores, [float((weights or {}).get(t, 1)) for t in targets])
     if task == "MLRegression":
         from sklearn.metrics import r2_score
 
@@ -69,7 +79,16 @@ def holdout_inputs(run_id):
     part = frame.iloc[rows]
     if task == TEXT_TASK:
         return task, part[config["text_column"]].astype(str).tolist(), part[target].tolist()
+    if len(config.get("target_columns") or []) > 1:  # several columns to predict: {target: value} per row
+        targets = list(config["target_columns"])
+        return task, part.drop(columns=targets), part[targets].to_dict("records")
     return task, part.drop(columns=[target]), part[target].tolist()
+
+
+def _target_weights(run_id):
+    from easyml.core.artifacts import read_json
+
+    return read_json(_record(run_id).get("folder_path") or "", "config_json.json").get("target_weights") or {}
 
 
 def holdout_raw_inputs(run_id):
@@ -127,13 +146,14 @@ def compare(champion_id, challenger_id):
             raw = holdout_raw_inputs(challenger_id)
         except Exception:  # raw rows are a refinement: fall back to the cleaned rows
             raw = None
+        weights = _target_weights(challenger_id)
         try:
-            challenger = score(task, truth, _predict(challenger_id, data, raw))
+            challenger = score(task, truth, _predict(challenger_id, data, raw), weights)
         except Exception as exc:
             note = f"The new model could not score its test rows ({exc})."
         else:
             try:
-                champion = score(task, truth, _predict(champion_id, data, raw))
+                champion = score(task, truth, _predict(champion_id, data, raw), weights)
             except Exception as exc:
                 note = (f"Run #{champion_id} could not predict the new data ({exc}), "
                         "so the runs' own test scores were compared.")

@@ -34,7 +34,15 @@ export const inference = reactive({
   cleaning: null, // {name, steps, automatic}: the data-prep recipe of a run trained on cleaned data
   dataCheck: null, // the last CSV file compared with the training data (POST /runs/<id>/data-check)
   checking: false,
+  // Runs with several columns to predict: {columns, weights, classes, scores, combined}; null otherwise.
+  targets: null,
+  explainTarget: '', // which column "Explain this prediction" is about
 });
+
+// The columns a run predicts, when it predicts several (else an empty list).
+export function targetList() {
+  return (inference.targets && inference.targets.columns) || [];
+}
 
 export function columnChoices(column) {
   const details = inference.columnDetails[column];
@@ -77,6 +85,8 @@ export async function openInference(runId) {
       sample: null,
       cleaning: data.cleaning || null,
       dataCheck: null,
+      targets: data.targets || null,
+      explainTarget: data.targets ? data.targets.columns[0] : '',
     });
     for (const col of inference.columns) inference.values[col] = '';
     navigate('inference');
@@ -152,9 +162,9 @@ export async function checkBatch(file) {
 export async function explain() {
   inference.explaining = true;
   try {
-    const result = await postJSON('/explain', {
-      run_id: inference.runId, model_name: inference.modelName, data: { ...inference.values },
-    }, 'Could not explain this prediction');
+    const body = { run_id: inference.runId, model_name: inference.modelName, data: { ...inference.values } };
+    if (inference.targets) body.target = inference.explainTarget;
+    const result = await postJSON('/explain', body, 'Could not explain this prediction');
     inference.shapPlot = result.plot_b64;
     inference.explanation = result.explanation || null;
   } catch (e) {
@@ -207,7 +217,8 @@ export async function tryRealRow() {
   }
 }
 
-// The sampled row's real answer, while the form still holds that row (null otherwise).
+// The sampled row's real answer, while the form still holds that row (null otherwise). With several columns to
+// predict, ``actual`` is {column: value}.
 export function sampleInForm() {
   const sample = inference.sample;
   if (!sample || sample.actual === null || sample.actual === undefined) return null;

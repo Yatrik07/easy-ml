@@ -4,8 +4,16 @@ import { featureAvailable, installHint, modelLabel, taskLabel } from '../store/s
 import { navigate } from '../store/ui.js';
 import {
   allInputsEmpty, columnChoices, explain, exportModel, inference, inputKind, predict, predictBatch, sampleInForm, setImage,
-  tryRealRow,
+  targetList, tryRealRow,
 } from '../store/inference.js';
+
+// Did the model get a sampled row's real answer right? (Regression: how far off it was.)
+function verdictFor(predicted, actual, regression) {
+  if (regression) return { regression: true, text: 'Off by ' + formatNumber(Math.abs(Number(predicted) - Number(actual)), 4) };
+  const same = String(predicted) === String(actual)
+    || (!Number.isNaN(Number(predicted)) && !Number.isNaN(Number(actual)) && Number(predicted) === Number(actual));
+  return { correct: same, text: same ? 'Correct' : 'Wrong' };
+}
 
 // A value for the API example: what the user typed, else a real value from the training data.
 function exampleValue(column) {
@@ -29,6 +37,8 @@ export default {
     const isText = computed(() => inference.task === 'NLPTextClassification');
     const isImage = computed(() => inference.task === 'ImageClassification');
     const usesBest = computed(() => inference.modelName === inference.bestModel);
+    const targets = computed(() => targetList()); // the columns it predicts, when it predicts several
+    const several = computed(() => targets.value.length > 0);
 
     // `easy-ml serve` plus one request in the format the service expects for this task.
     function serveExample() {
@@ -108,7 +118,9 @@ export default {
           '',
           'row = ' + JSON.stringify(row, null, 4),
           'answer = requests.post("http://127.0.0.1:8000/predict", json={"features": row}).json()',
-          'print(answer)   # ' + (inference.task === 'MLRegression' ? '{"prediction": 123.4}' : '{"prediction": ..., "confidence": 0.93}'),
+          'print(answer)   # ' + (several.value
+            ? '{"prediction": {' + targets.value.map(t => '"' + t + '": ...').join(', ') + '}}'
+            : (inference.task === 'MLRegression' ? '{"prediction": 123.4}' : '{"prediction": ..., "confidence": 0.93}')),
         ].join('\n') },
         { id: 'powershell', label: 'PowerShell', code: 'Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/predict -ContentType "application/json" -Body \'' + oneLine + '\'' },
         { id: 'curl', label: 'curl', code: 'curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -d \'' + oneLine + '\'' },
@@ -133,16 +145,27 @@ export default {
     const sample = computed(() => (inference.result ? sampleInForm() : null));
     const verdict = computed(() => {
       const s = sample.value;
-      if (!s) return null;
-      const predicted = inference.result.prediction;
-      if (inference.task === 'MLRegression') {
-        const error = Number(predicted) - Number(s.actual);
-        return { regression: true, text: 'Off by ' + formatNumber(Math.abs(error), 4) };
-      }
-      const same = String(predicted) === String(s.actual)
-        || (!Number.isNaN(Number(predicted)) && !Number.isNaN(Number(s.actual)) && Number(predicted) === Number(s.actual));
-      return { correct: same, text: same ? 'Correct' : 'Wrong' };
+      if (!s || several.value) return null;
+      return verdictFor(inference.result.prediction, s.actual, inference.task === 'MLRegression');
     });
+
+    // Several columns to predict: one answer (and confidence, and real value for a sampled row) per column.
+    const answers = computed(() => {
+      const r = inference.result;
+      if (!r || !several.value || !r.prediction || typeof r.prediction !== 'object') return [];
+      const actual = sample.value ? sample.value.actual || {} : null;
+      return targets.value.map(t => ({
+        target: t,
+        value: formatPrediction(r.prediction[t]),
+        confidence: r.probability && r.probability[t] != null ? r.probability[t] : null,
+        actual: actual ? formatPrediction(actual[t]) : null,
+        verdict: actual && actual[t] != null ? verdictFor(r.prediction[t], actual[t], inference.task === 'MLRegression') : null,
+      }));
+    });
+    function onExplainTarget() {
+      inference.explanation = null; // it explained another column
+      inference.shapPlot = null;
+    }
 
     const explainCard = ref(null);
     const plotOpen = ref(false);
@@ -151,7 +174,11 @@ export default {
       await nextTick();
       if (inference.explanation && explainCard.value) explainCard.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    const predictedLabel = computed(() => (inference.result ? formatPrediction(inference.result.prediction) : ''));
+    const predictedLabel = computed(() => {
+      const r = inference.result;
+      if (!r) return '';
+      return formatPrediction(several.value && r.prediction ? r.prediction[inference.explainTarget] : r.prediction);
+    });
     const explanationSummary = computed(() => {
       const e = inference.explanation;
       if (!e) return '';
@@ -194,7 +221,7 @@ export default {
       inference, isTabular, isText, isImage, codeTabs, columnChoices, predict, predictBatch, explain, exportModel,
       exportOpen, apiTabs, downloadExport, allEmpty, canSample, tryRealRow, sample, verdict,
       explainCard, plotOpen, explainAndShow, predictedLabel, explanationSummary, axisTitle, explainHint, hasMissing,
-      cleaningSteps, resultWarnings, flaggedColumns, inputKind,
+      cleaningSteps, resultWarnings, flaggedColumns, inputKind, targets, several, answers, onExplainTarget,
       onBatch, onImage, featureAvailable, installHint, modelLabel, taskLabel, navigate, formatPrediction, formatPercent, formatScore,
     };
   },
@@ -216,6 +243,9 @@ export default {
                     {{ modelLabel(m) }}{{ m === inference.bestModel ? '  ★ best' : '' }}{{ inference.modelScores[m] != null ? '  (' + formatScore(inference.modelScores[m], inference.metric) + ')' : '' }}
                   </option>
                 </select>
+                <span v-if="several && inference.modelName === 'best_for_each_target' && inference.targets.combined" class="field-hint">
+                  <template v-for="(t, i) in targets" :key="t">{{ i ? ', ' : '' }}{{ t }}: {{ modelLabel(inference.targets.combined[t]) }}</template>
+                </span>
               </div>
 
               <div v-if="inference.cleaning && inference.cleaning.automatic && !isImage" class="alert alert-info">
@@ -250,7 +280,8 @@ export default {
                 <div v-else class="field">
                   <label for="batch-file">{{ inference.cleaning && inference.cleaning.automatic ? 'CSV with the original columns' : 'CSV with the same columns' }}</label>
                   <input id="batch-file" class="input" type="file" accept=".csv" @change="onBatch" />
-                  <span class="field-hint">You get the file back with a Prediction column added.</span>
+                  <span class="field-hint">{{ several ? 'You get the file back with a Prediction column for each column to predict.'
+                    : 'You get the file back with a Prediction column added.' }}</span>
                 </div>
                 <p class="field-hint" v-if="allEmpty">Fill in at least one value, or press <strong>Try a real row</strong>
                   to fill the form with a row from this run's data.</p>
@@ -292,7 +323,37 @@ export default {
         <aside class="card inference-result">
           <div class="card-header"><h3>Prediction</h3></div>
           <div class="card-body stack">
-            <template v-if="inference.result">
+            <template v-if="inference.result && several">
+              <div class="target-answers">
+                <div v-for="a in answers" :key="a.target" class="target-answer">
+                  <span class="target-name">{{ a.target }}</span>
+                  <span class="target-value">{{ a.value }}</span>
+                  <span v-if="a.confidence != null" class="subtle text-xs">{{ formatPercent(a.confidence) }} confident</span>
+                  <span v-if="a.verdict" class="row-nowrap text-xs"><span class="muted">In the data: {{ a.actual }}</span>
+                    <span class="badge" :class="a.verdict.regression ? '' : (a.verdict.correct ? 'badge-success' : 'badge-danger')">{{ a.verdict.text }}</span></span>
+                </div>
+              </div>
+              <p v-if="sample" class="subtle text-xs">Row {{ (sample.row + 1).toLocaleString() }} of the run's data,
+                {{ sample.source === 'test' ? 'from its test set: the model never trained on it.' : 'used for training.' }}</p>
+              <div v-if="resultWarnings.length" class="alert alert-warning text-sm">
+                <Icon name="warning_amber" />
+                <div class="stack-xs"><strong>Unlike the training data</strong>
+                  <span v-for="(w, i) in resultWarnings" :key="i">{{ w }}</span>
+                  <span class="subtle text-xs">The prediction may be less reliable.</span></div>
+              </div>
+              <div class="field">
+                <label for="explain-target">Explain the prediction of</label>
+                <select id="explain-target" class="select" v-model="inference.explainTarget" @change="onExplainTarget">
+                  <option v-for="t in targets" :key="t" :value="t">{{ t }}</option>
+                </select>
+              </div>
+              <button class="btn btn-secondary" @click="explainAndShow" :disabled="inference.explaining || !featureAvailable('explain')">
+                <Spinner v-if="inference.explaining" /><Icon v-else name="insights" />Explain this prediction
+              </button>
+              <p v-if="!featureAvailable('explain')" class="field-hint">Explanations need SHAP: run <code>{{ installHint('explain') }}</code>,
+                then restart the studio.</p>
+            </template>
+            <template v-else-if="inference.result">
               <div class="prediction-value">{{ formatPrediction(inference.result.prediction) }}</div>
               <div v-if="inference.result.probability != null" class="stack-sm">
                 <div class="row-between text-sm"><span class="muted">Confidence</span><span class="strong num">{{ formatPercent(inference.result.probability) }}</span></div>
@@ -359,7 +420,7 @@ export default {
 
       <section v-if="inference.explanation && inference.result" ref="explainCard" class="card explain-card">
         <div class="card-header">
-          <div><h3>Why the model predicted {{ predictedLabel }}</h3>
+          <div><h3>Why the model predicted {{ predictedLabel }}<template v-if="several"> for {{ inference.explainTarget }}</template></h3>
             <div class="card-hint">{{ explanationSummary }}</div></div>
           <button v-if="inference.shapPlot" class="btn btn-ghost btn-sm" @click="plotOpen = true"><Icon name="zoom_in" />Detailed SHAP plot</button>
         </div>
@@ -390,7 +451,11 @@ export default {
 
       <ModalDialog :open="exportOpen" title="Export as API" @close="exportOpen = false">
         <div class="stack">
-          <p class="muted text-sm">Downloads <strong>{{ modelLabel(inference.modelName) }}</strong> as a small web service (a .zip).
+          <p v-if="several" class="muted text-sm">Downloads <strong>{{ modelLabel(inference.modelName) }}</strong> as a small web
+            service (a .zip) that predicts {{ targets.join(', ') }} with one model per column. It runs without the studio
+            on any computer or server with Python or Docker; its requirements install the easy-ml-studio package for the
+            code that holds the models together. Other programs send it a row of data and get the predictions back.</p>
+          <p v-else class="muted text-sm">Downloads <strong>{{ modelLabel(inference.modelName) }}</strong> as a small web service (a .zip).
             It runs on its own, without Easy-ML Studio, on any computer or server with Python or Docker.
             Other programs send it a row of data and get the prediction back.</p>
           <div class="stack-xs">

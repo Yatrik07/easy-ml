@@ -56,6 +56,8 @@ python -m easyml             # same as easy-ml
 ## Features
 
 - Train several models in one run and compare accuracy, confusion matrices and classification reports
+- Predict several columns at once (several numbers, categories or yes/no labels): each column gets its own
+  models, weights say which columns matter most, and predictions use the best model for each column
 - Data prep without code: clean a table step by step with a live preview, then train on it or save the steps as a reusable recipe;
   a model trained on cleaned data cleans new input the same way (with the values learned from its training data)
 - Result charts for every model: ROC and precision-recall curves, predicted vs actual, errors, feature importance and top words

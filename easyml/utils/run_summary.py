@@ -8,6 +8,7 @@ Pure Python: safe to import from the CLI and the predictor without pulling in he
 
 import hashlib
 import json
+import os
 import re
 import threading
 from collections import OrderedDict
@@ -38,6 +39,8 @@ MODEL_LABELS = {
     "LinearSVC": "Linear SVM", "MLPClassifier": "Neural Network (MLP)",
     # Image models
     "SimpleCNN": "Simple CNN", "ResNet18": "ResNet-18", "MobileNetV2": "MobileNet V2", "CustomCNN": "Custom CNN",
+    # Runs with several target columns (core/multi_target.py)
+    "best_for_each_target": "Best for each target",
 }
 
 _INTERNAL_UPLOAD_NAME = re.compile(r"^(data|data_nlp|clean)_[0-9a-f]{8}\.csv$")
@@ -100,6 +103,9 @@ def rank_models(task, metrics):
             "f1_test": _as_float(values.get("f1_test")),
             "cv_mean": _as_float((values.get("cv") or {}).get("mean")) if isinstance(values.get("cv"), dict) else None,
         })
+        if isinstance(values.get("targets"), dict):  # several targets (0.13): each target's test score
+            ranked[-1]["targets"] = {str(t): _as_float((v or {}).get("accuracy_test"))
+                                     for t, v in values["targets"].items()}
     ranked.sort(key=lambda m: (
         m["test_score"] is None,
         -(m["test_score"] or 0.0),
@@ -175,7 +181,8 @@ def summarize_run(row):
     task = row.get("task")
     ranked = _ranked(task, row.get("metrics_json"))
     best = ranked[0] if ranked and ranked[0]["test_score"] is not None else None
-    return {
+    targets = next((list(m["targets"]) for m in ranked if m.get("targets")), None)
+    summary = {
         "id": row.get("id"),
         "run_name": row.get("run_name"),
         "task": task,
@@ -192,13 +199,26 @@ def summarize_run(row):
         "tags": parse_tags(row.get("tags")),
         "notes": row.get("notes") or "",
     }
+    if targets:  # a run with several target columns: its score is their weighted average
+        summary["targets"] = targets
+    return summary
 
 
 def run_detail(row):
     """Everything about one run that the UI shows, without server file paths."""
     detail = summarize_run(row)
     detail["metrics"] = _strip_paths(parse_metrics(row.get("metrics_json")))
+    if detail.get("targets"):  # several columns to predict: their weights in the run's score
+        detail["target_weights"] = _target_weights(row.get("folder_path"))
     return detail
+
+
+def _target_weights(folder):
+    try:
+        with open(os.path.join(folder or "", "config_json.json"), "r", encoding="utf-8") as handle:
+            return json.load(handle).get("target_weights") or {}
+    except (OSError, ValueError):
+        return {}
 
 
 TUNING_LABELS = {0: "Off", 1: "Quick", 2: "Thorough"}
@@ -290,5 +310,17 @@ def settings_for_display(task, config):
             value = fmt(config[key])
         except (TypeError, ValueError):
             value = str(config[key])
+        if key == "target_column" and len(config.get("target_columns") or []) > 1:
+            label, value = "Columns to predict", _targets_text(config)
         rows.append({"key": key, "label": label, "group": group, "value": value})
     return rows
+
+
+def _targets_text(config):
+    """``price (weight 3), rent`` for a run with several target columns."""
+    weights = config.get("target_weights") or {}
+    parts = []
+    for target in config.get("target_columns") or []:
+        weight = weights.get(target, 1)
+        parts.append(f"{target} (weight {weight:g})" if weight != 1 else str(target))
+    return ", ".join(parts)

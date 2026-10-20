@@ -1,6 +1,6 @@
 // Results of a run: pipeline summary, ranked leaderboard and per-model detail.
 // Used by the Results page and by the Run History detail drawer.
-import { computed, ref } from '../lib/vue.js';
+import { computed, ref, watch } from '../lib/vue.js';
 import {
   classLabels, formatMape, formatNumber, formatPercent, formatScore, metricFor, overfitHint, rankPerformance,
 } from '../lib/format.js';
@@ -38,6 +38,9 @@ export const PipelineSummary = {
       }
       if (s.imbalance_handling && s.imbalance_handling !== 'none') {
         out.push({ icon: 'balance', title: 'Rebalancing', detail: s.imbalance_handling.toUpperCase() });
+      }
+      if (s.targets && s.targets.length > 1) {
+        out.push({ icon: 'my_location', title: 'Predicting', detail: s.targets.join(', ') });
       }
       out.push({ icon: 'call_split', title: 'Split', detail: s.split || '80/20' });
       out.push({ icon: 'model_training', title: 'Models', detail: (s.models_trained || []).length + ' trained' + (s.hyper_parameter_tuning ? ' · tuned' : '') });
@@ -94,20 +97,48 @@ export const ConfusionMatrix = {
 export const ModelDetail = {
   props: { entry: Object, task: String, runId: [Number, String], modelKey: String },
   setup(props) {
+    // Several columns to predict: everything below is the chosen column's own model.
+    const targets = computed(() => Object.keys((props.entry && props.entry.targets) || {}));
+    const target = ref(null);
+    watch(targets, list => { if (!list.includes(target.value)) target.value = list[0] || null; }, { immediate: true });
+    const shown = computed(() => {
+      const e = props.entry || {};
+      if (!target.value) return e;
+      const byTarget = (e.test_metrics && e.test_metrics.targets) || {};
+      return { test_metrics: byTarget[target.value] || {}, best_params: (e.best_params || {})[target.value] || {} };
+    });
+    const metric = computed(() => metricFor(props.task));
+    const targetFacts = computed(() => {
+      if (!target.value) return [];
+      const scores = props.entry.targets[target.value] || {};
+      const facts = [
+        { label: 'Test ' + metric.value.name, value: formatScore(scores.accuracy_test, metric.value) },
+        { label: 'Train ' + metric.value.name, value: formatScore(scores.accuracy_train, metric.value) },
+      ];
+      if (scores.cv && scores.cv.mean != null) facts.push({ label: 'CV ' + metric.value.name, value: formatScore(scores.cv.mean, metric.value) });
+      const tm = shown.value.test_metrics || {};
+      if (tm.mae != null) facts.push({ label: 'MAE', value: formatNumber(tm.mae, 2) });
+      if (tm.mape != null) facts.push({ label: 'MAPE', value: formatMape(tm.mape) });
+      return facts;
+    });
     const report = computed(() => {
-      const r = (props.entry && props.entry.test_metrics && props.entry.test_metrics.classification_report) || {};
+      const r = (shown.value.test_metrics && shown.value.test_metrics.classification_report) || {};
       return Object.entries(r)
         .filter(([, v]) => v && typeof v === 'object' && v.precision !== undefined)
         .map(([name, v]) => ({ name, precision: v.precision, recall: v.recall, f1: v['f1-score'], support: v.support }));
     });
-    const params = computed(() => Object.entries((props.entry && props.entry.best_params) || {}));
+    const params = computed(() => Object.entries(shown.value.best_params || {}));
     const fmt = v => (v === null || v === undefined ? '—' : Number(v).toFixed(3));
-    return { report, params, fmt };
+    return { targets, target, shown, targetFacts, report, params, fmt };
   },
   template: /* html */ `
+    <div v-if="targets.length" class="segmented target-picker" role="group" aria-label="Column to predict">
+      <button v-for="t in targets" :key="t" :class="{ active: target === t }" @click="target = t">{{ t }}</button>
+    </div>
     <div class="grid-2">
       <div class="stack">
-        <ConfusionMatrix :entry="entry" />
+        <dl v-if="targetFacts.length" class="kv"><template v-for="f in targetFacts" :key="f.label"><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></template></dl>
+        <ConfusionMatrix :entry="shown" />
         <div v-if="params.length" class="stack-sm">
           <div class="field-label">Best hyperparameters</div>
           <dl class="kv"><template v-for="[k, v] in params" :key="k"><dt>{{ k }}</dt><dd>{{ v }}</dd></template></dl>
@@ -132,7 +163,7 @@ export const ModelDetail = {
         </div>
       </div>
     </div>
-    <ModelCharts v-if="runId && modelKey" :run-id="runId" :model-key="modelKey" class="detail-charts" />`,
+    <ModelCharts v-if="runId && modelKey" :run-id="runId" :model-key="modelKey" :target="target" class="detail-charts" />`,
 };
 
 export const ResultsBoard = {
@@ -141,6 +172,7 @@ export const ResultsBoard = {
     performance: { type: Object, default: () => ({}) },
     summary: Object,
     runId: [Number, String],
+    targetWeights: Object, // several columns to predict: their weights (when there is no pipeline summary)
   },
   emits: ['predict'],
   setup(props) {
@@ -160,6 +192,7 @@ export const ResultsBoard = {
       const cv = row.entry && row.entry.cv;
       if (!cv) return '';
       if (cv.error) return cv.error;
+      if (!cv.scores) return cv.folds + '-fold cross-validation on the training data, weighted over the columns to predict';
       return cv.folds + '-fold cross-validation on the training data: ' + cv.scores.map(s => formatScore(s, metric.value)).join(', ');
     }
     const expanded = ref(null);
@@ -172,9 +205,37 @@ export const ResultsBoard = {
     const hints = computed(() => (estimatedFrom.value ? [] : rows.value
       .filter(r => overfitHint(r, metric.value))
       .map(r => ({ key: r.key, label: r.label, train: formatScore(r.train, metric.value), test: formatScore(r.test, metric.value) }))));
+
+    // Several columns to predict: each has its own models; the leaderboard ranks their weighted average.
+    const targets = computed(() => {
+      const fromSummary = props.summary && props.summary.targets;
+      if (fromSummary && fromSummary.length > 1) return fromSummary;
+      const row = rows.value.find(r => r.entry && r.entry.targets);
+      return row ? Object.keys(row.entry.targets) : [];
+    });
+    const weightOf = t => {
+      const weights = props.targetWeights || (props.summary && props.summary.target_weights) || {};
+      return weights[t] === undefined ? 1 : weights[t];
+    };
+    function targetScore(row, t) {
+      const scores = row.entry && row.entry.targets && row.entry.targets[t];
+      return scores && scores.accuracy_test != null ? scores.accuracy_test : null;
+    }
+    const winners = computed(() => Object.fromEntries(targets.value.map(t => {
+      const scored = rows.value.filter(r => targetScore(r, t) !== null);
+      if (!scored.length) return [t, null];
+      return [t, scored.reduce((best, r) => (targetScore(r, t) > targetScore(best, t) ? r : best)).key];
+    })));
+    const showExact = computed(() => targets.value.length > 0 && rows.value.some(r => r.entry && r.entry.test_metrics
+      && r.entry.test_metrics.exact_match != null));
+    const exact = row => (row.entry && row.entry.test_metrics ? row.entry.test_metrics.exact_match : null);
+    const showErrors = computed(() => isRegression.value && !targets.value.length);
+    const colspan = computed(() => 5 + (showF1.value ? 1 : 0) + (showCv.value ? 1 : 0) + (showErrors.value ? 2 : 0)
+      + (showExact.value ? 1 : 0));
     return {
       metric, rows, isRegression, showF1, showCv, cvText, cvTitle, expanded, toggle, hints, estimatedFrom,
-      formatScore, formatNumber, formatMape, formatPercent,
+      formatScore, formatNumber, formatMape, formatPercent, targets, weightOf, targetScore, winners, showExact, exact,
+      showErrors, colspan,
     };
   },
   template: /* html */ `
@@ -194,6 +255,7 @@ export const ResultsBoard = {
           <div>
             <h3>Leaderboard</h3>
             <div v-if="estimatedFrom" class="card-hint">Expected {{ metric.name }} from run #{{ estimatedFrom }}'s test set. Select a model to see its details.</div>
+            <div v-else-if="targets.length" class="card-hint">Models ranked by the weighted average of their test-set {{ metric.name }} over {{ targets.length }} columns. Select a model to see each column's details.</div>
             <div v-else class="card-hint">Models ranked by test-set {{ metric.name }}. Select a model to see its details.</div>
           </div>
           <slot name="actions" />
@@ -203,12 +265,13 @@ export const ResultsBoard = {
             <thead>
               <tr>
                 <th>#</th><th>Model</th>
-                <th class="right" :title="estimatedFrom ? 'Test score of run #' + estimatedFrom : ''">{{ estimatedFrom ? 'Expected' : 'Test' }} {{ metric.name }}</th>
+                <th class="right" :title="estimatedFrom ? 'Test score of run #' + estimatedFrom : ''">{{ estimatedFrom ? 'Expected' : 'Test' }} {{ metric.name }}<template v-if="targets.length"> (weighted)</template></th>
                 <th class="right">Train {{ metric.name }}</th>
                 <th v-if="showCv" class="right" title="Mean ± spread over the cross-validation folds">CV {{ metric.name }}</th>
                 <th v-if="showF1" class="right">Test F1</th>
-                <th v-if="isRegression" class="right">MAE</th>
-                <th v-if="isRegression" class="right">MAPE</th>
+                <th v-if="showExact" class="right" title="Test rows where every column was predicted right">All right</th>
+                <th v-if="showErrors" class="right">MAE</th>
+                <th v-if="showErrors" class="right">MAPE</th>
                 <th></th>
               </tr>
             </thead>
@@ -223,16 +286,44 @@ export const ResultsBoard = {
                   <td class="right num muted">{{ formatScore(row.train, metric) }}</td>
                   <td v-if="showCv" class="right num nowrap" :title="cvTitle(row)">{{ cvText(row) }}</td>
                   <td v-if="showF1" class="right num">{{ row.f1 === null ? '—' : formatPercent(row.f1) }}</td>
-                  <td v-if="isRegression" class="right num">{{ formatNumber(row.mae, 2) }}</td>
-                  <td v-if="isRegression" class="right num">{{ formatMape(row.mape) }}</td>
+                  <td v-if="showExact" class="right num">{{ exact(row) === null ? '—' : formatPercent(exact(row)) }}</td>
+                  <td v-if="showErrors" class="right num">{{ formatNumber(row.mae, 2) }}</td>
+                  <td v-if="showErrors" class="right num">{{ formatMape(row.mape) }}</td>
                   <td class="right"><Icon :name="expanded === row.key ? 'expand_less' : 'expand_more'" /></td>
                 </tr>
                 <tr v-if="expanded === row.key" class="detail-row">
-                  <td :colspan="5 + (showF1 ? 1 : 0) + (showCv ? 1 : 0) + (isRegression ? 2 : 0)">
+                  <td :colspan="colspan">
                     <ModelDetail :entry="row.entry" :task="task" :run-id="runId" :model-key="row.key" />
                   </td>
                 </tr>
               </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="targets.length" class="card">
+        <div class="card-header">
+          <div>
+            <h3>By column to predict</h3>
+            <div class="card-hint">Each column has its own models, trained and tuned on that column alone, so no column's
+              accuracy is traded for another's. ★ marks each column's best model: together they make
+              "Best for each target", which predictions use by default.</div>
+          </div>
+        </div>
+        <div class="table-wrap flush">
+          <table class="table target-scores">
+            <thead>
+              <tr><th>Model</th>
+                <th v-for="t in targets" :key="t" class="right">{{ t }}<span v-if="weightOf(t) !== 1" class="subtle text-xs" :title="'Weight ' + weightOf(t)"> ×{{ weightOf(t) }}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in rows" :key="row.key">
+                <td>{{ row.label }}</td>
+                <td v-for="t in targets" :key="t" class="right num" :class="{ winner: winners[t] === row.key }">
+                  {{ formatScore(targetScore(row, t), metric) }}<span v-if="winners[t] === row.key"> ★</span></td>
+              </tr>
             </tbody>
           </table>
         </div>

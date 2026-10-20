@@ -459,6 +459,35 @@ run's `prep.json`, `raw_data.csv` and `data_profile.json`, and its `evaluation.j
 `final`). Schedules: when the champion is a final model, a promoted challenger is refit with `plan_final`
 and that run becomes the champion. `plan_retrain` of a final model trains an evaluated run and warns.
 
+### Several columns to predict (0.13.0)
+
+Table runs only, in `core/multi_target.py`:
+
+- **Inputs.** `MLTrainer(target_column=[...])` or `target_columns=` (plus `target_weights`, 0.1–10) is
+  checked in `_TabularController.__init__` (`clean_targets`, `clean_weights`; no resampling, no target in
+  `ignore_columns`). `utils/data_loader._load_several_targets` makes `y` an n×k array: classification
+  targets are encoded per column into `target_encodings_by_column`, and regression targets must be numbers.
+  The split is not stratified.
+- **Training.** `model_builder._fit_per_target` clones each model per target and runs the single-target
+  `_fit` (search, `_all_cores`, CV) on `y[:, i]`. Nothing is shared between targets, so a target's model and
+  score equal those of a single-target run (tested). The result is a `PerTargetModel` (`estimators_`,
+  `targets`, `predict` → n×k), always pickled as `<Model>.pkl`.
+- **Scores.** `performance[model]` holds `accuracy_train`/`accuracy_test`: the averages weighted with
+  `target_weights`, so `rank_models` and schedules work unchanged. It also holds `targets[t]` (per-target
+  scores and CV), `test_metrics.targets[t]` (the usual metrics), `exact_match` (classification),
+  `best_params[t]` and a combined `cv`.
+- **Charts.** `evaluation.json` keeps the charts per target under `models[m].targets[t]`.
+- **Config.** `config_json.json` adds `target_columns`, `target_weights` and `target_classes`, only for these
+  runs.
+- **Best for each target.** `best_for_each_target` (`BEST_FOR_EACH_TARGET`) is assembled in
+  `artifacts.load_tabular_model` from each target's winner (`multi_target.winners`). It is the default of
+  `Predictor` and the prediction page.
+- **Predictions.** `inference._several` returns `{target: value}` rows and confidences, and
+  `inference.prediction_columns` names the batch and CLI columns. The `serve` answers and the exported
+  `main.py` give `prediction` as a dict. `XAIExplainer(target=...)` explains one target's estimator.
+  `scheduling/compare.score` weighs per-target scores. `retraining` replays `target_columns`/`target_weights`
+  and checks classes per target.
+
 ### Reproducibility and cross-validation (0.10.0)
 
 - `core/seeding.py`: `random_seed` (default 42) on every request body. `apply_seed` sets `random_state` on

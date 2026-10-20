@@ -9,6 +9,9 @@ function defaultConfig(task = '') {
     task,
     name: '',
     target_column: '',
+    // More columns to predict (tables only): each gets its own models; weights rank the models (1 = normal).
+    extra_targets: [],
+    target_weights: {},
     dataset_path: '',
     original_filename: '',
     recipe: null, // data-prep steps that produced the dataset (recorded with the run)
@@ -85,10 +88,53 @@ export const dataReady = computed(() => {
   return !isText.value || !!c.text_column;
 });
 
+// Every column to predict: the first one, then the ones added for tables.
+export const targetColumns = computed(() => {
+  const c = wizard.config;
+  return c.target_column ? [c.target_column].concat(isTabular.value ? c.extra_targets : []) : [];
+});
+export const severalTargets = computed(() => targetColumns.value.length > 1);
+
 export const featureColumns = computed(() => {
   const data = wizard.upload.data;
   if (!data) return [];
-  return data.column_names.filter(c => c !== wizard.config.target_column && c !== wizard.config.text_column);
+  return data.column_names.filter(c => !targetColumns.value.includes(c) && c !== wizard.config.text_column);
+});
+
+export function addTarget(column) {
+  const c = wizard.config;
+  if (!column || targetColumns.value.includes(column)) return;
+  c.extra_targets.push(column);
+  // A column to predict is not an input any more.
+  c.ignore_columns = c.ignore_columns.filter(x => x !== column);
+  c.categorical_columns = c.categorical_columns.filter(x => x !== column);
+  c.imbalance_handling = 'none'; // resampling works on one column to predict only
+}
+
+export function removeTarget(column) {
+  const c = wizard.config;
+  if (column === c.target_column) {
+    c.target_column = c.extra_targets.shift() || '';
+  } else {
+    c.extra_targets = c.extra_targets.filter(x => x !== column);
+  }
+  delete c.target_weights[column];
+}
+
+export function targetWeight(column) {
+  const weight = wizard.config.target_weights[column];
+  return weight === undefined ? 1 : weight;
+}
+
+export function setTargetWeight(column, value) {
+  const weight = Math.min(10, Math.max(0.1, Number(value) || 1));
+  wizard.config.target_weights[column] = Math.round(weight * 10) / 10;
+}
+
+// The first column to predict changed: it cannot also be one of the added ones.
+watch(() => wizard.config.target_column, column => {
+  const c = wizard.config;
+  if (c.extra_targets.includes(column)) c.extra_targets = c.extra_targets.filter(x => x !== column);
 });
 
 export function resetWizard(task = '') {
@@ -112,6 +158,8 @@ export async function uploadDataset(file) {
   if (!file) return;
   wizard.upload = { fileName: file.name, data: null, uploading: true };
   wizard.config.target_column = '';
+  wizard.config.extra_targets = [];
+  wizard.config.target_weights = {};
   wizard.config.text_column = '';
   const form = new FormData();
   form.append('file', file);

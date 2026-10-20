@@ -235,7 +235,7 @@ Regression:
 
 - run name
 - dataset path
-- target column
+- target column (or several, with weights: see below)
 - columns to ignore
 - missing-value handling
 - scaling
@@ -252,6 +252,25 @@ Regression:
 4. Choose the models you want to train.
 5. Start training.
 6. Open the results or run history view.
+
+### Several columns to predict
+
+A table run can predict more than one column, for example `price` and `rent`, or several yes/no label
+columns. In the Data step, choose the first column to predict, then add more with **Predict more columns**.
+All of them must be numbers (regression) or all categories (classification).
+
+- **Each column gets its own copy of every model**, trained and tuned on that column alone. One column's
+  accuracy is never traded for another's.
+- **Weights** (1 by default; 2 counts twice as much) say which columns matter most. They decide how the
+  columns' scores add up into the run's score, which ranks the models. They never change a column's
+  predictions.
+- **Results** show the weighted score, a **By column to predict** table with each column's best model
+  marked ★, and per-column details and charts. Classification runs also show **All right**: the share of test
+  rows with every column predicted correctly.
+- **Predictions** use **Best for each target** by default: each column is predicted by the model that did
+  best on it. You can also pick one model for all columns. The form shows one answer per column, and a CSV
+  gets a `Prediction: <column>` column for each. **Explain** asks which column to explain.
+- Class balance (SMOTE, Tomek links) is not available when several columns are predicted.
 
 ### Imbalance handling
 

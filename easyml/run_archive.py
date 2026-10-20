@@ -119,6 +119,7 @@ def export_run(run_id, output_path=None, include_data=True):
 
     if output_path is None:
         output_path = os.path.abspath(f"easyml-run-{int(run_id)}-{sanitize_run_name(record.get('run_name'))}.zip")
+    output_path = os.fspath(output_path)  # a pathlib.Path works too
 
     entries = []
     for entry in sorted(os.scandir(folder), key=lambda e: e.name):

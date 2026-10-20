@@ -37,6 +37,14 @@ class Predictor:
 
         ranked = rank_models(self.task, parse_metrics(record.get("metrics_json")))
         self.available_models = [m["key"] for m in ranked]
+        self.targets = []  # the columns it predicts, for runs with several targets (0.13)
+        if self.task in TABULAR_TASKS:
+            from easyml.core.multi_target import BEST_FOR_EACH_TARGET, combined_summary, run_targets
+
+            self.targets = run_targets(self._folder)
+            if self.targets and combined_summary(self._folder):
+                # Each target predicted by the model that did best on it: the default for these runs.
+                self.available_models = [BEST_FOR_EACH_TARGET] + self.available_models
         if model_name is None:
             if not self.available_models:
                 raise ValueError(f"Run {self.run_id} has no trained models.")
@@ -63,7 +71,8 @@ class Predictor:
         """
         Predict and return a list with one prediction per input.
 
-        * Tabular runs: a dict (one row), a list of dicts, a pandas DataFrame, or a .csv/.xlsx path.
+        * Tabular runs: a dict (one row), a list of dicts, a pandas DataFrame, or a .csv/.xlsx path. A run
+          with several target columns gives one ``{target: prediction}`` dict per row.
         * Text runs: a string, a list of strings, or a .csv path (uses the run's text column).
         * Image runs: an image path, a list of image paths, or a folder of images.
 
@@ -74,7 +83,10 @@ class Predictor:
         return self.predict_with_confidence(data, cleaned=cleaned)[0]
 
     def predict_with_confidence(self, data, cleaned=None):
-        """Like :meth:`predict`, but returns ``(predictions, confidences)``; confidences may be None."""
+        """
+        Like :meth:`predict`, but returns ``(predictions, confidences)``; confidences may be None. With
+        several targets each confidence is a ``{target: confidence}`` dict.
+        """
         predictions, confidences, _ = self.predict_with_notes(data, cleaned=cleaned)
         return predictions, confidences
 

@@ -66,6 +66,34 @@ print(run.performance)   # test/validation scores per model
 Tabular model keys: `logistic_regression` (classification), `linear_regression` (regression),
 `random_forest`, `knn`, `ada_boost`, and with the `[boost]` extra `xg_boost`, `light_gbm`, `cat_boost`.
 
+### Several columns to predict
+
+A table run can predict several columns at once (Easy-ML 0.13): several numbers (regression), or several
+categories or 0/1 label columns (classification). Pass a list:
+
+```python
+run = MLTrainer(
+    task="MLRegression",
+    name="houses",
+    dataset_path="houses.csv",
+    target_column=["price", "rent"],         # or target_columns=[...]
+    target_weights={"price": 3},             # optional, 0.1 to 10; the others count 1
+    models=["linear_regression", "random_forest", "light_gbm"],
+).run()
+
+run.performance["RandomForestRegressor"]["targets"]["rent"]["accuracy_test"]   # R² on rent alone
+run.performance["RandomForestRegressor"]["accuracy_test"]                      # weighted average
+```
+
+- Each column gets its own copy of every model, trained, tuned and cross-validated on that column
+  alone, so the accuracy of one column is never traded for another's.
+- `target_weights` only decide how the columns' scores add up into the run's score, which ranks the models;
+  they never change a column's predictions.
+- Classification runs also report `test_metrics["exact_match"]`, the share of test rows with every column
+  right.
+- Class balance (`imbalance_handling`) is not available with several columns. All columns must be numbers
+  (regression) or all categories (classification).
+
 ### Text options
 
 | Argument | Default | Meaning |
@@ -132,6 +160,16 @@ Tabular inputs can be strings or numbers, the same as the studio's form: values 
 types seen during training. Missing columns are treated as missing values.
 
 `model.input_columns` lists the columns to pass in.
+
+A run with several columns to predict answers one `{column: prediction}` dict per row (confidences are
+dicts too), and `model.targets` lists the columns. By default it uses the **best model for each column**
+(`"best_for_each_target"`): every column is predicted by the model that scored best on it. Load one model
+for all columns by name as usual.
+
+```python
+model = easyml.load_model(7)                      # model.model_name == "best_for_each_target"
+model.predict({"area": 120, "rooms": 3, "city": "NY"})    # -> [{"price": 415.2, "rent": 49.8}]
+```
 
 ### Runs trained on cleaned data
 

@@ -435,9 +435,10 @@ class FrozenRecipe:
                     step["needed"] = True
                     needed = (needed - created) | _sources(step)
         raw_order = self.data.get("raw_columns") or []
-        inputs = [c for c in raw_order if c in needed and c != target]
+        targets = set(target) if isinstance(target, (list, tuple)) else {target}  # several targets (0.13)
+        inputs = [c for c in raw_order if c in needed and c not in targets]
         self.data.update(features=[str(f) for f in features], target=target,
-                         input_columns=inputs + sorted(c for c in needed - set(inputs) if c != target))
+                         input_columns=inputs + sorted(c for c in needed - set(inputs) if c not in targets))
         if raw_rows is not None:
             self.data["inputs"], self.data["example"] = self._describe_inputs(raw_rows)
         return self

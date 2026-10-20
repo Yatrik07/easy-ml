@@ -72,7 +72,7 @@ def preprocessing_controller(request_body: ML_RequestBody):
             write_log("splitting the data into train-test-split", "info", os.path.basename(__file__))
             is_classification = "classification" in request_body.task.lower()
             stratify = None
-            if is_classification:
+            if is_classification and getattr(request_body.y, "ndim", 1) == 1:  # several targets: a plain split
                 counts = pd.Series(request_body.y).value_counts()
                 stratify = request_body.y if counts.min() >= 2 else None
             request_body.X_train, request_body.X_test, request_body.y_train, request_body.y_test = \

@@ -149,7 +149,7 @@ export default {
                   <Icon v-if="run.notes" name="sticky_note_2" size="sm" class="subtle note-icon" :title="run.notes" /></div>
                 <div class="run-sub"><span>#{{ run.id }}</span><TaskBadge :task="run.task" />
                   <span v-if="run.dataset_name" class="truncate dataset-name" :title="run.dataset_name"><Icon name="description" size="sm" />{{ run.dataset_name }}</span>
-                  <LineageBadge :run="run" /><ScheduleBadges :run="run" />
+                  <LineageBadge :run="run" /><TargetsBadge :run="run" /><ScheduleBadges :run="run" />
                   <button v-for="t in run.tags" :key="t" class="chip tag-chip" @click.stop="toggleTag(t)" :title="'Show runs tagged ' + t">{{ t }}</button></div>
               </td>
               <td class="hide-md"><ModelChips :models="run.models" :max="1" /></td>
@@ -190,13 +190,13 @@ export default {
           <div v-if="detail && detail.task" class="run-sub">
             <span>#{{ detail.id }}</span><TaskBadge :task="detail.task" />
             <span>{{ detail.dataset_name }}</span><span>· {{ absoluteTime(detail.timestamp) }}</span>
-            <LineageBadge :run="detail" /><ScheduleBadges :run="detail" />
+            <LineageBadge :run="detail" /><TargetsBadge :run="detail" /><ScheduleBadges :run="detail" />
           </div>
         </template>
         <div v-if="runs.detailLoading" class="row muted"><Spinner /> Loading run…</div>
         <div v-else-if="detail && detail.metrics" class="stack">
         <RunMetaEditor :run="detail" />
-        <ResultsBoard :task="detail.task" :performance="detail.metrics" :run-id="detail.id">
+        <ResultsBoard :task="detail.task" :performance="detail.metrics" :run-id="detail.id" :target-weights="detail.target_weights">
           <template #actions>
             <div class="row">
               <a class="btn btn-ghost btn-sm" :href="'/runs/' + detail.id + '/report'" download

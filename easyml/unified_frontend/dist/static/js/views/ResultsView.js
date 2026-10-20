@@ -11,6 +11,15 @@ export default {
     const result = computed(() => training.result || {});
     const performance = computed(() => result.value.performance || {});
     const best = computed(() => rankPerformance(training.task, performance.value, modelLabel)[0]);
+    const several = computed(() => Object.values(performance.value).some(e => e && e.targets));
+    const subtitle = computed(() => {
+      if (!best.value) return '';
+      if (several.value) {
+        return 'Best overall: ' + best.value.label + '. Predictions use the best model for each column. Every model is saved in run #'
+          + result.value.run_id + '.';
+      }
+      return 'Best model: ' + best.value.label + '. Every model is saved in run #' + result.value.run_id + '.';
+    });
     const metric = computed(() => metricFor(training.task));
     const eyebrow = computed(() => {
       if (training.kind === 'retrain') return 'Retrained from run #' + training.parentRunId + ' · ' + taskLabel(training.task);
@@ -21,12 +30,13 @@ export default {
     // A final model can be trained from an evaluated table or text run (not from a final model itself).
     const canFinalize = computed(() => result.value.run_id > 0 && training.kind !== 'final'
       && training.task !== 'ImageClassification');
-    return { training, result, performance, best, metric, navigate, openInference, openFinalDialog, eyebrow, canFinalize };
+    return {
+      training, result, performance, best, metric, navigate, openInference, openFinalDialog, eyebrow, canFinalize, subtitle,
+    };
   },
   template: /* html */ `
     <div class="page">
-      <PageHeader :eyebrow="eyebrow" title="Results"
-                  :subtitle="best ? 'Best model: ' + best.label + '. Every model is saved in run #' + result.run_id + '.' : ''">
+      <PageHeader :eyebrow="eyebrow" title="Results" :subtitle="subtitle">
         <button class="btn btn-secondary" @click="navigate('home')"><Icon name="add" />New run</button>
         <a v-if="result.run_id > 0" class="btn btn-secondary" :href="'/runs/' + result.run_id + '/report'" download
            title="One HTML file with the scores, charts and settings, to send to anyone"><Icon name="description" />Download report</a>

@@ -1,6 +1,6 @@
 import { featureAvailable, installHint, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
-import { featureColumns, isClassification, isImage, isTabular, isText, wizard } from '../store/wizard.js';
+import { featureColumns, isClassification, isImage, isTabular, isText, severalTargets, wizard } from '../store/wizard.js';
 
 const IMBALANCE = [
   { id: 'none', label: 'None' },
@@ -17,7 +17,7 @@ export default {
       if (idx >= 0) values.splice(idx, 1); else values.push(column);
     }
     return {
-      wizard, featureColumns, isClassification, isImage, isTabular, isText, IMBALANCE, toggle,
+      wizard, featureColumns, isClassification, isImage, isTabular, isText, IMBALANCE, toggle, severalTargets,
       featureAvailable, installHint, taskLabel, navigate,
     };
   },
@@ -171,7 +171,14 @@ export default {
       </section>
 
       <!-- Class balance (classification only) -->
-      <section v-if="isClassification" class="card">
+      <section v-if="isClassification && severalTargets" class="card">
+        <div class="card-header"><h3>Class balance</h3></div>
+        <div class="card-body">
+          <p class="muted">Rebalancing (SMOTE, Tomek links) is not available when several columns are predicted: it
+            changes rows to balance one column, which would unbalance the others.</p>
+        </div>
+      </section>
+      <section v-else-if="isClassification" class="card">
         <div class="card-header"><h3>Class balance</h3></div>
         <div class="card-body grid-2">
           <ClassDistribution :data="wizard.classDistribution" :loading="wizard.classDistributionLoading" />

@@ -30,11 +30,35 @@ def create_deployment_package(run_id: int, model_name: str) -> str:
     if task not in ("MLClassification", "MLRegression"):
         raise ValueError("Export is currently available for tabular classification and regression runs only.")
 
-    model_source = model_file_path(folder_path, model_name)
+    from easyml.core.multi_target import BEST_FOR_EACH_TARGET, run_targets
+
+    targets = run_targets(folder_path)  # several columns to predict (0.13): one model per target, pickled
     pipeline_source = os.path.join(folder_path, "preprocessing_pipeline.pkl")
     if not os.path.exists(pipeline_source):
         raise FileNotFoundError("The preprocessing pipeline for this run is missing.")
+    combined_file = None
+    if targets and model_name == BEST_FOR_EACH_TARGET:
+        # Put together from the run's saved models when loaded: written into the package as one file.
+        import joblib
 
+        from easyml.core.artifacts import load_tabular_model
+
+        combined = load_tabular_model(folder_path, model_name, task)
+        handle, combined_file = tempfile.mkstemp(suffix=".pkl")
+        os.close(handle)
+        joblib.dump(combined, combined_file, protocol=5)
+        model_source, model_classes = combined_file, list(combined.model_names)
+    else:
+        model_source, model_classes = model_file_path(folder_path, model_name), [model_name]
+    try:
+        return _write_package(run_id, folder_path, task, model_name, model_source, model_classes, targets,
+                              pipeline_source)
+    finally:
+        if combined_file:
+            os.remove(combined_file)
+
+
+def _write_package(run_id, folder_path, task, model_name, model_source, model_classes, targets, pipeline_source):
     model_filename = "model" + os.path.splitext(model_source)[1]
     copies = {model_filename: model_source, "pipeline.pkl": pipeline_source}
     for name in ("config_json.json", "column_data.json"):
@@ -47,13 +71,23 @@ def create_deployment_package(run_id: int, model_name: str) -> str:
     if cleans:
         copies["prep.json"] = prep_source
 
-    generated = {
-        "main.py": generate_fastapi_app(task, model_name, model_filename, cleans_input=cleans),
-        "requirements.txt": generate_requirements(model_name, cleans_input=cleans),
-        "Dockerfile": generate_dockerfile(model_name),
-        "README.md": generate_readme(task, model_name, model_filename, example_features(folder_path), cleans_input=cleans),
-    }
-    if task == "MLClassification":
+    if targets:
+        generated = {
+            "main.py": generate_fastapi_app(task, model_name, model_filename, cleans_input=cleans, targets=targets),
+            "requirements.txt": generate_requirements(model_name, cleans_input=cleans, model_classes=model_classes,
+                                                      needs_easyml=True),
+            "Dockerfile": generate_dockerfile(next((m for m in model_classes if m.startswith("LGBM")), model_name)),
+            "README.md": generate_readme(task, model_name, model_filename, example_features(folder_path),
+                                         cleans_input=cleans, targets=targets),
+        }
+    else:
+        generated = {
+            "main.py": generate_fastapi_app(task, model_name, model_filename, cleans_input=cleans),
+            "requirements.txt": generate_requirements(model_name, cleans_input=cleans),
+            "Dockerfile": generate_dockerfile(model_name),
+            "README.md": generate_readme(task, model_name, model_filename, example_features(folder_path), cleans_input=cleans),
+        }
+    if task == "MLClassification" and not targets:
         decoder = load_target_decoder(folder_path)
         generated["labels.json"] = json.dumps([decoder[i] for i in sorted(decoder)])
 
@@ -77,9 +111,27 @@ CLEANING_LINES = [
 ]
 
 
-def generate_fastapi_app(task: str, model_name: str, model_filename: str, cleans_input: bool = False) -> str:
+SEVERAL_TARGETS_LINES = [
+    "        values = np.asarray(model.predict(transformed))[0]",
+    "        answer, confidence = {}, {}",
+    "        for index, target in enumerate(targets):",
+    "            raw = values[index].item() if hasattr(values[index], 'item') else values[index]",
+    "            labels = target_classes.get(target)",
+    "            if not labels:",
+    "                answer[target] = float(raw)",
+    "                continue",
+    "            code = int(raw)",
+    "            answer[target] = labels[code] if 0 <= code < len(labels) else raw",
+    "            estimator = model.estimators_[index]",
+    "            if hasattr(estimator, 'predict_proba'):",
+    "                confidence[target] = float(np.max(estimator.predict_proba(transformed)[0]))",
+]
+
+
+def generate_fastapi_app(task: str, model_name: str, model_filename: str, cleans_input: bool = False,
+                         targets=None) -> str:
     is_classification = "classification" in task.lower()
-    is_catboost = model_name.startswith("CatBoost")
+    is_catboost = model_name.startswith("CatBoost") and not targets  # several targets: every model is pickled
 
     lines = [
         '"""FastAPI service generated by Easy-ML Studio."""',
@@ -119,11 +171,17 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str, cleans
         lines += [f"model = {model_name}()", f"model.load_model('{model_filename}')"]
     else:
         lines.append(f"model = joblib.load('{model_filename}')")
+    if targets:
+        # One model per column to predict (Easy-ML's PerTargetModel), and each column's classes.
+        labels_lines = ["config = _read_json('config.json')",
+                        "targets = config.get('target_columns') or []",
+                        "target_classes = config.get('target_classes') or {}"]
+    else:
+        labels_lines = ["labels = _read_json('labels.json')",
+                        "target_labels = labels if isinstance(labels, list) else []"]
     lines += [
         "column_dtypes = _read_json('column_data.json').get('column_dtypes', {})",
-    ] + (["prep = FrozenRecipe.load('prep.json')"] if cleans_input else []) + [
-        "labels = _read_json('labels.json')",
-        "target_labels = labels if isinstance(labels, list) else []",
+    ] + (["prep = FrozenRecipe.load('prep.json')"] if cleans_input else []) + labels_lines + [
         "",
         "",
         "def _prepare(features):",
@@ -145,10 +203,14 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str, cleans
         "def predict(data: InferenceInput):",
         "    try:",
         "        transformed = pipeline.transform(_prepare(data.features))",
-        "        prediction = np.asarray(model.predict(transformed)).reshape(-1)[0]",
     ]
-    if is_classification:
+    if targets:
+        lines += SEVERAL_TARGETS_LINES + (
+            ["        return {'prediction': answer, 'confidence': confidence or None}"] if is_classification
+            else ["        return {'prediction': answer}"])
+    elif is_classification:
         lines += [
+            "        prediction = np.asarray(model.predict(transformed)).reshape(-1)[0]",
             "        confidence = None",
             "        if hasattr(model, 'predict_proba'):",
             "            confidence = float(np.max(model.predict_proba(transformed)[0]))",
@@ -159,6 +221,7 @@ def generate_fastapi_app(task: str, model_name: str, model_filename: str, cleans
         ]
     else:
         lines += [
+            "        prediction = np.asarray(model.predict(transformed)).reshape(-1)[0]",
             "        return {'prediction': float(prediction)}",
         ]
     lines += [
@@ -187,13 +250,14 @@ def _pinned(dist):
     return f"{dist}=={version}" if version else dist
 
 
-def generate_requirements(model_name: str, cleans_input: bool = False) -> str:
+def generate_requirements(model_name: str, cleans_input: bool = False, model_classes=None,
+                          needs_easyml: bool = False) -> str:
     """Pin the libraries that unpickle the model to the versions that trained it."""
     reqs = ["fastapi", "uvicorn", "pydantic"]
     reqs += [_pinned(dist) for dist in ("scikit-learn", "pandas", "numpy", "joblib")]
-    if model_name in _MODEL_PACKAGES:
-        reqs.append(_pinned(_MODEL_PACKAGES[model_name]))
-    if cleans_input:  # the frozen data-prep recipe is applied with Easy-ML's own code
+    for dist in dict.fromkeys(_MODEL_PACKAGES[m] for m in (model_classes or [model_name]) if m in _MODEL_PACKAGES):
+        reqs.append(_pinned(dist))
+    if cleans_input or needs_easyml:  # Easy-ML's own code: the frozen recipe, or the per-target model
         from easyml import __version__
 
         reqs.append(f"easy-ml-studio=={__version__}")
@@ -254,7 +318,7 @@ def example_features(folder_path, limit=None):
 
 
 def generate_readme(task: str, model_name: str, model_filename: str = "model.pkl", example=None,
-                    cleans_input: bool = False) -> str:
+                    cleans_input: bool = False, targets=None) -> str:
     from easyml.utils.run_summary import model_label, task_label
 
     example = example or {"column_a": 1.5, "column_b": "value"}
@@ -265,7 +329,20 @@ def generate_readme(task: str, model_name: str, model_filename: str = "model.pkl
                 else '{"prediction": 123.45}')
     columns = "\n".join(f"- `{name}`" for name in example)
     label_file = "| `labels.json` | Class names, in the order the model uses them |\n" if is_classification else ""
-    if cleans_input:
+    if targets:  # several columns to predict: one answer per column
+        if is_classification:
+            response = json.dumps({"prediction": {t: "<class>" for t in targets}, "confidence": {t: 0.93 for t in targets}})
+        else:
+            response = json.dumps({"prediction": {t: 123.45 for t in targets}})
+        label_file = ""
+        runs_on = ("It predicts " + ", ".join(f"`{t}`" for t in targets) + " with one model per column. It needs no "
+                   "running studio: `requirements.txt` installs the `easy-ml-studio` package for the code that "
+                   "holds those models together" + (" and cleans each request like the training data"
+                                                    if cleans_input else "") + ".")
+        if cleans_input:
+            label_file = ("| `prep.json` | The data-prep recipe and the numbers it learned from the training data; "
+                          "each request is cleaned with it first |\n")
+    elif cleans_input:
         label_file += ("| `prep.json` | The data-prep recipe and the numbers it learned from the training data; "
                        "each request is cleaned with it first |\n")
         runs_on = ("It needs no running studio: `requirements.txt` installs the `easy-ml-studio` package only for "

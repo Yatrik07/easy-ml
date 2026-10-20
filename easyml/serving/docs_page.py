@@ -55,8 +55,18 @@ def render_docs(info, base_url, needs_key=False):
         inputs_html = ('<p>Send an image as a multipart <code>file</code> (one or several), or JSON '
                        '<code>{"image_base64": "..."}</code>.</p>')
     classes = info.get("classes")
-    classes_html = (f"<p>Possible answers: {', '.join('<code>' + html.escape(str(c)) + '</code>' for c in classes)}</p>"
-                    if classes else "")
+
+    def codes(values):
+        return ", ".join("<code>" + html.escape(str(v)) + "</code>" for v in values)
+
+    if info.get("targets"):  # several columns to predict: one answer per column
+        classes_html = (f"<p>Each answer predicts every column: {codes(info['targets'])}, as "
+                        "<code>{\"prediction\": {\"column\": value, ...}}</code>.</p>")
+        if isinstance(classes, dict):
+            classes_html += "".join(f"<p>Possible answers for <code>{html.escape(str(t))}</code>: {codes(c)}</p>"
+                                    for t, c in classes.items())
+    else:
+        classes_html = f"<p>Possible answers: {codes(classes)}</p>" if classes else ""
     key_html = ("<p class='note'>This service needs an API key: send <code>Authorization: Bearer &lt;key&gt;</code> "
                 "or <code>X-API-Key</code>.</p>" if needs_key else "")
     blocks = "".join(f"<h3>{html.escape(name)}</h3><pre>{html.escape(code)}</pre>" for name, code in examples.items())

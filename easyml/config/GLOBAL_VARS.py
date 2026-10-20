@@ -279,6 +279,11 @@ class ML_RequestBody(BaseModel):
     df: Optional[pd.DataFrame] = None
     target_column: str = ""
     target_encodings: Optional[dict] = None
+    # 0.13, several target columns (core/multi_target.py): all of them, their weights and per-column classes.
+    # Empty for a run with one target, which keeps using target_column / target_encodings only.
+    target_columns: List[str] = Field(default_factory=list)
+    target_weights: dict = Field(default_factory=dict)
+    target_encodings_by_column: dict = Field(default_factory=dict)
 
     X_train: Optional[pd.DataFrame] = None
     X_test: Optional[pd.DataFrame] = None
@@ -367,6 +372,12 @@ class ML_RequestBody(BaseModel):
         to_dump["run_id"] = getattr(self, "run_id", None)
         to_dump["random_seed"] = self.random_seed
         to_dump["cv_folds"] = self.cv_folds
+        if len(self.target_columns) > 1:
+            to_dump["target_columns"] = self.target_columns
+            to_dump["target_weights"] = self.target_weights
+            if self.target_encodings_by_column:
+                to_dump["target_classes"] = {target: labels_in_code_order(encodings)
+                                             for target, encodings in self.target_encodings_by_column.items()}
         if self.recipe:
             to_dump["recipe"] = self.recipe
         if self.final_of_run:

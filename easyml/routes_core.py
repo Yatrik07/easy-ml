@@ -12,6 +12,7 @@ from easyml.config.GLOBAL_VARS import (
 from easyml.capabilities import get_capabilities
 from easyml.core.artifacts import load_frozen_recipe, validate_model_name
 from easyml.core.inference import MLInferenceController
+from easyml.core.multi_target import BEST_FOR_EACH_TARGET, combined_summary, is_multi, targets_of
 from easyml.route_helpers import (
     recipe_summary,
     clean_display_filename,
@@ -113,7 +114,10 @@ def ml_predict():
 
     task = data.get("task")
     name = data.get("name")
-    target_column = data.get("target_column")
+    target_columns = data.get("target_columns") or []  # several columns to predict (0.13)
+    if not isinstance(target_columns, list):
+        return jsonify({"status_code": 400, "error_message": "target_columns must be a list of column names"}), 400
+    target_column = data.get("target_column") or (target_columns[0] if target_columns else None)
 
     if not task or not name or not data.get("dataset_path") or not target_column:
         return jsonify({"status_code": 400, "error_message": "Missing required fields (task, name, dataset_path, or target_column)"}), 400
@@ -145,6 +149,8 @@ def ml_predict():
             task=task,
             dataset_path=dataset_path,
             target_column=target_column,
+            target_columns=target_columns if len(target_columns) > 1 else None,
+            target_weights=data.get("target_weights") if len(target_columns) > 1 else None,
             preprocessing=True,
             imputation=data.get("imputation_strategy", "impute") != "drop",
             scaling=scaling_raw == "Yes" if isinstance(scaling_raw, str) else bool(scaling_raw),
@@ -269,8 +275,13 @@ def get_run_data():
     order = {m["key"]: i for i, m in enumerate(ranked)}
     model_names.sort(key=lambda name: order.get(name, len(order)))
     summary = summarize_run(result)
+    several = _several_targets(result.get("task"), data_path, config_data, ranked)
+    if several and several["combined"]:
+        # Each target predicted by the model that did best on it: offered first and chosen by default.
+        model_names.insert(0, BEST_FOR_EACH_TARGET)
+        summary["best_model"] = BEST_FOR_EACH_TARGET
 
-    return jsonify({
+    payload = {
         "columns": column_data,
         "column_details": column_details,
         "target_column": target,
@@ -283,7 +294,28 @@ def get_run_data():
         "model_scores": {m["key"]: m["test_score"] for m in ranked},
         "example_row": _example_row(result.get("task"), data_path),
         "cleaning": cleaning,
-    }), 200
+    }
+    if several:
+        payload["targets"] = several
+    return jsonify(payload), 200
+
+
+def _several_targets(task, folder, config, ranked):
+    """
+    For a run with several target columns: ``{"columns", "weights", "classes", "scores", "combined"}``, where
+    ``scores`` is each model's test score per target and ``combined`` the model behind each target in the
+    best model for each target. None for every other run.
+    """
+    if task not in ("MLClassification", "MLRegression") or not is_multi(config):
+        return None
+    columns = targets_of(config)
+    return {
+        "columns": columns,
+        "weights": {t: float((config.get("target_weights") or {}).get(t, 1)) for t in columns},
+        "classes": config.get("target_classes"),
+        "scores": {m["key"]: m.get("targets") or {} for m in ranked},
+        "combined": combined_summary(folder),
+    }
 
 
 def _cleaning_info(folder, config):
@@ -373,6 +405,7 @@ def explain():
             run_id=int(json_data["run_id"]),
             data=json_data["data"],
             model_name=validate_model_name(json_data["model_name"]),
+            target=json_data.get("target"),
         )
         return jsonify(explainer.explain()), 200
     except Exception as exc:

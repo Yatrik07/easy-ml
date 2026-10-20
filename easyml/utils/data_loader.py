@@ -130,9 +130,22 @@ def data_loader(request_body):
 
     move_to_runs(request_body)
 
+    if len(getattr(request_body, "target_columns", None) or []) > 1:
+        try:
+            _load_several_targets(request_body)
+        except Exception:
+            if request_body.status_code == 200:
+                request_body.error_message = "DataIngestionError"
+                request_body.status_code = error_code_mappings[request_body.error_message]
+                request_body.error_traceback = traceback.format_exc()
+                write_log("error occurred- {} - {}".format(request_body.error_message, request_body.error_traceback),
+                          "error", os.path.basename(__file__))
+            raise
+        return
+
     try:
         request_body.df = load_data_from_path(request_body.dataset_path)
-        
+
         if request_body.target_column not in request_body.df.columns:
             raise ValueError(f"Target column '{request_body.target_column}' not found in dataset. "
                              f"Available columns: {request_body.df.columns.tolist()}")
@@ -182,6 +195,54 @@ def data_loader(request_body):
 
         raise e
 
+
+
+def _load_several_targets(request_body):
+    """
+    ``data_loader`` for a run with several target columns (0.13): ``y`` is one column per target, and each
+    classification target is encoded on its own (``target_encodings_by_column``).
+    """
+    targets = list(request_body.target_columns)
+    request_body.df = load_data_from_path(request_body.dataset_path)
+    missing = [t for t in targets if t not in request_body.df.columns]
+    if missing:
+        raise ValueError(f"Column to predict '{missing[0]}' not found in dataset. "
+                         f"Available columns: {request_body.df.columns.tolist()}")
+    request_body.ignore_columns = request_body.ignore_columns or []
+
+    if request_body.df[targets].isna().any().any():
+        request_body.df = request_body.df.dropna(subset=targets)
+        request_body.source_rows = kept_rows(request_body.source_rows, request_body.df.index)
+        request_body.df.reset_index(drop=True, inplace=True)
+    if not getattr(request_body, "imputation", True):
+        used_columns = [c for c in request_body.df.columns if c not in request_body.ignore_columns]
+        if request_body.df[used_columns].isna().any().any():
+            request_body.df = request_body.df.dropna(subset=used_columns)
+            request_body.source_rows = kept_rows(request_body.source_rows, request_body.df.index)
+            request_body.df.reset_index(drop=True, inplace=True)
+    if request_body.df.empty:
+        raise ValueError("No rows have a value in every column to predict.")
+
+    request_body.X = request_body.df.drop(columns=targets + request_body.ignore_columns, errors="ignore")
+    if "classification" in request_body.task.lower():
+        encodings, codes = {}, []
+        for target in targets:
+            values = request_body.df[target].tolist()
+            if len(set(values)) < 2:
+                raise ValueError(f"'{target}' has the same value in every row, so there is nothing to predict.")
+            encodings[target], encoded = encode_categorical_list(values)
+            codes.append(encoded)
+        request_body.target_encodings_by_column = encodings
+        request_body.y = np.column_stack(codes)
+    else:
+        for target in targets:
+            if not pd.api.types.is_numeric_dtype(request_body.df[target]) or \
+                    pd.api.types.is_bool_dtype(request_body.df[target]):
+                raise ValueError(f"'{target}' does not hold numbers. Predict numbers and categories in separate "
+                                 "runs (categories with a classification run).")
+        request_body.y = request_body.df[targets].to_numpy(dtype=float)
+    write_log(f"loaded {len(request_body.df)} rows with {len(targets)} columns to predict", "info",
+              os.path.basename(__file__))
 
 
 def encode_categorical_list(categorical_list):

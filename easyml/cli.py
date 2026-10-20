@@ -196,9 +196,15 @@ def predict(run_id, source, model=None, output=None, text_column=None, out=None,
             if check_data:
                 _report_check(predictor, frame, notes)
             frame = frame.copy()
-            frame["Prediction"] = predictions
-            if confidences is not None:
-                frame["Confidence"] = [round(c, 4) for c in confidences]
+            if getattr(predictor, "targets", None):  # several targets: a column per target
+                from easyml.core.inference import prediction_columns
+
+                for column, values in prediction_columns(predictor.targets, predictions, confidences).items():
+                    frame[column] = values
+            else:
+                frame["Prediction"] = predictions
+                if confidences is not None:
+                    frame["Confidence"] = [round(c, 4) for c in confidences]
             if output:
                 frame.to_csv(output, index=False)
                 print(f"Wrote {len(frame)} predictions to {output}", file=sys.stderr)

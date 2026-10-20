@@ -139,6 +139,54 @@ def _charts(charts, task):
     return f'<div class="charts">{"".join(figures)}</div>' if figures else ""
 
 
+def _by_target(targets, ranked, config, metric):
+    """Each model's test score per column to predict, the best one per column marked (runs with several)."""
+    weights = config.get("target_weights") or {}
+    best = {t: max((m["targets"].get(t) for m in ranked if (m.get("targets") or {}).get(t) is not None), default=None)
+            for t in targets}
+    headers = ["Model"] + [f"{t} (weight {float(weights.get(t, 1)):g})" for t in targets]
+    rows = []
+    for m in ranked:
+        scores = m.get("targets") or {}
+        rows.append([_e(m["label"])] + [
+            _score(scores.get(t), metric) + (" ★" if scores.get(t) is not None and scores.get(t) == best[t] else "")
+            for t in targets])
+    note = ("<p class=\"subtle\">Each column to predict has its own model in every row above, trained and tuned on "
+            "that column alone, so no column's accuracy is traded for another's. The run's score is the "
+            "weighted average; ★ marks the best model for each column, which together make the "
+            "&ldquo;best model for each target&rdquo;.</p>")
+    return "<h3>By column to predict</h3>" + _table(headers, rows, numeric=tuple(range(1, len(headers)))) + note
+
+
+def _model_targets(entry, charts, task, metric):
+    """A multi-target model's section body: per column, its metrics, settings and charts."""
+    parts = []
+    test = (entry.get("test_metrics") or {}).get("targets") or {}
+    if (entry.get("test_metrics") or {}).get("exact_match") is not None:
+        parts.append(f'<p class="muted">All columns right: {_score(entry["test_metrics"]["exact_match"], metric)} '
+                     "of the test rows.</p>")
+    for target, scores in (entry.get("targets") or {}).items():
+        parts.append(f"<h4>{_e(target)}</h4>")
+        facts = [f"Test {metric['name']} {_score(scores.get('accuracy_test'), metric)}",
+                 f"train {_score(scores.get('accuracy_train'), metric)}"]
+        if scores.get("cv"):
+            facts.append(f"cross-validation {_cv_text(scores['cv'], metric)}")
+        parts.append(f'<p class="muted">{" · ".join(facts)}</p>')
+        metrics = test.get(target) or {}
+        if task != "MLRegression":
+            parts.append(_confusion(metrics))
+            parts.append(_class_report(metrics))
+        else:
+            values = [[_e(REGRESSION_LABELS.get(k, k)), _number(v)] for k, v in metrics.items() if isinstance(v, (int, float))]
+            if values:
+                parts.append(_table(["Test metric", "Value"], values, numeric=(1,)))
+        params = (entry.get("best_params") or {}).get(target)
+        if params:
+            parts.append(f'<p class="subtle">Tuned settings: {_e(", ".join(f"{k} = {v}" for k, v in params.items()))}</p>')
+        parts.append(_charts(charts.get(target) or {}, task))
+    return "".join(parts)
+
+
 def build_report(run_id):
     """``(html, file_name)`` for run ``run_id``. Raises RunNotFoundError."""
     from easyml import __version__
@@ -184,9 +232,14 @@ def build_report(run_id):
         out.append(f'<div class="notes">{_e(run["notes"])}</div>')
 
     final_of = run.get("parent_run_id") if run.get("origin") == "final" else None
+    targets = run.get("targets") or []
+    weighted = " (weighted)" if targets else ""  # several columns to predict: scores are weighted averages
     tiles = [("Best model", _e(run.get("best_model_label") or "—")),
-             (f"Expected {metric['name']}" if final_of else f"Test {metric['name']}", _score(run.get("best_score"), metric)),
+             (f"Expected {metric['name']}{weighted}" if final_of else f"Test {metric['name']}{weighted}",
+              _score(run.get("best_score"), metric)),
              ("Models trained", str(len(ranked)))]
+    if targets:
+        tiles.insert(2, ("Columns to predict", _e(", ".join(targets))))
     if evaluation.get("n_test"):
         tiles.append((f"Test rows (run #{int(final_of)})" if final_of else "Test rows", f"{int(evaluation['n_test']):,}"))
     out.append('<div class="tiles">' + "".join(f"<div class=\"tile\"><span>{_e(k)}</span><b>{v}</b></div>" for k, v in tiles) + "</div>")
@@ -206,7 +259,8 @@ def build_report(run_id):
 
     out.append("<h2>Leaderboard</h2>")
     has_cv = any(isinstance(metrics.get(m["key"]), dict) and metrics[m["key"]].get("cv") for m in ranked)
-    headers = ["#", "Model", f"Test {metric['name']}", f"Train {metric['name']}"] + (["Cross-validation"] if has_cv else [])
+    headers = (["#", "Model", f"Test {metric['name']}{weighted}", f"Train {metric['name']}{weighted}"]
+               + (["Cross-validation"] if has_cv else []))
     rows = []
     for i, m in enumerate(ranked, 1):
         entry = metrics.get(m["key"]) if isinstance(metrics.get(m["key"]), dict) else {}
@@ -218,6 +272,8 @@ def build_report(run_id):
     out.append(f'<p class="subtle">Models are ranked by their {_e(metric["name"].lower())} on the test set, '
                "rows the models never trained on." + (" Cross-validation: mean ± spread over folds of the training data."
                                                      if has_cv else "") + "</p>")
+    if targets:
+        out.append(_by_target(targets, ranked, config, metric))
 
     settings = settings_for_display(task, config)
     if settings:
@@ -249,6 +305,10 @@ def build_report(run_id):
         if entry.get("cv"):
             facts.append(f"cross-validation {_cv_text(entry['cv'], metric)}")
         out.append(f'<p class="muted">{" · ".join(facts)}</p>')
+        if entry.get("targets"):  # several columns to predict: each target's own model, metrics and charts
+            out.append(_model_targets(entry, (eval_models.get(m["key"]) or {}).get("targets") or {}, task, metric))
+            out.append("</section>")
+            continue
         if classification:
             out.append(_confusion(test_metrics))
             out.append(_class_report(test_metrics))

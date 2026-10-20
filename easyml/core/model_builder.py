@@ -28,6 +28,7 @@ from easyml.core.evaluation_charts import (
 from easyml.core.evaluator import get_metrics, get_train_test_metrics
 from easyml.core.cancellable_search import CancellableGridSearchCV
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
+from easyml.core.multi_target import PerTargetModel, estimator_for, weighted_mean, weights_of
 from easyml.utils.cancellation import is_cancelled
 from easyml.utils.holdout import write_holdout
 from easyml.utils.logger import write_log
@@ -73,7 +74,7 @@ def _model_charts(model, request_body, task, y_pred_test=None):
     parts["importance"] = lambda: tabular_importance(model, request_body, task)
     return build_model_charts(parts)
 
-def _cross_validate(request_body, template, model_name, task):
+def _cross_validate(request_body, template, model_name, task, y_train=None):
     """k-fold scores of ``template`` (with its tuned settings) with the preprocessing refit in every fold."""
     from sklearn.base import clone
     from sklearn.pipeline import Pipeline
@@ -86,9 +87,183 @@ def _cross_validate(request_body, template, model_name, task):
     def make():
         return Pipeline([("prep", clone(request_body.pipeline)), ("model", clone(template))])
 
-    return cross_validate(make, request_body.X_train_raw, request_body.y_train, folds, request_body.random_seed,
-                          task == "classification",
+    return cross_validate(make, request_body.X_train_raw, request_body.y_train if y_train is None else y_train,
+                          folds, request_body.random_seed, task == "classification",
                           on_fold=lambda number, k: emit_progress(f"🔁 {model_name}: fold {number}/{k} done"))
+
+
+def _fit(request_body, model, param_grid, imbalance_method, scoring, model_name, task, y_train, cv_name=None):
+    """
+    Fit ``model`` on ``y_train`` (with a grid search when ``param_grid`` has entries) and cross-validate it
+    when asked. Returns ``(fitted bare model, best parameters, cross-validation result or None)``.
+    """
+    temp_dir = None
+    if model_name in CATBOOST_MODEL_NAMES:
+        temp_dir = tempfile.mkdtemp()
+        model.set_params(train_dir=temp_dir, thread_count=1, allow_writing_files=False)
+
+    estimator, search_grid = with_resampling(model, param_grid, imbalance_method, request_body.random_seed)
+    try:
+        if search_grid:
+            search = CancellableGridSearchCV(estimator=estimator, param_grid=search_grid,
+                                             cv=4, scoring=scoring, n_jobs=-1)
+            search.fit(request_body.X_train, y_train)
+            fitted, best_params = search.best_estimator_, search.best_params_
+        else:
+            # No tuning requested: a single fit instead of a 4-fold search over an empty grid.
+            with _all_cores(_final_step(estimator), _PARALLEL_FIT, len(y_train)):
+                fitted, best_params = estimator.fit(request_body.X_train, y_train), {}
+        # Save and evaluate the bare model: metrics below use the original (not resampled) data.
+        best_estimator, best_params = unwrap_model(fitted, best_params)
+        cv_result = (_cross_validate(request_body, search.best_estimator_ if search_grid else estimator,
+                                     cv_name or model_name, task, y_train)
+                     if request_body.cv_folds and not request_body.final_of_run else None)
+    finally:
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    return best_estimator, best_params, cv_result
+
+
+# --------------------------------------------------------------------------- several targets (0.13)
+
+def _round(value):
+    return round(float(value), 5) if value is not None else None
+
+
+def _fit_per_target(request_body, template, model_name, task, param_grid, scoring):
+    """
+    A copy of ``template`` for each target, fitted (and searched) on that target's own column: no target's
+    accuracy is traded for another's. Returns ``(PerTargetModel, best params by target, CV by target)``.
+    """
+    from sklearn.base import clone
+
+    targets = request_body.target_columns
+    estimators, params, cv_results = [], {}, {}
+    for index, target in enumerate(targets):
+        if is_cancelled():
+            raise InterruptedError("Training cancelled by user")
+        emit_progress(f"🎯 {model_name}: predicting {target} ({index + 1}/{len(targets)})...")
+        model = clone(template)
+        grid = param_grid
+        if request_body.final_of_run:
+            model.set_params(**(((request_body.fixed_params.get(model_name) or {}).get(target)) or {}))
+            grid = {}
+        fitted, best_params, cv_result = _fit(request_body, model, grid, "none", scoring, model_name, task,
+                                              request_body.y_train[:, index], f"{model_name} ({target})")
+        estimators.append(fitted)
+        params[target] = best_params
+        cv_results[target] = cv_result
+    return PerTargetModel(estimators, targets), params, cv_results
+
+
+def _target_metrics(request_body, task, y_true, y_pred):
+    """
+    The single-target metrics of every target, their weighted score and, for classification, the share of
+    rows with every target right. Returns ``(metrics, per-target scores)``.
+    """
+    from types import SimpleNamespace
+
+    by_target, scores = {}, []
+    for index, target in enumerate(request_body.target_columns):
+        if task == "classification":
+            encodings = request_body.target_encodings_by_column[target]
+            metrics = get_metrics(SimpleNamespace(target_encodings=encodings), task, y_true[:, index],
+                                  y_pred[:, index], labels=list(encodings.keys()))
+            score = metrics.get("accuracy")
+        else:
+            metrics = get_metrics(request_body, task, y_true[:, index], y_pred[:, index])
+            score = metrics.get("r2_score")
+        by_target[target] = metrics
+        scores.append(None if score is None else float(score))
+    result = {"targets": by_target, "weighted": _round(weighted_mean(scores, weights_of(request_body)))}
+    if task == "classification":
+        result["exact_match"] = _round(np.mean(np.all(np.asarray(y_true) == np.asarray(y_pred), axis=1)))
+    return result, scores
+
+
+def _combined_cv(cv_results, request_body):
+    """One cross-validation summary for a multi-target model: the weighted mean of the targets' results."""
+    results = [cv_results.get(t) for t in request_body.target_columns]
+    present = [r for r in results if r]
+    if not present:
+        return None
+    failed = next((r for r in present if r.get("error")), None)
+    if failed:
+        return {"folds": failed["folds"], "metric": failed["metric"], "error": failed["error"]}
+    weights = weights_of(request_body)
+    return {"folds": present[0]["folds"], "metric": present[0]["metric"],
+            "mean": _round(weighted_mean([r and r.get("mean") for r in results], weights)),
+            "std": _round(weighted_mean([r and r.get("std") for r in results], weights))}
+
+
+def _per_target_charts(model, request_body, task, y_pred_test):
+    """The single-target charts of each target's model: ``{"targets": {target: charts}}``."""
+    from types import SimpleNamespace
+
+    charts = {}
+    for index, target in enumerate(request_body.target_columns):
+        estimator, y_test = estimator_for(model, index), request_body.y_test[:, index]
+        if task == "classification":
+            labels = labels_in_code_order(request_body.target_encodings_by_column[target])
+            parts = classification_parts(estimator, request_body.X_test, y_test, labels)
+        else:
+            parts = {"regression": lambda y=y_test, p=y_pred_test[:, index]: regression_points(y, p)}
+        body = SimpleNamespace(pipeline=request_body.pipeline, X_test_raw=request_body.X_test_raw,
+                               X_train=request_body.X_train, y_test=y_test)
+        parts["importance"] = lambda e=estimator, b=body: tabular_importance(e, b, task)
+        charts[target] = build_model_charts(parts)
+    return {"targets": charts}
+
+
+def _record_per_target(request_body, task, model_name, model, params, cv_results):
+    """Save a multi-target model and record its scores (weighted, per target and, for classification, exact)."""
+    targets = request_body.target_columns
+    model_path = os.path.join(request_body.path_to_save, f"{model_name}.pkl")
+    joblib.dump(model, model_path, protocol=5)
+    train, train_scores = _target_metrics(request_body, task, request_body.y_train, model.predict(request_body.X_train))
+    if request_body.final_of_run:
+        estimate = request_body.estimates.get(model_name) or {}
+        estimated_targets = estimate.get("targets") or {}
+        request_body.performance[model_name] = {
+            "model_path": model_path,
+            "accuracy_train": train["weighted"],
+            "accuracy_test": estimate.get("accuracy_test"),
+            "best_params": request_body.fixed_params.get(model_name) or {},
+            "train_metrics": train,
+            "test_metrics": estimate.get("test_metrics") or {},
+            "targets": {t: {"accuracy_train": _round(train_scores[i]),
+                            **{k: v for k, v in (estimated_targets.get(t) or {}).items() if k != "accuracy_train"}}
+                        for i, t in enumerate(targets)},
+            "estimated_from_run": request_body.final_of_run,
+        }
+        if estimate.get("cv"):
+            request_body.performance[model_name]["cv"] = estimate["cv"]
+        write_log(f"trained final {model_name} for {len(targets)} targets on {len(request_body.y_train)} rows",
+                  "info", os.path.basename(__file__))
+        return None
+
+    y_pred_test = model.predict(request_body.X_test)
+    test, test_scores = _target_metrics(request_body, task, request_body.y_test, y_pred_test)
+    per_target = {}
+    for index, target in enumerate(targets):
+        per_target[target] = {"accuracy_train": _round(train_scores[index]), "accuracy_test": _round(test_scores[index])}
+        if cv_results.get(target):
+            per_target[target]["cv"] = cv_results[target]
+    request_body.performance[model_name] = {
+        "model_path": model_path,
+        "accuracy_train": train["weighted"],
+        "accuracy_test": test["weighted"],
+        "best_params": params,
+        "train_metrics": train,
+        "test_metrics": test,
+        "targets": per_target,
+    }
+    combined = _combined_cv(cv_results, request_body)
+    if combined:
+        request_body.performance[model_name]["cv"] = combined
+    write_log(f"trained {model_name} for {len(targets)} targets: weighted test score {test['weighted']} - saved at "
+              f"{model_path}", "info", os.path.basename(__file__))
+    return y_pred_test
 
 
 def _save_final_model(request_body, task, model_name, model, is_catboost):
@@ -168,6 +343,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
         grid = get_param_grid(task, request_body.hyper_parameter_tuning)
 
         scoring = 'accuracy' if 'classification' in request_body.task.lower() else 'r2'
+        several_targets = len(request_body.target_columns) > 1
 
         total_models = len(models_to_apply)
         for idx, single_model in enumerate(models_to_apply):
@@ -182,36 +358,25 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
             model_name = type(single_model).__name__
             is_catboost = model_name in CATBOOST_MODEL_NAMES
             param_grid = grid.get(model_name, {})
+            if several_targets:
+                write_log(f"training - {single_model} - grid - {param_grid} - once per target", "info",
+                          os.path.basename(__file__))
+                model, params, cv_results = _fit_per_target(request_body, single_model, model_name, task,
+                                                            param_grid, scoring)
+                y_pred_test = _record_per_target(request_body, task, model_name, model, params, cv_results)
+                if y_pred_test is not None:
+                    emit_progress(f"📈 Preparing result charts for {model_name}...")
+                    request_body.charts[model_name] = _per_target_charts(model, request_body, task, y_pred_test)
+                emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))
+                continue
             if request_body.final_of_run:
                 # The final model: the evaluated run's best settings, fitted once on every row (no search).
                 single_model.set_params(**(request_body.fixed_params.get(model_name) or {}))
                 param_grid = {}
             write_log(f"training - {single_model} - grid - {param_grid}", "info", os.path.basename(__file__))
 
-            temp_dir = None
-            if is_catboost:
-                temp_dir = tempfile.mkdtemp()
-                single_model.set_params(train_dir=temp_dir, thread_count=1, allow_writing_files=False)
-
-            estimator, search_grid = with_resampling(single_model, param_grid, imbalance_method, request_body.random_seed)
-            try:
-                if search_grid:
-                    search = CancellableGridSearchCV(estimator=estimator, param_grid=search_grid,
-                                                     cv=4, scoring=scoring, n_jobs=-1)
-                    search.fit(request_body.X_train, request_body.y_train)
-                    fitted, best_params = search.best_estimator_, search.best_params_
-                else:
-                    # No tuning requested: a single fit instead of a 4-fold search over an empty grid.
-                    with _all_cores(_final_step(estimator), _PARALLEL_FIT, len(request_body.y_train)):
-                        fitted, best_params = estimator.fit(request_body.X_train, request_body.y_train), {}
-                # Save and evaluate the bare model: metrics below use the original (not resampled) data.
-                best_estimator, best_params = unwrap_model(fitted, best_params)
-                cv_result = (_cross_validate(request_body, search.best_estimator_ if search_grid else estimator,
-                                             model_name, task)
-                             if request_body.cv_folds and not request_body.final_of_run else None)
-            finally:
-                if temp_dir:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
+            best_estimator, best_params, cv_result = _fit(request_body, single_model, param_grid, imbalance_method,
+                                                          scoring, model_name, task, request_body.y_train)
 
             if request_body.final_of_run:
                 _save_final_model(request_body, task, model_name, best_estimator, is_catboost)
@@ -270,8 +435,13 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
 
         labels = labels_in_code_order(request_body.target_encodings) if task == "classification" else None
         if not request_body.final_of_run:  # a final model shows the evaluated run's charts (run_inputs)
-            write_evaluation(request_body.path_to_save, request_body.task, request_body.charts,
-                             {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels] if labels else None})
+            meta = {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels] if labels else None}
+            if several_targets:
+                meta["targets"] = request_body.target_columns
+                if task == "classification":
+                    meta["target_classes"] = {t: [str(c) for c in labels_in_code_order(e)]
+                                              for t, e in request_body.target_encodings_by_column.items()}
+            write_evaluation(request_body.path_to_save, request_body.task, request_body.charts, meta)
 
         # Write column_data.json and config_json.json ONCE after all models are done
         column_data = {}

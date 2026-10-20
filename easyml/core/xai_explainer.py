@@ -13,6 +13,7 @@ from easyml.core.artifacts import (
     load_tabular_model,
     read_json,
 )
+from easyml.core.multi_target import estimator_for, run_targets, targets_of
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.logger import write_log
 
@@ -32,10 +33,11 @@ class XAIExplainer:
     Generates SHAP explanations for a single inference prediction.
     It loads the model and pipeline, transforms the input, and picks a suitable SHAP explainer.
     """
-    def __init__(self, run_id, model_name, data):
+    def __init__(self, run_id, model_name, data, target=None):
         self.run_id = int(run_id)
         self.model_name = model_name
         self.data = data
+        self.target = target  # runs with several target columns: which one to explain (default: the first)
         self.model = None
         self.pipeline = None
         self.task = None
@@ -52,6 +54,16 @@ class XAIExplainer:
         self.pipeline = load_pipeline(self.folder_path)
         self.model = load_tabular_model(self.folder_path, self.model_name, self.task)
         self.column_data = read_json(self.folder_path, "column_data.json")
+        targets = run_targets(self.folder_path)
+        if targets:
+            # One target's own model is explained, like a run with that single target.
+            self.target = self.target or targets[0]
+            if self.target not in targets:
+                raise ValueError(f"'{self.target}' is not one of this run's columns to predict.")
+            self.model = estimator_for(self.model, targets.index(self.target))
+            self.model_name = type(self.model).__name__
+        else:
+            self.target = None
 
         try:
             if "pca" not in self.pipeline.named_steps:
@@ -82,7 +94,7 @@ class XAIExplainer:
         data_path = os.path.join(self.folder_path, "data.csv")
         config = read_json(self.folder_path, "config_json.json")
         df = pd.read_csv(data_path, nrows=5000)
-        drop = [config.get("target_column")] + (config.get("ignore_columns") or [])
+        drop = targets_of(config) + (config.get("ignore_columns") or [])
         df = df.drop(columns=[c for c in drop if c in df.columns])
         df = df.sample(min(BACKGROUND_SAMPLES, len(df)), random_state=0)
         return self._transform(df)
@@ -197,7 +209,7 @@ class XAIExplainer:
         buffer.seek(0)
 
         write_log("XAI plot generated", "info", "xai_explainer.py")
-        return {
+        answer = {
             "status": "success",
             "explanation": {
                 "scale": self._scale(),
@@ -209,3 +221,6 @@ class XAIExplainer:
             },
             "plot_b64": base64.b64encode(buffer.read()).decode('utf-8'),
         }
+        if self.target is not None:
+            answer["target"] = self.target
+        return answer

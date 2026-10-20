@@ -89,7 +89,11 @@ def model_info(predictor):
             columns = read_json(folder, "column_data.json").get("column_dtypes") or {}
             info["inputs"] = {"kind": "features", "columns": columns}
         info["example"] = {"features": example_features(folder)}
-        if predictor.task == "MLClassification":
+        if getattr(predictor, "targets", None):  # several columns to predict (0.13)
+            info["targets"] = list(predictor.targets)
+            if predictor.task == "MLClassification":
+                info["classes"] = read_json(folder, "config_json.json").get("target_classes")
+        elif predictor.task == "MLClassification":
             decoder = load_target_decoder(folder)
             info["classes"] = [decoder[i] for i in sorted(decoder)]
     elif predictor.is_text:

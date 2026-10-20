@@ -230,12 +230,17 @@ const TAB_LABELS = {
 const TAB_ORDER = ['roc', 'pr', 'scatter', 'residual_histogram', 'importance', 'top_terms'];
 
 export const ModelCharts = {
-  props: { runId: [Number, String], modelKey: String },
+  props: { runId: [Number, String], modelKey: String, target: String },
   setup(props) {
     onMounted(() => loadCharts(props.runId));
     watch(() => props.runId, id => loadCharts(id));
     const response = computed(() => charts.byRun[props.runId]);
-    const model = computed(() => (response.value && response.value.models && response.value.models[props.modelKey]) || null);
+    const model = computed(() => {
+      const saved = (response.value && response.value.models && response.value.models[props.modelKey]) || null;
+      if (!saved || !saved.targets) return saved;
+      // Several columns to predict: the charts of the chosen column's own model.
+      return saved.targets[props.target] || saved.targets[Object.keys(saved.targets)[0]] || null;
+    });
     const tabs = computed(() => (model.value ? TAB_ORDER.filter(key => model.value[key]) : []));
     const active = ref(null);
     watch(tabs, list => { if (!list.includes(active.value)) active.value = list[0] || null; }, { immediate: true });

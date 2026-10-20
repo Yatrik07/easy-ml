@@ -14,6 +14,7 @@ from easyml.core.artifacts import (
     load_target_decoder,
     read_json,
 )
+from easyml.core.multi_target import estimator_for, is_multi, targets_of
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.logger import write_log
 from easyml.utils.utils import convert_numpy
@@ -45,6 +46,8 @@ class MLInferenceController:
         self.column_data = {}
         self.prep = None  # the run's frozen data-prep recipe, when it was trained on cleaned data
         self.folder_path = None
+        self.targets = []    # several target columns (0.13): their names and, for classification, decoders
+        self.decoders = {}
 
     def _record_error(self):
         if self.inference_body.status_code == 200:
@@ -116,6 +119,13 @@ class MLInferenceController:
         prepared, notes = self._prepare(frame)
         transformed_input = self._transform(prepared, cleaned=True)
         model = self.inference_body.model
+        if self.targets:
+            predictions, confidences = self._several(model, transformed_input)
+            output = {"prediction": predictions[0], "probability": confidences[0] if confidences else None}
+            warnings = notes + self.data_warnings(frame)
+            if warnings:
+                output["warnings"] = warnings
+            return output
         prediction = flatten_predictions(model.predict(transformed_input))[0]
 
         is_classification = "classification" in self.inference_body.task.lower()
@@ -150,6 +160,9 @@ class MLInferenceController:
         prepared, notes = self._prepare(df, cleaned)
         transformed = self._transform(prepared, cleaned=True)
         model = self.inference_body.model
+        if self.targets:
+            predictions, confidences = self._several(model, transformed)
+            return predictions, confidences, notes
         predictions = flatten_predictions(model.predict(transformed))
         if "classification" not in self.inference_body.task.lower():
             return [convert_numpy(p) for p in predictions], None, notes
@@ -165,8 +178,12 @@ class MLInferenceController:
         """
         write_log("entered predict_batch", "debug", os.path.basename(__file__))
         try:
-            predictions, _ = self.predict_frame(df)
+            predictions, confidences = self.predict_frame(df)
             output_df = df.copy()
+            if self.targets:
+                for column, values in prediction_columns(self.targets, predictions, confidences).items():
+                    output_df[column] = values
+                return output_df
             output_df['Prediction'] = predictions
             return output_df
         except Exception:
@@ -192,7 +209,46 @@ class MLInferenceController:
         self.inference_body.model = load_tabular_model(folder_path, self.inference_body.model_name, record["task"])
         self.inference_body.pipeline = load_pipeline(folder_path)
         self.column_data = read_json(folder_path, "column_data.json")
-        if "classification" in record["task"].lower():
+        config = read_json(folder_path, "config_json.json")
+        if is_multi(config):
+            self.targets = targets_of(config)
+            self.decoders = {t: dict(enumerate(labels)) for t, labels in (config.get("target_classes") or {}).items()}
+        elif "classification" in record["task"].lower():
             self.inference_body.target_encodings = load_target_decoder(folder_path)
 
         write_log("Loaded model and pipeline objects successfully", "info", os.path.basename(__file__))
+
+    def _several(self, model, transformed):
+        """
+        Predictions of a run with several targets: one ``{target: value}`` per row and, for classifiers that
+        report probabilities, one ``{target: confidence}`` per row (else None).
+        """
+        values = np.asarray(model.predict(transformed))
+        rows = []
+        for row in values:
+            answer = {}
+            for index, target in enumerate(self.targets):
+                value = convert_numpy(row[index])
+                decoder = self.decoders.get(target)
+                answer[target] = decoder.get(int(value), value) if decoder else value
+            rows.append(answer)
+        if not self.decoders:
+            return rows, None
+        confidences = [{} for _ in rows]
+        for index, target in enumerate(self.targets):
+            estimator = estimator_for(model, index)
+            if not hasattr(estimator, "predict_proba"):
+                return rows, None
+            for answer, scores in zip(confidences, np.asarray(estimator.predict_proba(transformed))):
+                answer[target] = float(scores.max())
+        return rows, confidences
+
+
+def prediction_columns(targets, predictions, confidences):
+    """The output columns of a batch prediction with several targets: ``Prediction: <target>`` (+ confidence)."""
+    columns = {}
+    for target in targets:
+        columns[f"Prediction: {target}"] = [row[target] for row in predictions]
+        if confidences:
+            columns[f"Confidence: {target}"] = [round(row[target], 4) for row in confidences]
+    return columns

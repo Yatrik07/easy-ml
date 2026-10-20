@@ -25,6 +25,14 @@ export const LineageBadge = {
     <span v-else-if="run && run.origin === 'import'" class="badge lineage" title="Imported from a run archive"><Icon name="move_to_inbox" />Imported</span>`,
 };
 
+// A run that predicts several columns (each with its own models).
+export const TargetsBadge = {
+  props: { run: Object },
+  template: /* html */ `
+    <span v-if="run && run.targets && run.targets.length > 1" class="badge" :title="'Predicts ' + run.targets.join(', ')">
+      <Icon name="my_location" />{{ run.targets.length }} columns</span>`,
+};
+
 // Name, tags and notes of a run, edited in place in the run drawer (saved when a field is left).
 export const RunMetaEditor = {
   props: { run: Object },

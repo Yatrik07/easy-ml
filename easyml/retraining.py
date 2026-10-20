@@ -16,6 +16,7 @@ parent's id, so Run History can show where it came from.
 import os
 from dataclasses import dataclass, field
 
+from easyml.core.multi_target import is_multi, targets_of
 from easyml.utils.database_operations import get_record_by_id
 from easyml.utils.run_meta import parse_tags
 from easyml.utils.run_summary import (
@@ -179,19 +180,22 @@ def _require_columns(frame, required):
             missing_columns=missing, required_columns=required)
 
 
-def _check_classes(series, config, warnings):
+def _check_classes(series, config, warnings, several=False):
     values = series.dropna()
     if values.nunique() < 2:
         raise ValueError(f"The target column '{series.name}' needs at least two different classes.")
-    old = config.get("target_labels") or list((config.get("target_encodings") or {}).keys())
+    if several:  # one of several columns to predict (0.13): its own classes
+        old, where = (config.get("target_classes") or {}).get(series.name), f"'{series.name}'"
+    else:
+        old, where = config.get("target_labels") or list((config.get("target_encodings") or {}).keys()), "the target"
     if old:
         old_set = {str(v) for v in old}
         new_set = {str(v) for v in values.unique()}
         added, removed = sorted(new_set - old_set), sorted(old_set - new_set)
         if added:
-            warnings.append("New classes in the target: " + ", ".join(added) + ".")
+            warnings.append(f"New classes in {where}: " + ", ".join(added) + ".")
         if removed:
-            warnings.append("Classes no longer in the target: " + ", ".join(removed) + ".")
+            warnings.append(f"Classes no longer in {where}: " + ", ".join(removed) + ".")
 
 
 def _image_folders(dataset_path):
@@ -285,20 +289,22 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
     if task in TABULAR_TASKS:
         frame = _read_table(dataset_path)
         target = config["target_column"]
+        targets = targets_of(config)  # several columns to predict (0.13), else [target]
         features = _feature_columns(run["column_data"])
-        required = features + [target]
+        required = features + targets
         _require_columns(frame, required)
         extra = [c for c in frame.columns if c not in required]
         if extra:
             warnings.append(f"Ignoring {len(extra)} column(s) the original run did not use: {', '.join(map(str, extra))}.")
-        if task == "MLClassification":
-            _check_classes(frame[target], config, warnings)
-        else:
-            import pandas as pd
+        for column in targets:
+            if task == "MLClassification":
+                _check_classes(frame[column], config, warnings, several=len(targets) > 1)
+            else:
+                import pandas as pd
 
-            values = frame[target].dropna()
-            if pd.to_numeric(values, errors="coerce").isna().any():
-                raise ValueError(f"The target column '{target}' must contain numbers for a regression run.")
+                values = frame[column].dropna()
+                if pd.to_numeric(values, errors="coerce").isna().any():
+                    raise ValueError(f"The target column '{column}' must contain numbers for a regression run.")
         kwargs = {
             "task": task,
             "name": name,
@@ -322,6 +328,8 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
             "cv_folds": config.get("cv_folds", 0),
             "tags": parse_tags(record.get("tags")) or None,
         }
+        if len(targets) > 1:
+            kwargs.update(target_columns=targets, target_weights=dict(config.get("target_weights") or {}))
 
     elif task == TEXT_TASK:
         frame = _read_table(dataset_path)
@@ -453,7 +461,8 @@ def plan_final(run_id, models=None, name=None):
         final_of_run=run_id,
         fixed_params={c: (metrics.get(c) or {}).get("best_params") or {} for c in chosen},
         estimates={c: {k: v for k, v in (metrics.get(c) or {}).items()
-                       if k in ("accuracy_test", "test_metrics", "f1_test", "cv") and v is not None} for c in chosen},
+                       if k in ("accuracy_test", "test_metrics", "f1_test", "cv", "targets") and v is not None}
+                   for c in chosen},
         # data.csv is already clean: the recipe is the parent's, kept as a record (prep.json is copied over)
         recipe=config.get("recipe") if isinstance(config.get("recipe"), dict) else None,
     )
@@ -564,7 +573,9 @@ def run_spec(run_id):
     if task in TABULAR_TASKS:
         features = _feature_columns(run["column_data"])
         retrain.update(input="table", upload_endpoint="/load_data", feature_columns=features,
-                       required_columns=features + [config.get("target_column")])
+                       required_columns=features + (targets_of(config) or [config.get("target_column")]))
+        if is_multi(config):
+            retrain.update(target_columns=targets_of(config), classes=[])
     elif task == TEXT_TASK:
         retrain.update(input="text_table", upload_endpoint="/nlp/load_data",
                        required_columns=[config.get("text_column"), config.get("target_column")])

@@ -4,7 +4,8 @@ import { featureAvailable, installHint, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
 import { useDataset } from '../store/prep.js';
 import {
-  confirmImageFolder, dataReady, isImage, isText, openEdaReport, openFolderPicker, uploadDataset, wizard,
+  addTarget, confirmImageFolder, dataReady, isImage, isTabular, isText, openEdaReport, openFolderPicker, removeTarget,
+  setTargetWeight, severalTargets, targetColumns, targetWeight, uploadDataset, wizard,
 } from '../store/wizard.js';
 
 export default {
@@ -36,10 +37,18 @@ export default {
       ? 'Choose a folder of images with one sub-folder per class, for example cats/ and dogs/.'
       : 'Upload a CSV or Excel file. The first row must contain the column names.'));
 
+    // Columns that can still be added as columns to predict.
+    const otherColumns = computed(() => columns.value.filter(c => !targetColumns.value.includes(c)));
+    function onAddTarget(event) {
+      addTarget(event.target.value);
+      event.target.value = '';
+    }
+
     return {
       wizard, upload, columns, preview, fileInput, cleanFirst, dragging, pick, onFile, onDrop, isImage, isText, dataReady,
       subtitle, taskLabel, navigate, openEdaReport, openFolderPicker, confirmImageFolder, featureAvailable,
-      installHint, formatNumber, truncate,
+      installHint, formatNumber, truncate, isTabular, targetColumns, severalTargets, otherColumns, onAddTarget,
+      removeTarget, targetWeight, setTargetWeight,
     };
   },
   template: /* html */ `
@@ -95,11 +104,34 @@ export default {
                   <option v-for="col in columns" :key="col" :value="col">{{ col }}</option>
                 </select>
               </div>
+              <div v-if="isTabular && wizard.config.target_column" class="field">
+                <label for="extra-target">Predict more columns <span class="subtle text-xs">(optional)</span></label>
+                <select id="extra-target" class="select" value="" @change="onAddTarget">
+                  <option value="" disabled>Add another column to predict</option>
+                  <option v-for="col in otherColumns" :key="col" :value="col">{{ col }}</option>
+                </select>
+              </div>
               <div class="field">
                 <label for="run-name">Run name</label>
                 <input id="run-name" class="input" v-model="wizard.config.name" placeholder="e.g. churn_v1" />
                 <span v-if="!wizard.config.name.trim()" class="field-error">Give this run a name.</span>
               </div>
+            </div>
+            <div v-if="severalTargets" class="card-body target-list">
+              <div class="field-label">Columns to predict</div>
+              <div v-for="col in targetColumns" :key="col" class="target-item">
+                <span class="badge badge-accent">{{ col }}</span>
+                <label class="target-weight">
+                  <span>Weight</span>
+                  <input class="input" type="number" min="0.1" max="10" step="0.5" :value="targetWeight(col)"
+                         @change="setTargetWeight(col, $event.target.value)" :aria-label="'Weight of ' + col" />
+                </label>
+                <button class="btn btn-ghost btn-icon" @click="removeTarget(col)" :aria-label="'Stop predicting ' + col"
+                        title="Stop predicting this column"><Icon name="close" /></button>
+              </div>
+              <span class="field-hint">Each column gets its own models, trained and tuned on that column alone, so no
+                column's accuracy is traded for another's. Weights only decide how the columns' scores add up when the
+                models are ranked: 2 counts twice as much as 1.</span>
             </div>
           </div>
 
@@ -109,7 +141,7 @@ export default {
               <table class="table table-compact preview-table">
                 <thead><tr><th v-for="col in columns" :key="col">
                   {{ col }}
-                  <span v-if="col === wizard.config.target_column" class="badge badge-accent">Target</span>
+                  <span v-if="targetColumns.includes(col)" class="badge badge-accent">Target</span>
                   <span v-if="col === wizard.config.text_column" class="badge">Text</span>
                 </th></tr></thead>
                 <tbody>
