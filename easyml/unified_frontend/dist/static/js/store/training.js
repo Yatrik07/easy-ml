@@ -4,7 +4,9 @@ import { reactive } from '../lib/vue.js';
 import { io } from '../lib/vue.js';
 import { errorMessage } from '../lib/api.js';
 import { navigate, toast, toastError, toastSuccess } from './ui.js';
-import { wizard, isImage, isText, imageSize, severalTargets, targetColumns, targetWeight } from './wizard.js';
+import {
+  wizard, isImage, isText, imageSize, severalTargets, targetColumns, targetWeight, usedFeatureWeights,
+} from './wizard.js';
 import { loadRuns } from './runs.js';
 
 export const training = reactive({
@@ -40,6 +42,7 @@ function wizardRequest() {
   const payload = { ...config, models: [...config.models] };
   delete payload.extra_targets;
   delete payload.target_weights;
+  delete payload.feature_weights;
   if (isText.value) {
     endpoint = '/nlp/predict';
   } else if (isImage.value) {
@@ -48,6 +51,8 @@ function wizardRequest() {
     if (config.models.includes('CustomCNN')) payload.custom_layers = wizard.layers;
   } else {
     payload.preprocessing = true;
+    const weights = usedFeatureWeights();
+    if (Object.keys(weights).length) payload.feature_weights = weights;
     if (severalTargets.value) {
       payload.target_columns = [...targetColumns.value];
       payload.target_weights = Object.fromEntries(targetColumns.value.map(c => [c, targetWeight(c)]));

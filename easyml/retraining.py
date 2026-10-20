@@ -330,6 +330,8 @@ def plan_retrain(run_id, dataset_path, name=None, models=None, original_dataset_
         }
         if len(targets) > 1:
             kwargs.update(target_columns=targets, target_weights=dict(config.get("target_weights") or {}))
+        if config.get("feature_weights"):
+            kwargs["feature_weights"] = dict(config["feature_weights"])
 
     elif task == TEXT_TASK:
         frame = _read_table(dataset_path)

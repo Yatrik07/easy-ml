@@ -284,6 +284,9 @@ class ML_RequestBody(BaseModel):
     target_columns: List[str] = Field(default_factory=list)
     target_weights: dict = Field(default_factory=dict)
     target_encodings_by_column: dict = Field(default_factory=dict)
+    # 0.14, input column weights (core/column_weights.py): {column: weight}, only weights other than 1.
+    feature_weights: dict = Field(default_factory=dict)
+    feature_weight_vector: Optional[List[float]] = None  # one weight per processed column, for the boosters
 
     X_train: Optional[pd.DataFrame] = None
     X_test: Optional[pd.DataFrame] = None
@@ -378,6 +381,8 @@ class ML_RequestBody(BaseModel):
             if self.target_encodings_by_column:
                 to_dump["target_classes"] = {target: labels_in_code_order(encodings)
                                              for target, encodings in self.target_encodings_by_column.items()}
+        if self.feature_weights:
+            to_dump["feature_weights"] = self.feature_weights
         if self.recipe:
             to_dump["recipe"] = self.recipe
         if self.final_of_run:

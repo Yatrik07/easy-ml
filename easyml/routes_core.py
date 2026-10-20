@@ -151,6 +151,7 @@ def ml_predict():
             target_column=target_column,
             target_columns=target_columns if len(target_columns) > 1 else None,
             target_weights=data.get("target_weights") if len(target_columns) > 1 else None,
+            feature_weights=data.get("feature_weights") or None,
             preprocessing=True,
             imputation=data.get("imputation_strategy", "impute") != "drop",
             scaling=scaling_raw == "Yes" if isinstance(scaling_raw, str) else bool(scaling_raw),

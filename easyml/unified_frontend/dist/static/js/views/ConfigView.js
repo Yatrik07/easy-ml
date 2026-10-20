@@ -1,6 +1,12 @@
-import { featureAvailable, installHint, taskLabel } from '../store/session.js';
+import { computed, ref } from '../lib/vue.js';
+import { featureAvailable, installHint, modelLabel, session, taskLabel } from '../store/session.js';
 import { navigate } from '../store/ui.js';
-import { featureColumns, isClassification, isImage, isTabular, isText, severalTargets, wizard } from '../store/wizard.js';
+import {
+  availableModels, featureColumns, featureWeight, isClassification, isImage, isTabular, isText, setFeatureWeight,
+  severalTargets, wizard,
+} from '../store/wizard.js';
+
+const PRESETS = [{ value: 0.5, label: 'Less' }, { value: 1, label: 'Normal' }, { value: 2, label: 'More' }];
 
 const IMBALANCE = [
   { id: 'none', label: 'None' },
@@ -16,8 +22,21 @@ export default {
       const idx = values.indexOf(column);
       if (idx >= 0) values.splice(idx, 1); else values.push(column);
     }
+    // Input column weights: the columns that are used, and how much each model kind follows weights.
+    const weightColumns = computed(() => featureColumns.value.filter(c => !wizard.config.ignore_columns.includes(c)));
+    const weightedCount = computed(() => weightColumns.value.filter(c => featureWeight(c) !== 1).length);
+    const weightsOpen = ref(Object.keys(wizard.config.feature_weights).length > 0);
+    const effects = computed(() => {
+      const known = (session.capabilities && session.capabilities.weight_effects) || {};
+      const groups = { follows: [], slight: [], none: [] };
+      for (const key of availableModels()) {
+        if (known[key]) groups[known[key]].push(modelLabel(key));
+      }
+      return groups;
+    });
     return {
       wizard, featureColumns, isClassification, isImage, isTabular, isText, IMBALANCE, toggle, severalTargets,
+      weightColumns, weightedCount, weightsOpen, effects, PRESETS, featureWeight, setFeatureWeight,
       featureAvailable, installHint, taskLabel, navigate,
     };
   },
@@ -72,6 +91,40 @@ export default {
                 <button v-for="col in featureColumns" :key="col" class="chip" :class="{ selected: wizard.config.ignore_columns.includes(col) }"
                         @click="toggle('ignore_columns', col)" :aria-pressed="wizard.config.ignore_columns.includes(col)">{{ col }}</button>
               </div>
+            </div>
+            <div class="stack-sm">
+              <div class="row-between">
+                <div class="field-label">Column weights <span class="subtle text-xs">(optional)</span></div>
+                <button class="btn btn-ghost btn-sm" @click="weightsOpen = !weightsOpen" :aria-expanded="weightsOpen">
+                  <Icon :name="weightsOpen ? 'expand_less' : 'tune'" />{{ weightsOpen ? 'Hide' : (weightedCount ? weightedCount + ' weighted' : 'Set weights') }}</button>
+              </div>
+              <template v-if="weightsOpen">
+                <p v-if="wizard.config.reduce_features === 'Yes'" class="field-hint">Column weights cannot be combined with
+                  Reduce features (PCA), which mixes the columns.</p>
+                <template v-else>
+                  <p class="field-hint">Tell the models which inputs to rely on more or less, from what you know about the data.
+                    Scores are measured on the column you predict, so weights can lower the test score; Results show how
+                    much each model then used the weighted columns.</p>
+                  <div class="weight-list">
+                    <div v-for="col in weightColumns" :key="col" class="weight-item">
+                      <span class="truncate" :title="col">{{ col }}</span>
+                      <div class="segmented" role="group" :aria-label="'Weight of ' + col">
+                        <button v-for="p in PRESETS" :key="p.value" :class="{ active: featureWeight(col) === p.value }"
+                                @click="setFeatureWeight(col, p.value)">{{ p.label }}</button>
+                      </div>
+                      <input class="input" type="number" min="0.1" max="10" step="0.5" :value="featureWeight(col)"
+                             @change="setFeatureWeight(col, $event.target.value)" :aria-label="'Weight number of ' + col" />
+                    </div>
+                  </div>
+                  <ul class="hint-list text-sm muted">
+                    <li v-if="effects.follows.length"><strong>Follow the weights:</strong> {{ effects.follows.join(', ') }}</li>
+                    <li v-if="effects.slight.length"><strong>Barely change:</strong> {{ effects.slight.join(', ') }}
+                      (they get the weights, but what they rely on hardly moves)</li>
+                    <li v-if="effects.none.length"><strong>Not steered by weights:</strong> {{ effects.none.join(', ') }}
+                      (they only follow "Ignore columns")</li>
+                  </ul>
+                </template>
+              </template>
             </div>
           </div>
         </section>

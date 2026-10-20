@@ -208,17 +208,21 @@ def run_detail(row):
     """Everything about one run that the UI shows, without server file paths."""
     detail = summarize_run(row)
     detail["metrics"] = _strip_paths(parse_metrics(row.get("metrics_json")))
+    config = _config(row.get("folder_path"))
     if detail.get("targets"):  # several columns to predict: their weights in the run's score
-        detail["target_weights"] = _target_weights(row.get("folder_path"))
+        detail["target_weights"] = config.get("target_weights") or {}
+    if config.get("feature_weights"):  # input column weights (0.14)
+        detail["feature_weights"] = config["feature_weights"]
     return detail
 
 
-def _target_weights(folder):
+def _config(folder):
     try:
         with open(os.path.join(folder or "", "config_json.json"), "r", encoding="utf-8") as handle:
-            return json.load(handle).get("target_weights") or {}
+            config = json.load(handle)
     except (OSError, ValueError):
         return {}
+    return config if isinstance(config, dict) else {}
 
 
 TUNING_LABELS = {0: "Off", 1: "Quick", 2: "Thorough"}
@@ -249,6 +253,8 @@ _SETTINGS = {
         ("target_column", "Target column", "Data", str),
         ("ignore_columns", "Ignored columns", "Data", _list),
         ("categorical_columns", "Categorical columns", "Data", _list),
+        ("feature_weights", "Column weights", "Data",
+         lambda v: ", ".join(f"{c} ×{w:g}" for c, w in v.items()) if v else "None"),
         ("imputation", "Missing values", "Preprocessing", lambda v: "Impute" if v else "Drop rows"),
         ("scaling", "Scale numeric features", "Preprocessing", _yes_no),
         ("reduce_features", "Reduce features (PCA)", "Preprocessing", _yes_no),

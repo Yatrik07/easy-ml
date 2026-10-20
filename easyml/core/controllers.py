@@ -2,6 +2,7 @@ import json
 import os
 import traceback
 
+from easyml.core.column_weights import clean_feature_weights
 from easyml.core.multi_target import clean_targets, clean_weights
 from easyml.core.seeding import validate_cv_folds, validate_seed
 from easyml.utils.run_inputs import inherit_from_evaluated_run, record_inputs, recipe_from_sidecars
@@ -32,7 +33,7 @@ class _TabularController:
                  reduce_features=False, ignore_columns=None, task=None, imbalance_handling="none",
                  original_dataset_name=None, parent_run_id=None, recipe=None, random_seed=42, cv_folds=0, tags=None,
                  final_of_run=None, fixed_params=None, estimates=None, target_columns=None, target_weights=None,
-                 **kwargs):
+                 feature_weights=None, **kwargs):
         """
         Args:
             name (str): Name of the run.
@@ -67,6 +68,13 @@ class _TabularController:
                 raise ValueError("Class balance (resampling) is not available with several columns to predict.")
         elif target_weights:
             raise ValueError("Target weights need several columns to predict.")
+        feature_weights = clean_feature_weights(feature_weights)
+        if feature_weights:
+            if reduce_features:
+                raise ValueError("Column weights cannot be combined with Reduce features (PCA): PCA mixes the columns.")
+            clash = [c for c in feature_weights if c in (target_columns or [target_column]) or c in (ignore_columns or [])]
+            if clash:
+                raise ValueError(f"'{clash[0]}' is not an input column, so it cannot have a weight.")
 
         # A file cleaned by Data prep carries its frozen recipe next to it (see easyml.dataprep.frozen).
         self.source_path = dataset_path
@@ -77,6 +85,7 @@ class _TabularController:
             target_column=target_column,
             target_columns=target_columns,
             target_weights=target_weights or {},
+            feature_weights=feature_weights,
             # Inference always loads preprocessing_pipeline.pkl, so the pipeline is always built.
             preprocessing=True,
             scaling=scaling,
@@ -167,6 +176,8 @@ class _TabularController:
                 "hyper_parameter_tuning": bool(self.request_body.hyper_parameter_tuning),
                 "parent_run_id": self.request_body.parent_run_id,
             }
+            if self.request_body.feature_weights:
+                pipeline_summary["feature_weights"] = self.request_body.feature_weights
             if self.request_body.target_columns:
                 pipeline_summary["targets"] = self.request_body.target_columns
                 pipeline_summary["target_weights"] = self.request_body.target_weights

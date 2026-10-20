@@ -3,6 +3,21 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.14.0 (2026-10-20)
+
+Column weights.
+
+- **Tell the models which inputs matter most**: in Configure, **Columns → Column weights** marks a column as
+  Less, Normal or More important (or any weight from 0.1 to 10); in Python, `feature_weights={"area": 2}`.
+- LightGBM weighs its splits on the column and KNN weighs it in its distances: they follow the weights.
+  CatBoost, XGBoost and logistic regression get them too but barely change (measured), and Random Forest,
+  AdaBoost and linear regression are not steered by weights. The studio says which before training.
+- **Results** show a **Column weights** table: how much each model then relied on each weighted column (its
+  share of the feature importance and its rank).
+- Weights are kept by retraining, final models, schedules, the report and the run's settings. Predictions,
+  serve and **Export as API** need nothing new: the weights are part of the saved preprocessing.
+- Not available together with Reduce features (PCA).
+
 ## 0.13.0 (2026-10-20)
 
 Several columns to predict.

@@ -24,6 +24,7 @@ function defaultConfig(task = '') {
     // Tabular
     categorical_columns: [],
     ignore_columns: [],
+    feature_weights: {}, // input column weights: how much the models rely on a column (1 = normal)
     scaling: 'No',
     reduce_features: 'No',
     // Text
@@ -131,6 +132,25 @@ export function setTargetWeight(column, value) {
   wizard.config.target_weights[column] = Math.round(weight * 10) / 10;
 }
 
+export function featureWeight(column) {
+  const weight = wizard.config.feature_weights[column];
+  return weight === undefined ? 1 : weight;
+}
+
+export function setFeatureWeight(column, value) {
+  const weight = Math.round(Math.min(10, Math.max(0.1, Number(value) || 1)) * 10) / 10;
+  if (weight === 1) delete wizard.config.feature_weights[column];
+  else wizard.config.feature_weights[column] = weight;
+}
+
+// The weights that are sent: only for input columns that are used, and not with PCA (which mixes columns).
+export function usedFeatureWeights() {
+  const c = wizard.config;
+  if (c.reduce_features === 'Yes') return {};
+  return Object.fromEntries(Object.entries(c.feature_weights)
+    .filter(([col]) => featureColumns.value.includes(col) && !c.ignore_columns.includes(col)));
+}
+
 // The first column to predict changed: it cannot also be one of the added ones.
 watch(() => wizard.config.target_column, column => {
   const c = wizard.config;
@@ -171,6 +191,7 @@ export async function uploadDataset(file) {
     wizard.config.original_filename = data.original_filename || file.name;
     wizard.config.categorical_columns = [];
     wizard.config.ignore_columns = [];
+    wizard.config.feature_weights = {};
     if (!wizard.config.name) wizard.config.name = defaultRunName(file.name);
     toastSuccess('Loaded ' + file.name + ' (' + data.rows.toLocaleString() + ' rows, ' + data.cols + ' columns)');
   } catch (e) {

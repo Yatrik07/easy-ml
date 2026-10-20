@@ -28,6 +28,7 @@ from easyml.core.evaluation_charts import (
 from easyml.core.evaluator import get_metrics, get_train_test_metrics
 from easyml.core.cancellable_search import CancellableGridSearchCV
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
+from easyml.core.column_weights import BOOSTERS, FoldModel, booster_params
 from easyml.core.multi_target import PerTargetModel, estimator_for, weighted_mean, weights_of
 from easyml.utils.cancellation import is_cancelled
 from easyml.utils.holdout import write_holdout
@@ -85,6 +86,10 @@ def _cross_validate(request_body, template, model_name, task, y_train=None):
     emit_progress(f"🔁 Cross-validating {model_name} on {folds} folds...")
 
     def make():
+        if request_body.feature_weights and type(_final_step(template)).__name__ in BOOSTERS:
+            # Weighted boosters: the weights are matched to each fold's processed columns.
+            return FoldModel(clone(request_body.pipeline), clone(template), type(_final_step(template)).__name__,
+                             list(request_body.X.columns), request_body.feature_weights)
         return Pipeline([("prep", clone(request_body.pipeline)), ("model", clone(template))])
 
     return cross_validate(make, request_body.X_train_raw, request_body.y_train if y_train is None else y_train,
@@ -97,6 +102,8 @@ def _fit(request_body, model, param_grid, imbalance_method, scoring, model_name,
     Fit ``model`` on ``y_train`` (with a grid search when ``param_grid`` has entries) and cross-validate it
     when asked. Returns ``(fitted bare model, best parameters, cross-validation result or None)``.
     """
+    if request_body.feature_weight_vector and model_name in BOOSTERS:  # input column weights (0.14)
+        model.set_params(**booster_params(model_name, request_body.feature_weight_vector))
     temp_dir = None
     if model_name in CATBOOST_MODEL_NAMES:
         temp_dir = tempfile.mkdtemp()

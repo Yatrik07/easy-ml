@@ -459,6 +459,25 @@ run's `prep.json`, `raw_data.csv` and `data_profile.json`, and its `evaluation.j
 `final`). Schedules: when the champion is a final model, a promoted challenger is refit with `plan_final`
 and that run becomes the champion. `plan_retrain` of a final model trains an evaluated run and warns.
 
+### Column weights (0.14.0)
+
+`core/column_weights.py`. `feature_weights` (`{column: 0.1-10}`, only values other than 1; refused with PCA,
+targets and ignored columns) is applied two ways:
+
+- **In the preprocessing.** `pre_processing` swaps the grouped ColumnTransformer entries for
+  `weighted_transformers`: one entry per column, in the same order, so unweighted columns give identical
+  values. Weighted columns get a final `FunctionTransformer(partial(np.multiply, w))` step, which pickles
+  without Easy-ML. KNN follows it, and logistic regression only through regularisation.
+- **For the boosters.** `output_weights` maps the weights onto the processed columns (`feature_weight_vector`),
+  and `_fit` sets `booster_params`: LightGBM `feature_contri`, CatBoost `feature_weights`, XGBoost
+  `feature_weights` with `colsample_bynode` 0.8. Cross-validation folds refit the preprocessing, so boosters
+  are wrapped in `FoldModel`, which matches the weights again per fold. CatBoost gets `"index:weight"` text,
+  because newer versions copy a list, which sklearn's `clone` refuses. Measured by permutation, only LightGBM
+  clearly follows; CatBoost and XGBoost are marked `slight` (see the module docstring for the numbers).
+- **Everywhere else.** `weight_effect` / `WEIGHT_EFFECT_BY_KEY` (served in `/settings/capabilities`) tell the UI
+  which models follow. Retraining replays `feature_weights`. The Results card reads each model's importance
+  chart.
+
 ### Several columns to predict (0.13.0)
 
 Table runs only, in `core/multi_target.py`:

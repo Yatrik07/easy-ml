@@ -97,7 +97,11 @@ def settings_clear_data():
 
 @settings_bp.route("/settings/capabilities", methods=["GET"])
 def settings_capabilities():
-    return jsonify(get_capabilities())
+    from easyml.core.column_weights import WEIGHT_EFFECT_BY_KEY, weight_effects_by_class
+
+    # How much each tabular model follows input column weights (0.14): by key (Configure) and by class (Results).
+    return jsonify({**get_capabilities(), "weight_effects": WEIGHT_EFFECT_BY_KEY,
+                    "weight_effects_by_class": weight_effects_by_class()})
 
 
 @settings_bp.route("/settings/device", methods=["GET"])

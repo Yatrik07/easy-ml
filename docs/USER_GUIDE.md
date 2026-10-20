@@ -253,6 +253,16 @@ Regression:
 5. Start training.
 6. Open the results or run history view.
 
+### Column weights
+
+In the Configure step, **Columns → Column weights** lets you mark inputs as **Less**, **Normal** or **More**
+important (or type a weight from 0.1 to 10), from what you know about the data. It asks the models to rely
+on those columns more or less. The error is still measured on the column you predict, so weights can lower
+the test score; **Results** show a **Column weights** table with how much each model then relied on each
+weighted column. LightGBM and KNN follow weights; CatBoost, XGBoost and logistic regression barely change; Random
+Forest, AdaBoost and linear regression are not steered by weights (use **Ignore columns** to drop a column). Weights
+cannot be combined with **Reduce features (PCA)**.
+
 ### Several columns to predict
 
 A table run can predict more than one column, for example `price` and `rent`, or several yes/no label

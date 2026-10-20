@@ -83,6 +83,14 @@ def preprocessing_controller(request_body: ML_RequestBody):
         # Process numerical variables after split
         process_numerical(request_body)
 
+        if request_body.feature_weights:
+            # Column weights (0.14): one entry per column, the weighted ones multiplied after their own steps.
+            from easyml.core.column_weights import weighted_transformers
+
+            unknown = [c for c in request_body.feature_weights if c not in request_body.X.columns]
+            if unknown:
+                raise ValueError(f"Column weights name columns that are not inputs: {', '.join(unknown)}.")
+            request_body.transformers = weighted_transformers(request_body.transformers, request_body.feature_weights)
         write_log("appending all the transformers to request_body.column_transformer.transformers ", "info", os.path.basename(__file__))
         request_body.column_transformer.transformers = request_body.transformers
 
@@ -100,6 +108,11 @@ def preprocessing_controller(request_body: ML_RequestBody):
         if request_body.X_test is not None:
             request_body.X_test = final_pipeline.transform(request_body.X_test)
         request_body.pipeline = final_pipeline
+        if request_body.feature_weights:
+            from easyml.core.column_weights import output_weights
+
+            request_body.feature_weight_vector = output_weights(final_pipeline, list(request_body.X.columns),
+                                                                request_body.feature_weights)
         write_log("transformed the data using the final pipeline", "info", os.path.basename(__file__))
 
         joblib.dump(final_pipeline, os.path.join(request_body.path_to_save, "preprocessing_pipeline.pkl"), protocol=5)

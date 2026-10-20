@@ -196,7 +196,7 @@ export default {
         <div v-if="runs.detailLoading" class="row muted"><Spinner /> Loading run…</div>
         <div v-else-if="detail && detail.metrics" class="stack">
         <RunMetaEditor :run="detail" />
-        <ResultsBoard :task="detail.task" :performance="detail.metrics" :run-id="detail.id" :target-weights="detail.target_weights">
+        <ResultsBoard :task="detail.task" :performance="detail.metrics" :run-id="detail.id" :target-weights="detail.target_weights" :feature-weights="detail.feature_weights">
           <template #actions>
             <div class="row">
               <a class="btn btn-ghost btn-sm" :href="'/runs/' + detail.id + '/report'" download

@@ -62,9 +62,27 @@ print(run.performance)   # test/validation scores per model
 | `ignore_columns` | none | Columns to leave out, such as IDs |
 | `reduce_features` | `False` | Compress features with PCA (keeps 95% of the variance) |
 | `imbalance_handling` | `"none"` | Classification only: `"smote"`, `"tomek"` or `"smotetomek"` |
+| `feature_weights` | none | How much models rely on input columns, e.g. `{"area": 2, "age": 0.5}` (0.1 to 10; see below) |
 
 Tabular model keys: `logistic_regression` (classification), `linear_regression` (regression),
 `random_forest`, `knn`, `ada_boost`, and with the `[boost]` extra `xg_boost`, `light_gbm`, `cat_boost`.
+
+### Column weights
+
+`feature_weights={"area": 2, "age": 0.5}` tells the models which inputs to rely on more (above 1) or less (below
+1), from what you know about the data (Easy-ML 0.14). Models are scored on the column they predict, so weights
+can lower the test score; the run records the weights and its importance charts show what each model then used.
+
+| Model | Follows the weights |
+|---|---|
+| LightGBM | Yes: splits on a weighted column count more |
+| K-nearest neighbours | Yes: the column counts more in distances |
+| CatBoost, XGBoost | Barely: they get the weights, but measured, what they rely on hardly changes |
+| Logistic regression | Barely: only its regularisation changes |
+| Random Forest, AdaBoost, linear regression | No (tree results can shift slightly through rounding): leave a column out with `ignore_columns` instead |
+
+Weights cannot be combined with `reduce_features=True` (PCA mixes the columns). Retraining, final models and
+schedules keep them.
 
 ### Several columns to predict
 

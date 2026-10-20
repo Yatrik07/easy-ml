@@ -4,7 +4,8 @@ import { computed, ref, watch } from '../lib/vue.js';
 import {
   classLabels, formatMape, formatNumber, formatPercent, formatScore, metricFor, overfitHint, rankPerformance,
 } from '../lib/format.js';
-import { modelLabel } from '../store/session.js';
+import { modelLabel, session } from '../store/session.js';
+import { charts, loadCharts } from '../store/charts.js';
 
 export const PipelineSummary = {
   props: { summary: Object, task: String },
@@ -173,6 +174,7 @@ export const ResultsBoard = {
     summary: Object,
     runId: [Number, String],
     targetWeights: Object, // several columns to predict: their weights (when there is no pipeline summary)
+    featureWeights: Object, // input column weights (when there is no pipeline summary)
   },
   emits: ['predict'],
   setup(props) {
@@ -230,12 +232,32 @@ export const ResultsBoard = {
       && r.entry.test_metrics.exact_match != null));
     const exact = row => (row.entry && row.entry.test_metrics ? row.entry.test_metrics.exact_match : null);
     const showErrors = computed(() => isRegression.value && !targets.value.length);
+    // Input column weights: how much each model then relied on the weighted columns (its importance chart).
+    const featureWeights = computed(() => props.featureWeights || (props.summary && props.summary.feature_weights) || {});
+    const weightedColumns = computed(() => Object.keys(featureWeights.value));
+    watch(() => [props.runId, weightedColumns.value.length], ([id, count]) => { if (id && count) loadCharts(id); },
+      { immediate: true });
+    const EFFECTS = { follows: 'Yes', slight: 'Barely', none: 'No' };
+    const weightRows = computed(() => rows.value.map(row => {
+      const byClass = (session.capabilities && session.capabilities.weight_effects_by_class) || {};
+      const saved = charts.byRun[props.runId];
+      let model = saved && saved.models ? saved.models[row.key] : null;
+      if (model && model.targets) model = model.targets[Object.keys(model.targets)[0]];
+      const features = (model && model.importance && model.importance.features) || [];
+      const total = features.reduce((sum, f) => sum + Math.max(0, f.value || 0), 0);
+      const cells = weightedColumns.value.map(column => {
+        const index = features.findIndex(f => f.name === column);
+        if (index < 0 || !total) return '—';
+        return formatPercent(Math.max(0, features[index].value) / total) + ' (#' + (index + 1) + ')';
+      });
+      return { key: row.key, label: row.label, effect: EFFECTS[byClass[row.key] || 'none'], cells };
+    }));
     const colspan = computed(() => 5 + (showF1.value ? 1 : 0) + (showCv.value ? 1 : 0) + (showErrors.value ? 2 : 0)
       + (showExact.value ? 1 : 0));
     return {
       metric, rows, isRegression, showF1, showCv, cvText, cvTitle, expanded, toggle, hints, estimatedFrom,
       formatScore, formatNumber, formatMape, formatPercent, targets, weightOf, targetScore, winners, showExact, exact,
-      showErrors, colspan,
+      showErrors, colspan, featureWeights, weightedColumns, weightRows,
     };
   },
   template: /* html */ `
@@ -297,6 +319,32 @@ export const ResultsBoard = {
                   </td>
                 </tr>
               </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="weightedColumns.length" class="card">
+        <div class="card-header">
+          <div>
+            <h3>Column weights</h3>
+            <div class="card-hint">How much each model relied on the columns you weighted: their share of the model's
+              feature importance, and their rank among all columns<template v-if="targets.length"> (for {{ targets[0] }})</template>.
+              Weights are hints; only some models can follow them.</div>
+          </div>
+        </div>
+        <div class="table-wrap flush">
+          <table class="table">
+            <thead>
+              <tr><th>Model</th><th>Follows weights</th>
+                <th v-for="c in weightedColumns" :key="c" class="right">{{ c }} <span class="subtle text-xs">×{{ featureWeights[c] }}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in weightRows" :key="row.key">
+                <td>{{ row.label }}</td><td>{{ row.effect }}</td>
+                <td v-for="(cell, i) in row.cells" :key="i" class="right num">{{ cell }}</td>
+              </tr>
             </tbody>
           </table>
         </div>
