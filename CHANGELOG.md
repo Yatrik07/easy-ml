@@ -3,6 +3,13 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.14.1 (2026-10-21)
+
+- A classification run whose column to predict is clearly an amount (many different numbers, like a price)
+  now stops at once with "...looks like an amount to predict, not a category. Start a Tabular regression run",
+  instead of failing during tuning with "n_splits=4 cannot be greater than the number of members in each
+  class". This applies to one or several columns to predict.
+
 ## 0.14.0 (2026-10-20)
 
 Column weights.

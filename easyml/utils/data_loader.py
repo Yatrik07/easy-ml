@@ -176,6 +176,7 @@ def data_loader(request_body):
 
         # Encode target if it's a classification task
         if "classification" in request_body.task.lower():
+            check_class_column(request_body.y, request_body.target_column)
             request_body.target_dtype = str(request_body.y.dtype)
             request_body.target_encodings, encoded = encode_categorical_list(request_body.y.tolist())
             # An array (not a list) is shared with the grid-search workers instead of pickled for each fit.
@@ -195,6 +196,20 @@ def data_loader(request_body):
 
         raise e
 
+
+
+def check_class_column(series, name):
+    """
+    Refuse a classification target that is clearly an amount (many different numbers, like a price): each value
+    would become its own class with a row or two, which cannot be learned and breaks the cross-validated search.
+    """
+    values = series.dropna()
+    if not pd.api.types.is_numeric_dtype(values) or pd.api.types.is_bool_dtype(values):
+        return
+    distinct = int(values.nunique())
+    if distinct > 50 and distinct > 0.3 * len(values):
+        raise ValueError(f"'{name}' has {distinct:,} different numbers, so it looks like an amount to predict, not a "
+                         "category. Start a Tabular regression run to predict it.")
 
 
 def _load_several_targets(request_body):
@@ -227,6 +242,7 @@ def _load_several_targets(request_body):
     if "classification" in request_body.task.lower():
         encodings, codes = {}, []
         for target in targets:
+            check_class_column(request_body.df[target], target)
             values = request_body.df[target].tolist()
             if len(set(values)) < 2:
                 raise ValueError(f"'{target}' has the same value in every row, so there is nothing to predict.")

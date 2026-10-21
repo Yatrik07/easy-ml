@@ -289,6 +289,14 @@ def test_training_endpoint_and_bad_requests(client, houses_csv):
         MLTrainer(task="MLRegression", name="x", dataset_path=houses_csv, target_column="price", target_weights={"price": 2})
 
 
+def test_amounts_are_refused_as_classes(houses_csv):
+    # A price is not a category: one class per value used to crash the tuning ("n_splits=4 cannot be greater").
+    for target in (["size", "price"], "price"):
+        with pytest.raises(ValueError, match="looks like an amount to predict"):
+            MLTrainer(task="MLClassification", name="amount", dataset_path=houses_csv, target_column=target,
+                      models=["random_forest"], hyper_parameter_tuning=1).run()
+
+
 def test_kinds_are_checked_when_the_data_is_read(houses_csv):
     with pytest.raises(ValueError, match="does not hold numbers"):
         MLTrainer(task="MLRegression", name="mixed", dataset_path=houses_csv, target_column=["price", "size"],
