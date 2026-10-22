@@ -183,12 +183,12 @@ def test_run_details_report_and_sample(client, reg_run):
     summary = next(r for r in client.get("/runs").get_json()["data"] if r["id"] == reg_run.run_id)
     assert summary["targets"] == NUMBERS
     html = client.get(f"/runs/{reg_run.run_id}/report").get_data(as_text=True)
-    assert "By column to predict" in html and "price (weight 3)" in html and "Test R² (weighted)" in html
+    assert "By column to predict" in html and "price (ranking weight 3)" in html and "Test R² (weighted)" in html
     sample = client.get(f"/runs/{reg_run.run_id}/sample").get_json()
     assert set(sample["actual"]) == set(NUMBERS) and "price" not in sample["values"]
     spec = client.get(f"/runs/{reg_run.run_id}/config").get_json()
     shown = {s["label"]: s["value"] for s in spec["settings"]}
-    assert shown["Columns to predict"] == "price (weight 3), rent"
+    assert shown["Columns to predict"] == "price (ranking weight 3), rent"
     assert spec["retrain"]["target_columns"] == NUMBERS and set(NUMBERS) <= set(spec["retrain"]["required_columns"])
 
 

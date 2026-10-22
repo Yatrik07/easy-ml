@@ -281,6 +281,11 @@ All of them must be numbers (regression) or all categories (classification).
   best on it. You can also pick one model for all columns. The form shows one answer per column, and a CSV
   gets a `Prediction: <column>` column for each. **Explain** asks which column to explain.
 - Class balance (SMOTE, Tomek links) is not available when several columns are predicted.
+- **Why one column can stay flat.** Each column is learned only from the input columns. If the inputs do
+  not explain a column, every model predicts close to its average: its R² is about 0 or negative, and Results
+  say "cannot be predicted from these inputs". Ranking weights cannot change this. And a column you predict is
+  not an input: if price depends on trip duration and you predict both, price can no longer use duration.
+  Results point this out. If you will know the duration when predicting, train price in its own run.
 
 ### Imbalance handling
 

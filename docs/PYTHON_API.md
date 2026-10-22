@@ -111,6 +111,11 @@ run.performance["RandomForestRegressor"]["accuracy_test"]                      #
   right.
 - Class balance (`imbalance_handling`) is not available with several columns. All columns must be numbers
   (regression) or all categories (classification).
+- Each column is learned from the input columns only. `config_json.json` (and the Results page) holds
+  `target_notes`: a column that cannot be predicted from the inputs (its models predict about its average), a
+  column whose best model overfits, and a column that moves with another column you predict (which it cannot
+  use as an input). `test_metrics["targets"][column]` has `spread` (std of predictions / std of true values)
+  and `baseline` (the score of always answering the average or most frequent value).
 
 ### Text options
 

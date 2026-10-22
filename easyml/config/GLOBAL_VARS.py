@@ -284,6 +284,8 @@ class ML_RequestBody(BaseModel):
     target_columns: List[str] = Field(default_factory=list)
     target_weights: dict = Field(default_factory=dict)
     target_encodings_by_column: dict = Field(default_factory=dict)
+    target_notes: dict = Field(default_factory=dict)  # 0.14.2: per target, what the results mean (multi_target)
+    rows_without_targets: int = 0  # 0.14.2: rows left out because a column to predict was empty
     # 0.14, input column weights (core/column_weights.py): {column: weight}, only weights other than 1.
     feature_weights: dict = Field(default_factory=dict)
     feature_weight_vector: Optional[List[float]] = None  # one weight per processed column, for the boosters
@@ -378,6 +380,8 @@ class ML_RequestBody(BaseModel):
         if len(self.target_columns) > 1:
             to_dump["target_columns"] = self.target_columns
             to_dump["target_weights"] = self.target_weights
+            if self.target_notes:
+                to_dump["target_notes"] = self.target_notes
             if self.target_encodings_by_column:
                 to_dump["target_classes"] = {target: labels_in_code_order(encodings)
                                              for target, encodings in self.target_encodings_by_column.items()}

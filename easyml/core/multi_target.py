@@ -129,6 +129,91 @@ def winners(performance, targets):
     return {t: s[0][0] for t, s in target_scores(performance, targets).items() if s}
 
 
+# --------------------------------------------------------------------------- notes per target (0.14.2)
+
+NOT_PREDICTABLE_R2 = 0.1      # regression: below this best test R², the models predict about the column's average
+NOT_PREDICTABLE_MARGIN = 0.02  # classification: no better than always answering the most frequent class
+OVERFIT_GAP = 0.3             # train score this much above the test score
+RELATED_CORR = 0.3            # |r| between a column's test errors and another target's values
+
+
+def _fmt(value, task):
+    return f"{value:.0%}" if task == "classification" else f"{value:.2f}"
+
+
+def target_notes(performance, targets, task, y_test=None, test_predictions=None):
+    """
+    What to tell the user about each column to predict, from the scores of every model (and, for numbers, how
+    the best model's test errors relate to the other targets): ``{target: [{"kind", "text", ...}]}``, only
+    targets with notes.
+
+    * ``not_predictable``: even the best model is about as good as predicting the column's average (regression,
+      best test R² < 0.1) or its most frequent class (classification). Weights cannot change this.
+    * ``overfits``: the best model scores far higher on its training rows than on the test rows.
+    * ``depends_on_target``: the best model's test errors follow another column that is also predicted (|r| ≥
+      0.3), so that column would explain part of what the models miss; but a target cannot be an input.
+    """
+    notes = {}
+    scores = target_scores(performance, targets)
+    for index, target in enumerate(targets):
+        found = []
+        ranked = scores.get(target) or []
+        if ranked:
+            model, best = ranked[0]
+            entry = (performance.get(model) or {})
+            per_target = (entry.get("targets") or {}).get(target) or {}
+            metrics = ((entry.get("test_metrics") or {}).get("targets") or {}).get(target) or {}
+            baseline = metrics.get("baseline")
+            if task == "classification":
+                weak = baseline is not None and best <= baseline + NOT_PREDICTABLE_MARGIN
+                why = (f"the best model is right {_fmt(best, task)} of the time, about as often as always answering "
+                       f"its most frequent value ({_fmt(baseline, task) if baseline is not None else '?'})")
+            else:
+                weak = best < NOT_PREDICTABLE_R2
+                spread = metrics.get("spread")
+                why = (f"the models predict close to its average (best R² {best:.2f}"
+                       + (f", predictions vary {spread:.0%} as much as the real values" if spread is not None else "")
+                       + ")")
+            if weak:
+                found.append({"kind": "not_predictable", "model": model, "best": best,
+                              "text": f"{target} cannot be predicted from these inputs: {why}. Weights cannot change "
+                                      "this; add input columns that relate to it."})
+            train = per_target.get("accuracy_train")
+            if train is not None and train - best > OVERFIT_GAP:
+                found.append({"kind": "overfits", "model": model, "train": train, "test": best,
+                              "text": f"{target}: the best model scores {_fmt(train, task)} on its training rows but "
+                                      f"{_fmt(best, task)} on the test rows, so it mostly memorized the training data."})
+        if ranked and task != "classification" and y_test is not None and ranked[0][0] in (test_predictions or {}):
+            related = _strongest_partner(y_test, test_predictions[ranked[0][0]], index, targets)
+            if related:
+                other, corr = related
+                found.append({"kind": "depends_on_target", "other": other, "corr": corr,
+                              "text": f"{other} would explain about {corr * corr:.0%} of what the models get wrong for "
+                                      f"{target} (r {corr:.2f}), but it is also predicted here, so it cannot be used as "
+                                      f"an input. If you will know {other} when predicting, train {target} in its own "
+                                      f"run with {other} as an input."})
+        if found:
+            notes[target] = found
+    return notes
+
+
+def _strongest_partner(y_test, predicted, index, targets):
+    """
+    The other target whose true values follow target ``index``'s test errors most (|r| ≥ 0.3), as
+    ``(name, r)``, or None: that target holds information the inputs lack.
+    """
+    truth = np.asarray(y_test, dtype=float)
+    errors = truth[:, index] - np.asarray(predicted, dtype=float)[:, index]
+    best = None
+    for other, column in enumerate(targets):
+        if other == index or np.std(errors) == 0 or np.std(truth[:, other]) == 0:
+            continue
+        r = float(np.corrcoef(errors, truth[:, other])[0, 1])
+        if abs(r) >= RELATED_CORR and (best is None or abs(r) > abs(best[1])):
+            best = (column, round(r, 2))
+    return best
+
+
 # --------------------------------------------------------------------------- the combined model
 
 def best_for_each_target(folder, task):

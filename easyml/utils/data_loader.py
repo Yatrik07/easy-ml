@@ -226,6 +226,7 @@ def _load_several_targets(request_body):
     request_body.ignore_columns = request_body.ignore_columns or []
 
     if request_body.df[targets].isna().any().any():
+        request_body.rows_without_targets = int(request_body.df[targets].isna().any(axis=1).sum())
         request_body.df = request_body.df.dropna(subset=targets)
         request_body.source_rows = kept_rows(request_body.source_rows, request_body.df.index)
         request_body.df.reset_index(drop=True, inplace=True)

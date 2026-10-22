@@ -160,6 +160,7 @@ export default {
         confidence: r.probability && r.probability[t] != null ? r.probability[t] : null,
         actual: actual ? formatPrediction(actual[t]) : null,
         verdict: actual && actual[t] != null ? verdictFor(r.prediction[t], actual[t], inference.task === 'MLRegression') : null,
+        notPredictable: ((inference.targets.notes || {})[t] || []).some(n => n.kind === 'not_predictable'),
       }));
     });
     function onExplainTarget() {
@@ -328,6 +329,7 @@ export default {
                 <div v-for="a in answers" :key="a.target" class="target-answer">
                   <span class="target-name">{{ a.target }}</span>
                   <span class="target-value">{{ a.value }}</span>
+                  <span v-if="a.notPredictable" class="subtle text-xs" title="This column could not be learned from the inputs: see the run's results">not predictable: about its average</span>
                   <span v-if="a.confidence != null" class="subtle text-xs">{{ formatPercent(a.confidence) }} confident</span>
                   <span v-if="a.verdict" class="row-nowrap text-xs"><span class="muted">In the data: {{ a.actual }}</span>
                     <span class="badge" :class="a.verdict.regression ? '' : (a.verdict.correct ? 'badge-success' : 'badge-danger')">{{ a.verdict.text }}</span></span>

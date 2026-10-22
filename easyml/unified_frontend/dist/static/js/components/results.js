@@ -122,6 +122,11 @@ export const ModelDetail = {
       if (tm.mape != null) facts.push({ label: 'MAPE', value: formatMape(tm.mape) });
       return facts;
     });
+    const targetOverfit = computed(() => {
+      if (!target.value) return null;
+      const scores = props.entry.targets[target.value] || {};
+      return overfitHint({ train: scores.accuracy_train, test: scores.accuracy_test }, metric.value);
+    });
     const report = computed(() => {
       const r = (shown.value.test_metrics && shown.value.test_metrics.classification_report) || {};
       return Object.entries(r)
@@ -130,7 +135,7 @@ export const ModelDetail = {
     });
     const params = computed(() => Object.entries(shown.value.best_params || {}));
     const fmt = v => (v === null || v === undefined ? '—' : Number(v).toFixed(3));
-    return { targets, target, shown, targetFacts, report, params, fmt };
+    return { targets, target, shown, targetFacts, targetOverfit, report, params, fmt };
   },
   template: /* html */ `
     <div v-if="targets.length" class="segmented target-picker" role="group" aria-label="Column to predict">
@@ -139,6 +144,7 @@ export const ModelDetail = {
     <div class="grid-2">
       <div class="stack">
         <dl v-if="targetFacts.length" class="kv"><template v-for="f in targetFacts" :key="f.label"><dt>{{ f.label }}</dt><dd>{{ f.value }}</dd></template></dl>
+        <p v-if="targetOverfit" class="field-hint">{{ targetOverfit }}</p>
         <ConfusionMatrix :entry="shown" />
         <div v-if="params.length" class="stack-sm">
           <div class="field-label">Best hyperparameters</div>
@@ -175,6 +181,7 @@ export const ResultsBoard = {
     runId: [Number, String],
     targetWeights: Object, // several columns to predict: their weights (when there is no pipeline summary)
     featureWeights: Object, // input column weights (when there is no pipeline summary)
+    targetNotes: Object, // several columns to predict: what the results mean per column (when no pipeline summary)
   },
   emits: ['predict'],
   setup(props) {
@@ -252,12 +259,18 @@ export const ResultsBoard = {
       });
       return { key: row.key, label: row.label, effect: EFFECTS[byClass[row.key] || 'none'], cells };
     }));
+    // Per column: not predictable from the inputs, overfitting, tied to another target (server-written text).
+    const notes = computed(() => {
+      const all = props.targetNotes || (props.summary && props.summary.target_notes) || {};
+      return targets.value.flatMap(t => (all[t] || []).map(n => ({ key: t + n.kind, kind: n.kind, text: n.text })));
+    });
+    const rowsLeftOut = computed(() => (props.summary && props.summary.rows_without_targets) || 0);
     const colspan = computed(() => 5 + (showF1.value ? 1 : 0) + (showCv.value ? 1 : 0) + (showErrors.value ? 2 : 0)
       + (showExact.value ? 1 : 0));
     return {
       metric, rows, isRegression, showF1, showCv, cvText, cvTitle, expanded, toggle, hints, estimatedFrom,
       formatScore, formatNumber, formatMape, formatPercent, targets, weightOf, targetScore, winners, showExact, exact,
-      showErrors, colspan, featureWeights, weightedColumns, weightRows,
+      showErrors, colspan, featureWeights, weightedColumns, weightRows, notes, rowsLeftOut,
     };
   },
   template: /* html */ `
@@ -363,7 +376,7 @@ export const ResultsBoard = {
           <table class="table target-scores">
             <thead>
               <tr><th>Model</th>
-                <th v-for="t in targets" :key="t" class="right">{{ t }}<span v-if="weightOf(t) !== 1" class="subtle text-xs" :title="'Weight ' + weightOf(t)"> ×{{ weightOf(t) }}</span></th>
+                <th v-for="t in targets" :key="t" class="right">{{ t }}<span v-if="weightOf(t) !== 1" class="subtle text-xs" :title="'Ranking weight ' + weightOf(t)"> ×{{ weightOf(t) }}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -374,6 +387,16 @@ export const ResultsBoard = {
               </tr>
             </tbody>
           </table>
+        </div>
+        <div v-if="notes.length" class="card-body stack-sm">
+          <div v-for="n in notes" :key="n.key" class="alert text-sm" :class="n.kind === 'depends_on_target' ? 'alert-info' : 'alert-warning'">
+            <Icon :name="n.kind === 'depends_on_target' ? 'link' : 'warning_amber'" /><div>{{ n.text }}</div>
+          </div>
+          <p class="subtle text-xs">The ranking weights only rank the models; they do not change what any column's model learns.</p>
+        </div>
+        <div v-if="rowsLeftOut" class="card-body">
+          <p class="subtle text-xs">{{ rowsLeftOut.toLocaleString() }} rows were left out because a column to predict was
+            empty in them, so a single-column run on the same file trains and tests on more rows and its scores can differ.</p>
         </div>
       </div>
 

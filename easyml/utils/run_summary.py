@@ -211,6 +211,7 @@ def run_detail(row):
     config = _config(row.get("folder_path"))
     if detail.get("targets"):  # several columns to predict: their weights in the run's score
         detail["target_weights"] = config.get("target_weights") or {}
+        detail["target_notes"] = config.get("target_notes") or {}
     if config.get("feature_weights"):  # input column weights (0.14)
         detail["feature_weights"] = config["feature_weights"]
     return detail
@@ -328,5 +329,5 @@ def _targets_text(config):
     parts = []
     for target in config.get("target_columns") or []:
         weight = weights.get(target, 1)
-        parts.append(f"{target} (weight {weight:g})" if weight != 1 else str(target))
+        parts.append(f"{target} (ranking weight {weight:g})" if weight != 1 else str(target))
     return ", ".join(parts)

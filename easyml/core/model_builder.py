@@ -29,7 +29,7 @@ from easyml.core.evaluator import get_metrics, get_train_test_metrics
 from easyml.core.cancellable_search import CancellableGridSearchCV
 from easyml.core.imbalance_handler import unwrap_model, with_resampling
 from easyml.core.column_weights import BOOSTERS, FoldModel, booster_params
-from easyml.core.multi_target import PerTargetModel, estimator_for, weighted_mean, weights_of
+from easyml.core.multi_target import PerTargetModel, estimator_for, target_notes, weighted_mean, weights_of
 from easyml.utils.cancellation import is_cancelled
 from easyml.utils.holdout import write_holdout
 from easyml.utils.logger import write_log
@@ -180,12 +180,32 @@ def _target_metrics(request_body, task, y_true, y_pred):
         else:
             metrics = get_metrics(request_body, task, y_true[:, index], y_pred[:, index])
             score = metrics.get("r2_score")
+        metrics.update(_reference_scores(request_body, task, index, y_true[:, index], y_pred[:, index]))
         by_target[target] = metrics
         scores.append(None if score is None else float(score))
     result = {"targets": by_target, "weighted": _round(weighted_mean(scores, weights_of(request_body)))}
     if task == "classification":
         result["exact_match"] = _round(np.mean(np.all(np.asarray(y_true) == np.asarray(y_pred), axis=1)))
     return result, scores
+
+
+def _reference_scores(request_body, task, index, truth, predicted):
+    """
+    What one target's score means (0.14.2): ``baseline``, the score of always answering the training rows'
+    average (regression R², about 0) or most frequent class (classification accuracy); and for regression
+    ``spread``, how much the predictions vary compared with the real values (near 0: about constant).
+    """
+    from sklearn.metrics import r2_score
+
+    reference = np.asarray(request_body.y_train[:, index])
+    truth, predicted = np.asarray(truth), np.asarray(predicted)
+    if task == "classification":
+        values, counts = np.unique(reference, return_counts=True)
+        return {"baseline": _round(np.mean(truth == values[np.argmax(counts)]))}
+    truth, predicted = truth.astype(float), predicted.astype(float)
+    spread = np.std(predicted) / np.std(truth) if np.std(truth) > 0 else None
+    return {"baseline": _round(r2_score(truth, np.full(len(truth), reference.astype(float).mean()))),
+            "spread": _round(spread)}
 
 
 def _combined_cv(cv_results, request_body):
@@ -351,6 +371,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
 
         scoring = 'accuracy' if 'classification' in request_body.task.lower() else 'r2'
         several_targets = len(request_body.target_columns) > 1
+        test_predictions = {}  # several targets: each model's test predictions, for the per-column notes
 
         total_models = len(models_to_apply)
         for idx, single_model in enumerate(models_to_apply):
@@ -372,6 +393,7 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
                                                             param_grid, scoring)
                 y_pred_test = _record_per_target(request_body, task, model_name, model, params, cv_results)
                 if y_pred_test is not None:
+                    test_predictions[model_name] = y_pred_test
                     emit_progress(f"📈 Preparing result charts for {model_name}...")
                     request_body.charts[model_name] = _per_target_charts(model, request_body, task, y_pred_test)
                 emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))
@@ -440,6 +462,10 @@ def ml_model_builder_trainer_controller(request_body: ML_RequestBody):
             request_body.charts[model_name] = _model_charts(best_estimator, request_body, task, y_pred_test)
             emit_progress(f"✅ Finished {model_name}", pct=model_base_pct + int(45 / max(1, total_models)))
 
+        if several_targets and not request_body.final_of_run:
+            # What to tell the user per column: not predictable, overfitting, tied to another target (0.14.2).
+            request_body.target_notes = target_notes(request_body.performance, request_body.target_columns, task,
+                                                     y_test=request_body.y_test, test_predictions=test_predictions)
         labels = labels_in_code_order(request_body.target_encodings) if task == "classification" else None
         if not request_body.final_of_run:  # a final model shows the evaluated run's charts (run_inputs)
             meta = {"n_test": len(request_body.y_test), "classes": [str(c) for c in labels] if labels else None}

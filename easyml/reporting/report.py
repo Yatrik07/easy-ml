@@ -144,7 +144,7 @@ def _by_target(targets, ranked, config, metric):
     weights = config.get("target_weights") or {}
     best = {t: max((m["targets"].get(t) for m in ranked if (m.get("targets") or {}).get(t) is not None), default=None)
             for t in targets}
-    headers = ["Model"] + [f"{t} (weight {float(weights.get(t, 1)):g})" for t in targets]
+    headers = ["Model"] + [f"{t} (ranking weight {float(weights.get(t, 1)):g})" for t in targets]
     rows = []
     for m in ranked:
         scores = m.get("targets") or {}
@@ -153,8 +153,12 @@ def _by_target(targets, ranked, config, metric):
             for t in targets])
     note = ("<p class=\"subtle\">Each column to predict has its own model in every row above, trained and tuned on "
             "that column alone, so no column's accuracy is traded for another's. The run's score is the "
-            "weighted average; ★ marks the best model for each column, which together make the "
+            "weighted average (the ranking weights only rank the models; they do not change what any column's model "
+            "learns); ★ marks the best model for each column, which together make the "
             "&ldquo;best model for each target&rdquo;.</p>")
+    notes = [n["text"] for t in targets for n in (config.get("target_notes") or {}).get(t, [])]
+    if notes:
+        note += "<ul class=\"notes-list\">" + "".join(f"<li>{_e(text)}</li>" for text in notes) + "</ul>"
     return "<h3>By column to predict</h3>" + _table(headers, rows, numeric=tuple(range(1, len(headers)))) + note
 
 

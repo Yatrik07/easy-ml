@@ -3,6 +3,27 @@
 All notable changes to Easy-ML Studio (`pip install easy-ml-studio`). Versions follow
 [semantic versioning](https://semver.org/); existing runs and data keep working across upgrades.
 
+## 0.14.2 (2026-10-22)
+
+Clearer results when several columns are predicted.
+
+- **Each column now says what its scores mean.** Under "By column to predict", the Results page, the report
+  and the run's details point out:
+  - a column the inputs cannot explain: the models predict close to its average, so its R² is about 0 or
+    negative and its predictions barely vary;
+  - a column whose best model mostly memorized the training rows;
+  - a column that moves with another column you also predict. A column to predict is never an input, so it
+    loses that information. If you will know the other column when predicting, train it in its own run with
+    that column as an input.
+
+  The prediction page marks a column that could not be learned.
+- **"Weight" is now "Ranking weight"**: it ranks the models and never changes what a column's model learns.
+  So no weight can make an unpredictable column predictable, and a weight never decides which column is
+  learned.
+- New per-column numbers in the scores: `spread` (how much the predictions vary compared with the real
+  values) and `baseline` (the score of always answering the average or the most frequent value).
+- Model details show an overfitting hint for each column.
+
 ## 0.14.1 (2026-10-21)
 
 - A classification run whose column to predict is clearly an amount (many different numbers, like a price)

@@ -181,6 +181,8 @@ class _TabularController:
             if self.request_body.target_columns:
                 pipeline_summary["targets"] = self.request_body.target_columns
                 pipeline_summary["target_weights"] = self.request_body.target_weights
+                pipeline_summary["target_notes"] = self.request_body.target_notes
+                pipeline_summary["rows_without_targets"] = self.request_body.rows_without_targets
 
             response_payload = {
                 "status_code": 200,

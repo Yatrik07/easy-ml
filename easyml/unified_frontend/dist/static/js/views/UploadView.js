@@ -122,16 +122,18 @@ export default {
               <div v-for="col in targetColumns" :key="col" class="target-item">
                 <span class="badge badge-accent">{{ col }}</span>
                 <label class="target-weight">
-                  <span>Weight</span>
+                  <span>Ranking weight</span>
                   <input class="input" type="number" min="0.1" max="10" step="0.5" :value="targetWeight(col)"
-                         @change="setTargetWeight(col, $event.target.value)" :aria-label="'Weight of ' + col" />
+                         @change="setTargetWeight(col, $event.target.value)" :aria-label="'Ranking weight of ' + col" />
                 </label>
                 <button class="btn btn-ghost btn-icon" @click="removeTarget(col)" :aria-label="'Stop predicting ' + col"
                         title="Stop predicting this column"><Icon name="close" /></button>
               </div>
               <span class="field-hint">Each column gets its own models, trained and tuned on that column alone, so no
-                column's accuracy is traded for another's. Weights only decide how the columns' scores add up when the
-                models are ranked: 2 counts twice as much as 1.</span>
+                column's accuracy is traded for another's. Ranking weights only decide how the columns' scores add up
+                when the models are ranked (2 counts twice as much as 1); they do not change what any column's model
+                learns. A column to predict is not an input, so a column that depends on another one you predict
+                loses it.</span>
             </div>
           </div>
 

@@ -316,6 +316,7 @@ def _several_targets(task, folder, config, ranked):
         "classes": config.get("target_classes"),
         "scores": {m["key"]: m.get("targets") or {} for m in ranked},
         "combined": combined_summary(folder),
+        "notes": config.get("target_notes") or {},
     }
 
 
